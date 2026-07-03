@@ -1,5 +1,6 @@
 package com.apify.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Optional;
 
 /**
@@ -62,6 +63,30 @@ public final class ActorClient {
   public ActorRun call(Object input, ActorStartOptions options, Long waitSecs) {
     ActorRun run = start(input, options);
     return root.run(run.getId()).waitForFinish(waitSecs);
+  }
+
+  /** Validates the given input against the Actor's default-build input schema. */
+  public boolean validateInput(Object input) {
+    return validateInput(input, new ValidateInputOptions());
+  }
+
+  /**
+   * Validates {@code input} against the Actor's input schema and returns whether it is valid.
+   * {@code input} is any JSON-serializable value (or {@code null}). {@code options} may pin the
+   * build whose schema is used and the content type of the input body.
+   */
+  public boolean validateInput(Object input, ValidateInputOptions options) {
+    ValidateInputOptions opts = options == null ? new ValidateInputOptions() : options;
+    QueryParams params = new QueryParams();
+    opts.apply(params);
+    byte[] body = input == null ? null : Json.toBytes(input);
+    // The validate-input endpoint returns a bare {"valid": <bool>} object, not the standard
+    // {"data": ...} envelope, so parse it without unwrapping.
+    JsonNode result =
+        ctx.postWithBodyNoEnvelope(
+            "validate-input", params, body, opts.contentTypeOrDefault(), JsonNode.class);
+    JsonNode valid = result == null ? null : result.get("valid");
+    return valid != null && valid.asBoolean();
   }
 
   /** Builds the given version of the Actor and returns the created build. */

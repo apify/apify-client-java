@@ -33,6 +33,8 @@ Apify API, verified against OpenAPI specification version `v2-2026-07-01T115402Z
   `minDelayBetweenUnprocessedRequestsRetriesMillis`) with automatic retry of unprocessed requests,
   all matching the reference client. `downloadItems` forwards the full set of item-selection
   parameters via `DatasetDownloadOptions.items(...)`.
+- `actor(...).validateInput(input[, ValidateInputOptions])` to validate an input against an Actor's
+  input schema, matching the reference client.
 - Public version constants `Version.CLIENT_VERSION` and `Version.API_SPEC_VERSION`.
 - Forward-compatible models that capture unmodelled API fields in an `extra` map.
 - Offline unit tests (mock HTTP backend) covering retries, error parsing, 404→empty mapping, the

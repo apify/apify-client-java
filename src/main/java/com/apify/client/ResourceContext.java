@@ -189,6 +189,18 @@ final class ResourceContext {
     return Json.parseData(resp.body, dataType);
   }
 
+  /**
+   * POST with a raw body, parsing the response body directly <em>without</em> unwrapping a {@code
+   * {"data": ...}} envelope. Used by endpoints (e.g. actor input validation) whose response is a
+   * plain object rather than the standard data envelope.
+   */
+  <T> T postWithBodyNoEnvelope(
+      String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
+    String u = mergedParams(params).applyToUrl(subUrl(subPath));
+    ApiResponse resp = http.call("POST", u, body, contentType, DEFAULT_REQUEST_TIMEOUT);
+    return Json.parse(resp.body, dataClass);
+  }
+
   /** DELETE with a JSON body (used for batch request deletion), unwrapping the data envelope. */
   <T> T deleteWithBody(String subPath, QueryParams params, Object body, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));

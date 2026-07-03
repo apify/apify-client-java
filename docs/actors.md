@@ -47,6 +47,7 @@ Actor created = client.actors().create(Map.of(
 | `delete()` | Delete the Actor. |
 | `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Returns `ActorRun`. |
 | `call(Object input, ActorStartOptions, Long waitSecs)` | Start a run and poll until it finishes (`null` waits indefinitely). Returns `ActorRun`. |
+| `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Returns `boolean`. `ValidateInputOptions` fields (optional): `build`, `contentType`. |
 | `build(String versionNumber, ActorBuildOptions)` | Build a version. Returns `Build`. |
 | `defaultBuild(Long waitForFinish)` | Resolve the default build. Returns `BuildClient`. |
 | `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run. |

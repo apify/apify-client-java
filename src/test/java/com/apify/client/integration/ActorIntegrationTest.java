@@ -109,6 +109,15 @@ class ActorIntegrationTest extends IntegrationBase {
   }
 
   @Test
+  void validateInput() {
+    ApifyClient client = requireClient();
+    // apify/hello-world is a public store Actor; validate-input is read-only and returns
+    // {"valid": <bool>}. A well-formed input validates true.
+    boolean valid = client.actor("apify/hello-world").validateInput(Map.of("firstNumber", 1));
+    assertTrue(valid);
+  }
+
+  @Test
   void actorEnvVarCrudFlow() {
     ApifyClient client = requireClient();
     Actor created = client.actors().create(minimalActor(uniqueName("env")));
