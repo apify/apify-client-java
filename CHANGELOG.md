@@ -8,7 +8,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.1.0] - 2026-07-03
 
 Initial release of the official (experimental, AI-generated and AI-maintained) Java client for the
-Apify API, verified against OpenAPI specification version `v2-2026-07-01T115402Z`.
+Apify API, verified against OpenAPI specification version `v2-2026-07-02T131926Z`.
 
 ### Added
 
@@ -35,29 +35,19 @@ Apify API, verified against OpenAPI specification version `v2-2026-07-01T115402Z
   parameters via `DatasetDownloadOptions.items(...)`.
 - `actor(...).validateInput(input[, ValidateInputOptions])` to validate an input against an Actor's
   input schema, matching the reference client.
+- `datasets()`/`keyValueStores()` `getOrCreate(name, schema)` overloads that send a creation schema,
+  matching the reference client.
+- `batchAddRequests` surfaces a non-retryable client error (a 4xx other than 429) as an
+  `ApifyApiException`; persistent rate-limit/server failures are returned as `unprocessedRequests`.
+- Read-only nested webhook collections (`actor(id).webhooks()`, `task(id).webhooks()`); `create(...)`
+  is exposed only on the account-wide `client.webhooks()`, matching the GET-only nested API.
+- Single-resource getters return an empty `Optional` when the API responds `200` with `{"data": null}`.
 - Public version constants `Version.CLIENT_VERSION` and `Version.API_SPEC_VERSION`.
 - Forward-compatible models that capture unmodelled API fields in an `extra` map.
-- Offline unit tests (mock HTTP backend) covering retries, error parsing, 404→empty mapping, the
-  User-Agent format, base-URL resolution, and the storage-signature scheme (pinned to the upstream
-  `@apify/utilities` algorithm with a known-answer test).
-- Integration test suite (one simple GET plus one CRUD/complex flow per resource) and runnable,
-  CI-tested documentation examples.
-- Language-specific GitHub Actions workflows: `Java integration tests` (Spotless format check,
-  build, unit tests, integration tests, and a standalone `Test examples` step) and a manually
-  triggered `Publish Java client` workflow that releases to Maven Central via the Sonatype Central
-  Publisher Portal (OIDC Trusted Publisher) and creates a tagged GitHub release.
-
-### Fixed
-
-- Nested webhook collections (`actor(id).webhooks()`, `task(id).webhooks()`) are now read-only
-  (`NestedWebhookCollectionClient`); `create(...)` is exposed only on the account-wide
-  `client.webhooks()`, matching the API (those nested endpoints are GET-only).
-- `store().iterate(options)` no longer mutates the caller's `StoreListOptions` and now honors its
-  initial `offset`.
-- `waitForFinish` clamps the server-side wait to the configured request timeout, so a short client
-  timeout no longer aborts every poll.
-- Single-resource getters return an empty `Optional` (instead of throwing) when the API responds
-  `200` with `{"data": null}`.
-- `RunCollectionClient.list` tolerates a `null` options/filter argument.
-- `RunChargeOptions.eventName` is validated before a charge request is sent.
-- `KeyValueStoreRecord` defensively copies its byte payload on the way in and out.
+- Offline unit tests (mock HTTP backend) and an integration test suite (one simple GET plus one
+  CRUD/complex flow per resource), with runnable, CI-tested documentation examples.
+- Language-specific GitHub Actions workflows: `Java integration tests` (Spotless, SpotBugs, build,
+  unit, integration, and a standalone `Test examples` step) and a manually triggered `Publish Java
+  client` workflow that releases to Maven Central via the Sonatype Central Publisher Portal,
+  authenticating with the Maven Central repository credentials from the protected `Publishing`
+  GitHub environment, and creates a tagged GitHub release.

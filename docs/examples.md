@@ -31,6 +31,11 @@ Optional<KeyValueStoreRecord> record = client.keyValueStore(store.getId()).getRe
 RequestQueue queue = client.requestQueues().getOrCreate("example-rq");
 client.requestQueue(queue.getId()).addRequest(new RequestQueueRequest("https://example.com", "example"), false);
 RequestQueueHead head = client.requestQueue(queue.getId()).listHead(10L);
+
+// Named storages persist on your account; delete them when done so the example does not leak them.
+client.dataset(dataset.getId()).delete();
+client.keyValueStore(store.getId()).delete();
+client.requestQueue(queue.getId()).delete();
 ```
 
 ## Get own account details

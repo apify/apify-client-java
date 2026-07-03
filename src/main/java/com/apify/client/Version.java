@@ -19,7 +19,7 @@ public final class Version {
    * The version of the Apify OpenAPI specification this client was generated and verified against.
    * Corresponds to the {@code info.version} field of the Apify OpenAPI document.
    */
-  public static final String API_SPEC_VERSION = "v2-2026-07-01T115402Z";
+  public static final String API_SPEC_VERSION = "v2-2026-07-02T131926Z";
 
   private Version() {}
 }

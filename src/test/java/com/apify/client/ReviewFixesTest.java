@@ -38,6 +38,39 @@ class ReviewFixesTest {
   }
 
   @Test
+  void lastRunForwardsStatusFilterToNestedStorages() {
+    // A status/origin-filtered last-run client must forward those filters to its nested
+    // dataset/key-value-store/request-queue/log accessors, so they resolve the same run.
+    MockBackend ds = MockBackend.ofConstant(200, "[]");
+    client(ds)
+        .actor("me/x")
+        .lastRun("SUCCEEDED")
+        .dataset()
+        .listItems(new DatasetListItemsOptions());
+    assertTrue(ds.lastUrl.contains("runs/last/dataset/items"), ds.lastUrl);
+    assertTrue(ds.lastUrl.contains("status=SUCCEEDED"), ds.lastUrl);
+
+    MockBackend log = MockBackend.ofConstant(200, "log-text");
+    client(log)
+        .actor("me/x")
+        .lastRun(new LastRunOptions().status("SUCCEEDED").origin("API"))
+        .log()
+        .get();
+    assertTrue(log.lastUrl.contains("runs/last/log"), log.lastUrl);
+    assertTrue(log.lastUrl.contains("status=SUCCEEDED"), log.lastUrl);
+    assertTrue(log.lastUrl.contains("origin=API"), log.lastUrl);
+  }
+
+  @Test
+  void plainRunNestedStoragesCarryNoInheritedFilter() {
+    // A non-last-run client has no pinned params, so nested accessors stay filter-free.
+    MockBackend ds = MockBackend.ofConstant(200, "[]");
+    client(ds).run("run123").dataset().listItems(new DatasetListItemsOptions());
+    assertTrue(ds.lastUrl.contains("actor-runs/run123/dataset/items"), ds.lastUrl);
+    assertFalse(ds.lastUrl.contains("status="), ds.lastUrl);
+  }
+
+  @Test
   void chargeHonorsExplicitIdempotencyKey() {
     MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{}}");
     client(backend).run("run123").charge(new RunChargeOptions("e").idempotencyKey("fixed-key"));
@@ -287,5 +320,88 @@ class ReviewFixesTest {
     Webhook created = client(backend).webhooks().create(java.util.Map.of("eventTypes", List.of()));
     assertEquals("wh1", created.getId());
     assertTrue(backend.lastUrl.endsWith("/webhooks"), backend.lastUrl);
+  }
+
+  @Test
+  void updateLimitsSendsPutToMeLimits() {
+    MockBackend backend = MockBackend.ofConstant(200, "{}");
+    client(backend).me().updateLimits(java.util.Map.of("maxMonthlyUsageUsd", 100));
+    assertTrue(backend.lastUrl.endsWith("/users/me/limits"), backend.lastUrl);
+    assertTrue(backend.lastBody.contains("\"maxMonthlyUsageUsd\":100"), backend.lastBody);
+    assertEquals(1, backend.calls);
+  }
+
+  @Test
+  void batchAddRequestsThrowsOnNonRetryableClientError() {
+    // A hard 4xx (e.g. bad token / insufficient permissions) must surface, not be masked as
+    // "unprocessed" — otherwise a caller cannot tell it apart from ordinary rate-limiting.
+    MockBackend backend =
+        MockBackend.ofConstant(
+            403, "{\"error\":{\"type\":\"insufficient-permissions\",\"message\":\"no\"}}");
+    ApifyApiException ex =
+        assertThrows(
+            ApifyApiException.class,
+            () ->
+                client(backend)
+                    .requestQueue("q1")
+                    .batchAddRequests(
+                        List.of(new RequestQueueRequest("https://example.com", "k0")),
+                        false,
+                        new BatchAddRequestsOptions().maxUnprocessedRequestsRetries(0)));
+    assertEquals(403, ex.getStatusCode());
+  }
+
+  @Test
+  void batchAddRequestsRunsChunksInParallel() {
+    MockBackend backend =
+        MockBackend.ofConstant(
+            200, "{\"data\":{\"processedRequests\":[],\"unprocessedRequests\":[]}}");
+    List<RequestQueueRequest> requests = new ArrayList<>();
+    for (int i = 0; i < 60; i++) {
+      requests.add(new RequestQueueRequest("https://example.com", "k" + i));
+    }
+    client(backend)
+        .requestQueue("q1")
+        .batchAddRequests(
+            requests,
+            false,
+            new BatchAddRequestsOptions().maxParallel(3).maxUnprocessedRequestsRetries(0));
+    assertEquals(3, backend.calls, "60 requests must be sent as 3 parallel chunks of 25/25/10");
+  }
+
+  @Test
+  void waitForFinishReturnsWhenResourceAppearsAfter404() {
+    // A just-started run can transiently 404 (replica lag); the wait must keep polling until it
+    // appears and reaches a terminal state rather than giving up on the first 404.
+    MockBackend backend =
+        new MockBackend(
+            List.of(
+                MockBackend.ok(
+                    404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}"),
+                MockBackend.ok(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}")));
+    ActorRun run = client(backend).run("r1").waitForFinish(5L);
+    assertEquals("r1", run.getId());
+    assertEquals("SUCCEEDED", run.getStatus());
+    assertEquals(2, backend.calls, "one 404 poll then the terminal poll");
+  }
+
+  @Test
+  void waitForFinishThrowsWhenResourceNeverAppears() {
+    // If the resource is never fetchable within the budget, the wait must fail loudly rather than
+    // return a phantom result.
+    MockBackend backend =
+        MockBackend.ofConstant(
+            404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}");
+    assertThrows(IllegalStateException.class, () -> client(backend).run("r1").waitForFinish(0L));
+  }
+
+  @Test
+  void logStreamThrowsOnNonSuccessStatus() {
+    MockBackend backend = MockBackend.ofConstant(200, "");
+    backend.scriptStream(
+        403, "{\"error\":{\"type\":\"insufficient-permissions\",\"message\":\"no\"}}");
+    ApifyApiException ex =
+        assertThrows(ApifyApiException.class, () -> client(backend).log("run1").stream());
+    assertEquals(403, ex.getStatusCode());
   }
 }

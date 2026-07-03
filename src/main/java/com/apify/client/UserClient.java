@@ -67,7 +67,7 @@ public final class UserClient {
         ctx.subUrl("limits"),
         Json.toBytes(newLimits),
         ResourceContext.CONTENT_TYPE_JSON,
-        ResourceContext.DEFAULT_REQUEST_TIMEOUT);
+        http.baseRequestTimeout());
   }
 
   private void requireMe() {

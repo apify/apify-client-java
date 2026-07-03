@@ -20,6 +20,16 @@ public final class DatasetCollectionClient {
    * name creates a new unnamed dataset.
    */
   public Dataset getOrCreate(String name) {
-    return ctx.getOrCreateNamed(name, Dataset.class);
+    return getOrCreate(name, null);
+  }
+
+  /**
+   * Gets the dataset with the given name, creating it if it does not exist, applying the given
+   * {@code schema} on creation. Mirrors the reference client's {@code getOrCreate(name, {schema})};
+   * a {@code null} schema behaves like {@link #getOrCreate(String)}.
+   */
+  public Dataset getOrCreate(String name, Object schema) {
+    Object body = schema == null ? null : java.util.Collections.singletonMap("schema", schema);
+    return ctx.getOrCreateNamed(name, body, Dataset.class);
   }
 }

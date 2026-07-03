@@ -37,8 +37,8 @@ implementation 'com.apify:apify-client:0.1.0'
 ApifyClient client = ApifyClient.create("my-api-token");
 
 // Start an Actor and wait for it to finish. The last argument is the wait budget in seconds;
-// pass a value (e.g. 120L) to bound the wait, or null to wait indefinitely (as here).
-ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), null);
+// pass a value (e.g. 120L) to bound the wait, or null to wait indefinitely.
+ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
 
 // Read items from the run's default dataset.
 PaginationList<JsonNode> items =
@@ -119,7 +119,7 @@ try {
 
 - `Version.CLIENT_VERSION` — the semantic version of this client (`0.1.0`).
 - `Version.API_SPEC_VERSION` — the Apify OpenAPI specification version this client was verified
-  against (`v2-2026-07-01T115402Z`).
+  against (`v2-2026-07-02T131926Z`).
 
 Changes to the public interface other than additive ones are considered breaking changes and follow
 [Semantic Versioning](https://semver.org/).
@@ -127,10 +127,11 @@ Changes to the public interface other than additive ones are considered breaking
 ### Releasing
 
 Releases are published to Maven Central through the Sonatype Central Publisher Portal by the
-manually-triggered `Publish Java client` GitHub Actions workflow. The workflow authenticates to the
-portal using an OIDC **Trusted Publisher** exchange (no long-lived registry password stored in the
-repo), signs the artifacts with GPG, publishes the `com.apify:apify-client` artifact, and creates a
-tagged GitHub release. The release version is taken from the `<version>` in `pom.xml`.
+manually-triggered `Publish Java client` GitHub Actions workflow. The workflow runs in the
+protected `Publishing` GitHub environment and authenticates to the portal with the Maven Central
+repository credentials held there, signs the artifacts with GPG, publishes the
+`com.apify:apify-client` artifact, and creates a tagged GitHub release. The release version is taken
+from the `<version>` in `pom.xml`.
 
 ## Scope
 

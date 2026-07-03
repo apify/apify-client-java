@@ -39,11 +39,12 @@ transitive dependency of this client, so it is already on your classpath.
 A few methods return data whose shape is not modelled by this client and is instead exposed as a
 Jackson `JsonNode` (or accept an arbitrary `Object` serialized to JSON):
 
-- Read: `me().monthlyUsage(...)`, `me().limits()`,
-  `task(id).getInput()`/`updateInput(...)`, `build(id).getOpenApiDefinition()`,
-  `dataset(id).getStatistics()`, and the raw request-queue operations (`listRequests`,
-  `listAndLockHead`, `prolongRequestLock`, `unlockRequests`, `batchDeleteRequests`).
-- Write: definition/`update`/`create` arguments accept any JSON-serializable value — a `Map`, a
+- Read: `me().monthlyUsage(...)`, `me().limits()`, `task(id).getInput()`,
+  `build(id).getOpenApiDefinition()`, `dataset(id).getStatistics()`, and the raw request-queue
+  operations (`listRequests`, `listAndLockHead`, `prolongRequestLock`, `unlockRequests`,
+  `batchDeleteRequests`).
+- Write: `task(id).updateInput(...)` and `me().updateLimits(...)` accept an arbitrary
+  JSON-serializable value, as do definition/`update`/`create` arguments generally — a `Map`, a
   `JsonNode`, or your own POJO.
 
 Navigate a `JsonNode` with `node.get("field")`, `node.path("a").asText()`, etc.

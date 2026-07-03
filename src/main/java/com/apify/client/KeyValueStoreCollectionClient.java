@@ -20,6 +20,16 @@ public final class KeyValueStoreCollectionClient {
    * name creates a new unnamed store.
    */
   public KeyValueStore getOrCreate(String name) {
-    return ctx.getOrCreateNamed(name, KeyValueStore.class);
+    return getOrCreate(name, null);
+  }
+
+  /**
+   * Gets the store with the given name, creating it if it does not exist, applying the given {@code
+   * schema} on creation. Mirrors the reference client's {@code getOrCreate(name, {schema})}; a
+   * {@code null} schema behaves like {@link #getOrCreate(String)}.
+   */
+  public KeyValueStore getOrCreate(String name, Object schema) {
+    Object body = schema == null ? null : java.util.Collections.singletonMap("schema", schema);
+    return ctx.getOrCreateNamed(name, body, KeyValueStore.class);
   }
 }

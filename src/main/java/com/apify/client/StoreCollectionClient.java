@@ -33,7 +33,6 @@ public final class StoreCollectionClient {
     private List<ActorStoreListItem> buffer = List.of();
     private int pos;
     private long offset;
-    private long total;
     private boolean exhausted;
 
     StoreIterator(StoreListOptions options) {
@@ -68,9 +67,14 @@ public final class StoreCollectionClient {
       PaginationList<ActorStoreListItem> page = list(options);
       buffer = page.getItems();
       pos = 0;
-      total = page.getTotal();
       offset += page.getItems().size();
-      if (page.getItems().isEmpty() || offset >= total) {
+      // Terminate on an empty page, or on a short page when a page size (limit) is known — a page
+      // returning fewer items than requested is the last one. We deliberately do NOT stop on
+      // `offset >= total`: a momentarily stale (under-reported) `total`, e.g. from read-replica
+      // lag right after a write, could otherwise cut iteration short while items remain.
+      Long limit = options.limitValue();
+      boolean shortPage = limit != null && limit > 0 && page.getItems().size() < limit;
+      if (page.getItems().isEmpty() || shortPage) {
         exhausted = true;
       }
     }

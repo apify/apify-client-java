@@ -23,7 +23,12 @@ public final class LogClient {
 
   /** Creates a log client for a run's or build's nested log endpoint (e.g. {@code .../log}). */
   static LogClient nested(HttpClientCore http, String base) {
-    return new LogClient(ResourceContext.collection(http, base, "log"));
+    return nested(http, base, null);
+  }
+
+  /** As {@link #nested(HttpClientCore, String)} but inheriting parent query params. */
+  static LogClient nested(HttpClientCore http, String base, QueryParams inherited) {
+    return new LogClient(ResourceContext.collection(http, base, "log").seedParams(inherited));
   }
 
   /** Fetches the entire log as text, or empty if the log does not exist. */

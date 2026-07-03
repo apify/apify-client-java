@@ -13,7 +13,11 @@ final class RetryConfig {
   /** Upper bound on the (exponentially growing) inter-retry delay. */
   final Duration maxDelayBetweenRetries;
 
-  /** Overall per-request timeout budget. Each attempt's timeout grows but is capped here. */
+  /**
+   * Maximum per-attempt request (socket) timeout, and the default base timeout for a call. Each
+   * attempt's timeout may grow from a smaller per-call base but is capped at this value. This
+   * bounds a single attempt, not the cumulative time across all retries.
+   */
   final Duration timeout;
 
   RetryConfig(

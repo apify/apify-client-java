@@ -21,6 +21,20 @@ public final class RequestQueueClient {
   /** The API limit on requests per batch call; larger inputs are split into chunks of this size. */
   private static final int MAX_REQUESTS_PER_BATCH = 25;
 
+  /**
+   * Upper bound on the unprocessed-requests backoff exponent, so {@code 2^attempt} cannot blow up.
+   */
+  private static final int MAX_BACKOFF_EXPONENT = 10;
+
+  /** Lowest client-error status; statuses in {@code [400, 500)} are client errors. */
+  private static final int MIN_CLIENT_ERROR_STATUS = 400;
+
+  /** Lowest server-error status; statuses at or above this are server errors. */
+  private static final int MIN_SERVER_ERROR_STATUS = 500;
+
+  /** Rate-limit status; retryable, so it is not treated as a hard client error. */
+  private static final int RATE_LIMIT_STATUS = 429;
+
   private final HttpClientCore http;
   private final ResourceContext ctx;
   private final String clientKey;
@@ -37,7 +51,14 @@ public final class RequestQueueClient {
 
   /** Creates a client for a run's default request queue (nested path only, no ID). */
   static RequestQueueClient nested(HttpClientCore http, String base, String subPath) {
-    return new RequestQueueClient(http, ResourceContext.collection(http, base, subPath), null);
+    return nested(http, base, subPath, null);
+  }
+
+  /** As {@link #nested(HttpClientCore, String, String)} but inheriting parent query params. */
+  static RequestQueueClient nested(
+      HttpClientCore http, String base, String subPath, QueryParams inherited) {
+    return new RequestQueueClient(
+        http, ResourceContext.collection(http, base, subPath).seedParams(inherited), null);
   }
 
   /**
@@ -121,7 +142,7 @@ public final class RequestQueueClient {
             url,
             Json.toBytes(request),
             ResourceContext.CONTENT_TYPE_JSON,
-            ResourceContext.DEFAULT_REQUEST_TIMEOUT);
+            http.baseRequestTimeout());
     return Json.parseData(resp.body, RequestQueueOperationInfo.class);
   }
 
@@ -132,7 +153,7 @@ public final class RequestQueueClient {
         ctx.mergedParams(params)
             .applyToUrl(ctx.subUrl("requests/" + ResourceContext.encodePathSegment(id)));
     try {
-      http.call("DELETE", url, null, "", ResourceContext.DEFAULT_REQUEST_TIMEOUT);
+      http.call("DELETE", url, null, "", http.baseRequestTimeout());
     } catch (ApifyApiException e) {
       if (!ResourceContext.isNotFound(e)) {
         throw e;
@@ -167,6 +188,13 @@ public final class RequestQueueClient {
    * requests the API leaves unprocessed (typically rate-limited) are retried with exponential
    * backoff up to {@link BatchAddRequestsOptions#maxUnprocessedRequestsRetries} times. The
    * per-chunk results are merged into a single {@link BatchAddResult}.
+   *
+   * <p>Requests that remain unprocessed after all retries (typically due to persistent
+   * rate-limiting or server errors) are returned in {@link BatchAddResult#getUnprocessedRequests()}
+   * rather than raising an exception. A non-retryable client error (a 4xx other than 429, such as
+   * an invalid token or insufficient permissions) is instead thrown as an {@link
+   * ApifyApiException}, since it will not succeed on retry and should not be silently hidden as
+   * "unprocessed".
    */
   public BatchAddResult batchAddRequests(
       List<RequestQueueRequest> requests, boolean forefront, BatchAddRequestsOptions options) {
@@ -241,8 +269,15 @@ public final class RequestQueueClient {
           break;
         }
       } catch (ApifyApiException e) {
-        // Transport did not (or was told not to) retry: stop and report everything not yet added as
-        // unprocessed so the call keeps its non-throwing signature.
+        // A non-retryable client error (bad token, insufficient permissions, invalid request) is a
+        // hard failure, not a transient one — surface it rather than hiding it as "unprocessed",
+        // where a caller could not tell it apart from ordinary rate-limiting. Rate-limit (429) and
+        // server (5xx) errors have already exhausted the transport's retries by this point; keep
+        // the
+        // non-throwing contract for those and report the remainder as unprocessed.
+        if (isNonRetryableClientError(e)) {
+          throw e;
+        }
         break;
       }
       if (attempt < maxRetries) {
@@ -256,6 +291,18 @@ public final class RequestQueueClient {
     // (instead of trusting the last response) stays correct even if the API returns fewer entries.
     result.setUnprocessedRequests(requestsNotYetProcessed(chunk, processed));
     return result;
+  }
+
+  /**
+   * Reports whether an API error is a non-retryable client error (a 4xx other than 429). Such
+   * errors (e.g. bad token, insufficient permissions, invalid request) will not succeed on retry,
+   * so the batch helper surfaces them instead of masking them as unprocessed requests.
+   */
+  private static boolean isNonRetryableClientError(ApifyApiException e) {
+    int status = e.getStatusCode();
+    return status >= MIN_CLIENT_ERROR_STATUS
+        && status < MIN_SERVER_ERROR_STATUS
+        && status != RATE_LIMIT_STATUS;
   }
 
   private static List<RequestQueueRequest> requestsNotYetProcessed(
@@ -280,8 +327,10 @@ public final class RequestQueueClient {
       return;
     }
     // (1 + random) * 2^attempt * minDelay — exponential backoff with jitter, matching the
-    // reference.
-    double factor = (1 + ThreadLocalRandom.current().nextDouble()) * Math.pow(2, attempt);
+    // reference. The exponent is capped so a pathologically large retry count cannot overflow the
+    // delay into an absurd (or negative, after the long cast) sleep.
+    int cappedAttempt = Math.min(attempt, MAX_BACKOFF_EXPONENT);
+    double factor = (1 + ThreadLocalRandom.current().nextDouble()) * Math.pow(2, cappedAttempt);
     long delayMillis = (long) Math.floor(factor * minDelayMillis);
     try {
       Thread.sleep(delayMillis);
@@ -332,7 +381,7 @@ public final class RequestQueueClient {
     String url =
         ctx.mergedParams(params)
             .applyToUrl(ctx.subUrl("requests/" + ResourceContext.encodePathSegment(id) + "/lock"));
-    ApiResponse resp = http.call("PUT", url, null, "", ResourceContext.DEFAULT_REQUEST_TIMEOUT);
+    ApiResponse resp = http.call("PUT", url, null, "", http.baseRequestTimeout());
     return Json.parseData(resp.body, Json.type(JsonNode.class));
   }
 
@@ -348,7 +397,7 @@ public final class RequestQueueClient {
         ctx.mergedParams(params)
             .applyToUrl(ctx.subUrl("requests/" + ResourceContext.encodePathSegment(id) + "/lock"));
     try {
-      http.call("DELETE", url, null, "", ResourceContext.DEFAULT_REQUEST_TIMEOUT);
+      http.call("DELETE", url, null, "", http.baseRequestTimeout());
     } catch (ApifyApiException e) {
       if (!ResourceContext.isNotFound(e)) {
         throw e;

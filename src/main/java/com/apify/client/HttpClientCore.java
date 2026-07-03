@@ -49,9 +49,19 @@ final class HttpClientCore {
     return backend;
   }
 
-  /** The configured overall per-request timeout budget, in whole seconds. */
+  /** The configured maximum per-attempt request timeout, in whole seconds. */
   long requestTimeoutSeconds() {
     return retry.timeout.getSeconds();
+  }
+
+  /**
+   * The default per-attempt request timeout used as the base for standard API calls. It is the
+   * client's configured timeout (single source of truth), so a caller-configured timeout applies to
+   * the first attempt too. Individual calls may pass a smaller base (e.g. key-value-store uploads),
+   * which then grows back up toward this value on retries.
+   */
+  Duration baseRequestTimeout() {
+    return retry.timeout;
   }
 
   /** Sends a request with auth, User-Agent and the retry policy applied. */
@@ -176,9 +186,12 @@ final class HttpClientCore {
   }
 
   /**
-   * Returns {@code min(overall, base * 2^(attempt-1))}. The first attempt uses the per-endpoint
-   * base timeout; each retry doubles it (so a slow-but-progressing connection gets more time) while
-   * never exceeding the overall budget.
+   * Returns {@code min(configured, base * 2^(attempt-1))}: the per-attempt socket timeout. The
+   * first attempt uses the per-call base timeout; each retry doubles it (so a slow-but-progressing
+   * connection gets more time) while never exceeding the configured maximum. This mirrors the
+   * reference client's per-try timeout model ({@code Math.min(timeoutMillis, base *
+   * 2**(attempt-1))}). Note this bounds each individual attempt, not the cumulative wall-clock time
+   * across all retries.
    */
   private Duration attemptTimeout(Duration base, int attempt) {
     Duration scaled = base;

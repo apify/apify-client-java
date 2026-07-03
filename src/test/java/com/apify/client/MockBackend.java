@@ -85,9 +85,24 @@ final class MockBackend implements HttpBackend {
     return new FakeResponse(request.uri(), r.status, r.body);
   }
 
+  /**
+   * Optional scripted response for {@link #sendStreaming}; defaults to the first {@code send}
+   * entry.
+   */
+  private Scripted streamResponse;
+
+  /** Scripts the next {@link #sendStreaming} call to return the given status and body. */
+  void scriptStream(int status, String body) {
+    this.streamResponse = new Scripted(status, body, null);
+  }
+
   @Override
-  public HttpResponse<InputStream> sendStreaming(HttpRequest request) {
-    throw new UnsupportedOperationException("streaming not used in unit tests");
+  public synchronized HttpResponse<InputStream> sendStreaming(HttpRequest request) {
+    calls++;
+    lastUrl = request.uri().toString();
+    Scripted r = streamResponse != null ? streamResponse : responses.get(0);
+    return new FakeStreamResponse(
+        request.uri(), r.status, new java.io.ByteArrayInputStream(r.body));
   }
 
   private static String readBody(HttpRequest request) {
@@ -165,6 +180,59 @@ final class MockBackend implements HttpBackend {
 
     @Override
     public byte[] body() {
+      return body;
+    }
+
+    @Override
+    public Optional<SSLSession> sslSession() {
+      return Optional.empty();
+    }
+
+    @Override
+    public URI uri() {
+      return uri;
+    }
+
+    @Override
+    public HttpClient.Version version() {
+      return HttpClient.Version.HTTP_1_1;
+    }
+  }
+
+  /** Minimal {@link HttpResponse} over an {@link InputStream} body, for streaming tests. */
+  private static final class FakeStreamResponse implements HttpResponse<InputStream> {
+    private final URI uri;
+    private final int status;
+    private final InputStream body;
+
+    FakeStreamResponse(URI uri, int status, InputStream body) {
+      this.uri = uri;
+      this.status = status;
+      this.body = body;
+    }
+
+    @Override
+    public int statusCode() {
+      return status;
+    }
+
+    @Override
+    public HttpRequest request() {
+      return null;
+    }
+
+    @Override
+    public Optional<HttpResponse<InputStream>> previousResponse() {
+      return Optional.empty();
+    }
+
+    @Override
+    public HttpHeaders headers() {
+      return HttpHeaders.of(Map.of(), (a, b) -> true);
+    }
+
+    @Override
+    public InputStream body() {
       return body;
     }
 

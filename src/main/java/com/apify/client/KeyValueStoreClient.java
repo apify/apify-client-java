@@ -16,7 +16,14 @@ public final class KeyValueStoreClient {
 
   /** Creates a client for a run's default key-value store (nested path only, no ID). */
   static KeyValueStoreClient nested(HttpClientCore http, String base, String subPath) {
-    return new KeyValueStoreClient(ResourceContext.collection(http, base, subPath));
+    return nested(http, base, subPath, null);
+  }
+
+  /** As {@link #nested(HttpClientCore, String, String)} but inheriting parent query params. */
+  static KeyValueStoreClient nested(
+      HttpClientCore http, String base, String subPath, QueryParams inherited) {
+    return new KeyValueStoreClient(
+        ResourceContext.collection(http, base, subPath).seedParams(inherited));
   }
 
   KeyValueStoreClient withPublicBase(String publicBaseUrl) {
@@ -84,7 +91,7 @@ public final class KeyValueStoreClient {
     java.time.Duration timeout =
         options.timeoutSecsValue() != null
             ? java.time.Duration.ofSeconds(options.timeoutSecsValue())
-            : ResourceContext.DEFAULT_REQUEST_TIMEOUT;
+            : ctx.http.baseRequestTimeout();
     ctx.putRaw(
         "records/" + ResourceContext.encodePathSegment(key),
         new QueryParams(),

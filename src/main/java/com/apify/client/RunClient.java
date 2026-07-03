@@ -132,7 +132,7 @@ public final class RunClient {
         Json.toBytes(body),
         ResourceContext.CONTENT_TYPE_JSON,
         headers,
-        ResourceContext.DEFAULT_REQUEST_TIMEOUT);
+        ctx.http.baseRequestTimeout());
   }
 
   /**
@@ -160,27 +160,31 @@ public final class RunClient {
 
   /** A client for this run's default dataset. */
   public DatasetClient dataset() {
-    return DatasetClient.nested(ctx.http, ctx.subUrl(""), "dataset");
+    return DatasetClient.nested(ctx.http, ctx.subUrl(""), "dataset", ctx.baseParams);
   }
 
   /** A client for this run's default key-value store. */
   public KeyValueStoreClient keyValueStore() {
-    return KeyValueStoreClient.nested(ctx.http, ctx.subUrl(""), "key-value-store");
+    return KeyValueStoreClient.nested(ctx.http, ctx.subUrl(""), "key-value-store", ctx.baseParams);
   }
 
   /** A client for this run's default request queue. */
   public RequestQueueClient requestQueue() {
-    return RequestQueueClient.nested(ctx.http, ctx.subUrl(""), "request-queue");
+    return RequestQueueClient.nested(ctx.http, ctx.subUrl(""), "request-queue", ctx.baseParams);
   }
 
   /** A client for accessing this run's log. */
   public LogClient log() {
-    return LogClient.nested(ctx.http, ctx.subUrl(""));
+    return LogClient.nested(ctx.http, ctx.subUrl(""), ctx.baseParams);
   }
 
   /**
    * Opens a live stream of this run's raw log, for convenient log redirection. The caller must
    * close the returned stream.
+   *
+   * <p>This is a shorthand for the common raw-log case. For full control over the streamed log
+   * (e.g. non-raw content or a download disposition), use {@link #log()}{@code .stream(options)}
+   * directly with a {@link LogOptions}.
    */
   public InputStream getStreamedLog() {
     return log().stream(new LogOptions().raw(true));

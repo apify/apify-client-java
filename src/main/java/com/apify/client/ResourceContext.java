@@ -14,9 +14,6 @@ import java.util.function.Predicate;
  */
 final class ResourceContext {
 
-  /** Per-request timeout applied to all API calls (6 minutes). Single source of truth. */
-  static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(360);
-
   static final String CONTENT_TYPE_JSON = "application/json";
   static final String CONTENT_TYPE_JSON_CHARSET = "application/json; charset=utf-8";
 
@@ -105,6 +102,18 @@ final class ResourceContext {
     return baseParams.copy().extend(params);
   }
 
+  /**
+   * Seeds this context's inherited params from a parent context (e.g. so a last-run client's pinned
+   * {@code status}/{@code origin} filters carry into its nested storage/log accessors). No-op when
+   * {@code inherited} is null or empty, so ordinary nested clients are unaffected.
+   */
+  ResourceContext seedParams(QueryParams inherited) {
+    if (inherited != null && !inherited.isEmpty()) {
+      baseParams.extend(inherited);
+    }
+    return this;
+  }
+
   // ---- CRUD primitives ------------------------------------------------------
 
   <T> Optional<T> getResource(String subPath, QueryParams params, JavaType dataType) {
@@ -126,7 +135,7 @@ final class ResourceContext {
 
   <T> T getResourceRequired(String subPath, QueryParams params, JavaType dataType) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    ApiResponse resp = http.call("GET", u, null, "", DEFAULT_REQUEST_TIMEOUT);
+    ApiResponse resp = http.call("GET", u, null, "", http.baseRequestTimeout());
     return Json.parseData(resp.body, dataType);
   }
 
@@ -137,7 +146,7 @@ final class ResourceContext {
   <T> T updateResource(String subPath, Object body, Class<T> dataClass) {
     String u = mergedParams(new QueryParams()).applyToUrl(subUrl(subPath));
     ApiResponse resp =
-        http.call("PUT", u, Json.toBytes(body), CONTENT_TYPE_JSON, DEFAULT_REQUEST_TIMEOUT);
+        http.call("PUT", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout());
     return Json.parseData(resp.body, dataClass);
   }
 
@@ -145,7 +154,7 @@ final class ResourceContext {
   void deleteResource(String subPath) {
     String u = mergedParams(new QueryParams()).applyToUrl(subUrl(subPath));
     try {
-      http.call("DELETE", u, null, "", DEFAULT_REQUEST_TIMEOUT);
+      http.call("DELETE", u, null, "", http.baseRequestTimeout());
     } catch (ApifyApiException e) {
       if (!isNotFound(e)) {
         throw e;
@@ -161,18 +170,29 @@ final class ResourceContext {
   <T> T createResource(QueryParams params, Object body, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(""));
     ApiResponse resp =
-        http.call("POST", u, Json.toBytes(body), CONTENT_TYPE_JSON, DEFAULT_REQUEST_TIMEOUT);
+        http.call("POST", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout());
     return Json.parseData(resp.body, dataClass);
   }
 
   /** POST that gets-or-creates a named resource ({@code POST {collection}?name=...}). */
   <T> T getOrCreateNamed(String name, Class<T> dataClass) {
+    return getOrCreateNamed(name, null, dataClass);
+  }
+
+  /**
+   * POST that gets-or-creates a named resource, optionally sending a JSON request body (e.g. a
+   * storage {@code schema}). A {@code null} body sends no body, matching the plain get-or-create.
+   */
+  <T> T getOrCreateNamed(String name, Object body, Class<T> dataClass) {
     QueryParams params = new QueryParams();
     if (name != null && !name.isEmpty()) {
       params.addString("name", name);
     }
     String u = params.applyToUrl(subUrl(""));
-    ApiResponse resp = http.call("POST", u, null, "", DEFAULT_REQUEST_TIMEOUT);
+    byte[] bodyBytes = body == null ? null : Json.toBytes(body);
+    ApiResponse resp =
+        http.call(
+            "POST", u, bodyBytes, body == null ? "" : CONTENT_TYPE_JSON, http.baseRequestTimeout());
     return Json.parseData(resp.body, dataClass);
   }
 
@@ -185,7 +205,7 @@ final class ResourceContext {
   <T> T postWithBody(
       String subPath, QueryParams params, byte[] body, String contentType, JavaType dataType) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    ApiResponse resp = http.call("POST", u, body, contentType, DEFAULT_REQUEST_TIMEOUT);
+    ApiResponse resp = http.call("POST", u, body, contentType, http.baseRequestTimeout());
     return Json.parseData(resp.body, dataType);
   }
 
@@ -197,7 +217,7 @@ final class ResourceContext {
   <T> T postWithBodyNoEnvelope(
       String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    ApiResponse resp = http.call("POST", u, body, contentType, DEFAULT_REQUEST_TIMEOUT);
+    ApiResponse resp = http.call("POST", u, body, contentType, http.baseRequestTimeout());
     return Json.parse(resp.body, dataClass);
   }
 
@@ -205,7 +225,7 @@ final class ResourceContext {
   <T> T deleteWithBody(String subPath, QueryParams params, Object body, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp =
-        http.call("DELETE", u, Json.toBytes(body), CONTENT_TYPE_JSON, DEFAULT_REQUEST_TIMEOUT);
+        http.call("DELETE", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout());
     return Json.parseData(resp.body, dataClass);
   }
 
@@ -213,7 +233,7 @@ final class ResourceContext {
   ApiResponse getRaw(String subPath, QueryParams params) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     try {
-      return http.call("GET", u, null, "", DEFAULT_REQUEST_TIMEOUT);
+      return http.call("GET", u, null, "", http.baseRequestTimeout());
     } catch (ApifyApiException e) {
       if (isNotFound(e)) {
         return null;
@@ -226,7 +246,7 @@ final class ResourceContext {
   boolean headExists(String subPath, QueryParams params) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     try {
-      http.call("HEAD", u, null, "", DEFAULT_REQUEST_TIMEOUT);
+      http.call("HEAD", u, null, "", http.baseRequestTimeout());
       return true;
     } catch (ApifyApiException e) {
       if (isNotFound(e)) {
@@ -238,7 +258,7 @@ final class ResourceContext {
 
   /** PUT with raw bytes and a content type (used for key-value-store record uploads). */
   void putRaw(String subPath, QueryParams params, byte[] body, String contentType) {
-    putRaw(subPath, params, body, contentType, DEFAULT_REQUEST_TIMEOUT, false);
+    putRaw(subPath, params, body, contentType, http.baseRequestTimeout(), false);
   }
 
   /**

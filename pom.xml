@@ -130,8 +130,9 @@
 
     <profiles>
         <!-- Release profile: attaches sources and javadoc, GPG-signs artifacts, and publishes
-             to Maven Central via the Sonatype Central Publisher Portal (OIDC "Trusted Publisher"
-             is supported by the publish workflow). Activated by the publish CI workflow with -Prelease. -->
+             to Maven Central via the Sonatype Central Publisher Portal. The publish workflow
+             authenticates the "central" server with the Maven Central repository credentials from
+             the "Publishing" GitHub environment. Activated by the publish CI workflow with -Prelease. -->
         <profile>
             <id>release</id>
             <build>

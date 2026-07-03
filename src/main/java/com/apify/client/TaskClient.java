@@ -73,7 +73,7 @@ public final class TaskClient {
             ctx.subUrl("input"),
             Json.toBytes(input),
             ResourceContext.CONTENT_TYPE_JSON,
-            ResourceContext.DEFAULT_REQUEST_TIMEOUT);
+            http.baseRequestTimeout());
     return Json.parse(resp.body, JsonNode.class);
   }
 

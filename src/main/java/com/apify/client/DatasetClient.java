@@ -22,7 +22,14 @@ public final class DatasetClient {
 
   /** Creates a dataset client for a run's default dataset (nested path only, no ID). */
   static DatasetClient nested(HttpClientCore http, String base, String subPath) {
-    return new DatasetClient(http, ResourceContext.collection(http, base, subPath));
+    return nested(http, base, subPath, null);
+  }
+
+  /** As {@link #nested(HttpClientCore, String, String)} but inheriting parent query params. */
+  static DatasetClient nested(
+      HttpClientCore http, String base, String subPath, QueryParams inherited) {
+    return new DatasetClient(
+        http, ResourceContext.collection(http, base, subPath).seedParams(inherited));
   }
 
   DatasetClient withPublicBase(String publicBaseUrl) {
@@ -63,8 +70,8 @@ public final class DatasetClient {
   public <T> PaginationList<T> listItems(DatasetListItemsOptions options, Class<T> itemClass) {
     QueryParams params = new QueryParams();
     options.apply(params);
-    String url = params.applyToUrl(ctx.subUrl("items"));
-    ApiResponse resp = http.call("GET", url, null, "", ResourceContext.DEFAULT_REQUEST_TIMEOUT);
+    String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
+    ApiResponse resp = http.call("GET", url, null, "", http.baseRequestTimeout());
 
     JavaType listType = Json.parametric(List.class, Json.type(itemClass));
     List<T> items = Json.parse(resp.body, listType);
@@ -91,8 +98,8 @@ public final class DatasetClient {
     QueryParams params = new QueryParams();
     params.addString("format", format.wireValue());
     options.apply(params);
-    String url = params.applyToUrl(ctx.subUrl("items"));
-    ApiResponse resp = http.call("GET", url, null, "", ResourceContext.DEFAULT_REQUEST_TIMEOUT);
+    String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
+    ApiResponse resp = http.call("GET", url, null, "", http.baseRequestTimeout());
     return resp.body;
   }
 
@@ -106,7 +113,7 @@ public final class DatasetClient {
         ctx.subUrl("items"),
         Json.toBytes(items),
         ResourceContext.CONTENT_TYPE_JSON_CHARSET,
-        ResourceContext.DEFAULT_REQUEST_TIMEOUT);
+        http.baseRequestTimeout());
   }
 
   /** Returns statistical information about the dataset, or empty if unavailable. */

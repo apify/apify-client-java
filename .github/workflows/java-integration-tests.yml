@@ -47,7 +47,7 @@ jobs:
 
       # Offline unit tests (mock HTTP backend): prove the retry/error/signature logic without the API.
       - name: Unit tests
-        run: mvn -B test -Dtest='UnitHttpTest,ReviewFixesTest,ClientMetaTest,SignatureTest,ConfigTest' -DfailIfNoTests=false
+        run: mvn -B test -Dtest='UnitHttpTest,ReviewFixesTest,ClientMetaTest,SignatureTest,ConfigTest' -DfailIfNoTests=true
 
       # Fail fast if the integration-test secret is missing or empty. Without this guard the
       # integration tests silently "pass" (JUnit assumptions skip them when APIFY_TOKEN is unset),
@@ -66,7 +66,7 @@ jobs:
           # The integration-test token is stored as a repository secret.
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         # Run every test except the example/doc-snippet harnesses (exercised by the step below).
-        run: mvn -B test -Dtest='!ExamplesTest,!DocSnippetsTest' -DfailIfNoTests=false
+        run: mvn -B test -Dtest='!ExamplesTest,!DocSnippetsTest' -DfailIfNoTests=true
 
       # Standalone CI step that verifies the documentation examples actually work end-to-end against
       # the live API (ExamplesTest runs each example's main), and that every in-documentation Java
@@ -74,4 +74,4 @@ jobs:
       - name: Test examples
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        run: mvn -B test -Dtest='ExamplesTest,DocSnippetsTest' -DfailIfNoTests=false
+        run: mvn -B test -Dtest='ExamplesTest,DocSnippetsTest' -DfailIfNoTests=true
