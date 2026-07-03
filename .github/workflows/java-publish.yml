@@ -1,0 +1,121 @@
+name: Publish Java client
+
+# Language-specific publish workflow for the Java client. It is triggered manually only
+# (workflow_dispatch) so a maintainer deliberately decides when a release is cut. The release
+# version is the single source of truth in pom.xml (<version>). The artifact is published to Maven
+# Central via the Sonatype Central Publisher Portal.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run all checks and build artifacts but do not deploy or create the release.'
+        type: boolean
+        default: false
+
+# Never allow two publish runs to race; publishing two releases concurrently is hard to undo.
+concurrency:
+  group: java-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create the tagged GitHub release
+  id-token: write # OIDC Trusted Publishing exchange with the Sonatype Central Portal
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A release must only ever be cut from master.
+      - name: Require master branch
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/master" ]; then
+            echo "::error::Publishing is only allowed from master, but this run is on '${GITHUB_REF}'."
+            exit 1
+          fi
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          # Provision a Maven settings.xml with the Central Portal server credentials. All secrets
+          # are read from repository secrets; nothing is stored in the repo.
+          server-id: central
+          server-username: CENTRAL_USERNAME
+          server-password: CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      # Gate the release on the same quality bar as CI so a broken build can never be published.
+      - name: Check formatting (Spotless)
+        run: mvn -B spotless:check
+
+      - name: Static analysis (SpotBugs)
+        run: mvn -B -DskipTests compile spotbugs:check
+
+      - name: Unit tests
+        run: mvn -B test -Dtest='UnitHttpTest,ReviewFixesTest,ClientMetaTest,SignatureTest,ConfigTest' -DfailIfNoTests=false
+
+      - name: Resolve version from pom.xml
+        id: version
+        run: |
+          version=$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)
+          if ! echo "${version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::project.version '${version}' is not a bare semver (X.Y.Z)."
+            exit 1
+          fi
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: v${version}"
+
+      - name: Ensure tag does not already exist
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git ls-remote --exit-code --tags origin "${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag ${TAG} already exists on origin; bump the version in pom.xml first."
+            exit 1
+          fi
+
+      # Build, sign and publish to Maven Central via the Sonatype Central Publisher Portal.
+      # The Central Portal supports OIDC Trusted Publishing (id-token above); the token exchange is
+      # performed by the central-publishing-maven-plugin, with the CENTRAL_* / GPG secrets as the
+      # credential fallback. All values come from repository secrets.
+      - name: Publish to Maven Central
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: mvn -B -Prelease -DskipTests deploy
+
+      - name: Build artifacts only (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: mvn -B -Prelease -DskipTests verify
+
+      - name: Create and push release tag
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+
+      - name: Create GitHub release
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes "Apify Java client ${TAG}. See CHANGELOG.md for details."

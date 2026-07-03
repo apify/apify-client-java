@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs exclude filter. Two narrow, documented exclusions only — no category-wide rule is
+  disabled:
+
+  1. EI_EXPOSE_REP/EI_EXPOSE_REP2 on the internal raw-bytes HTTP response body ({@code
+     ApiResponse}). Carrying the actual bytes rather than a defensive copy is the intended contract;
+     the payload can be large (dataset exports, records ZIPs) and copying it on every access would be
+     wasteful. {@code ApiResponse} is package-private (not user-facing). The user-facing {@code
+     KeyValueStoreRecord} value type does defensively copy its bytes. All other
+     representation-exposure warnings are fixed in code (unmodifiable getters / copy-on-set).
+
+  2. UWF_UNWRITTEN_FIELD on KeyValueStoreKey: a Jackson-populated DTO whose fields are written by
+     the deserializer via reflection, which SpotBugs cannot see — a known false positive for
+     data-binding models.
+-->
+<FindBugsFilter>
+  <Match>
+    <Class name="com.apify.client.ApiResponse"/>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.KeyValueStoreKey"/>
+    <Bug pattern="UWF_UNWRITTEN_FIELD"/>
+  </Match>
+</FindBugsFilter>
