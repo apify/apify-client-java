@@ -21,16 +21,19 @@ System.out.println("Item count: " + items.getCount());
 Dataset dataset = client.datasets().getOrCreate("example-ds");
 client.dataset(dataset.getId()).pushItems(List.of(Map.of("hello", "world")));
 PaginationList<JsonNode> dsItems = client.dataset(dataset.getId()).listItems(new DatasetListItemsOptions());
+System.out.println("Dataset items: " + dsItems.getCount());
 
 // Key-value store
 KeyValueStore store = client.keyValueStores().getOrCreate("example-kvs");
 client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42));
 Optional<KeyValueStoreRecord> record = client.keyValueStore(store.getId()).getRecord("OUTPUT");
+record.ifPresent(r -> System.out.println("OUTPUT bytes: " + r.getValue().length));
 
 // Request queue
 RequestQueue queue = client.requestQueues().getOrCreate("example-rq");
 client.requestQueue(queue.getId()).addRequest(new RequestQueueRequest("https://example.com", "example"), false);
 RequestQueueHead head = client.requestQueue(queue.getId()).listHead(10L);
+System.out.println("Queue head items: " + head.getItems().size());
 
 // Named storages persist on your account; delete them when done so the example does not leak them.
 client.dataset(dataset.getId()).delete();

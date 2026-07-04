@@ -272,9 +272,8 @@ public final class RequestQueueClient {
         // A non-retryable client error (bad token, insufficient permissions, invalid request) is a
         // hard failure, not a transient one — surface it rather than hiding it as "unprocessed",
         // where a caller could not tell it apart from ordinary rate-limiting. Rate-limit (429) and
-        // server (5xx) errors have already exhausted the transport's retries by this point; keep
-        // the
-        // non-throwing contract for those and report the remainder as unprocessed.
+        // server (5xx) errors have already exhausted the transport's retries by this point, so for
+        // those we keep the non-throwing contract and report the remainder as unprocessed.
         if (isNonRetryableClientError(e)) {
           throw e;
         }

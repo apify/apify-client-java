@@ -67,10 +67,13 @@ public final class TaskClient {
 
   /** Replaces the task's stored input and returns the updated input. */
   public JsonNode updateInput(Object input) {
+    // Route through mergedParams like the task's other calls, so any inherited params are
+    // preserved.
+    String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("input"));
     ApiResponse resp =
         http.call(
             "PUT",
-            ctx.subUrl("input"),
+            url,
             Json.toBytes(input),
             ResourceContext.CONTENT_TYPE_JSON,
             http.baseRequestTimeout());

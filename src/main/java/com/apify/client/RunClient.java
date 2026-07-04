@@ -46,9 +46,10 @@ public final class RunClient {
   }
 
   /**
-   * Fetches the run, optionally asking the API to wait up to {@code waitForFinishSecs} seconds (max
-   * 60) for the run to reach a terminal state before responding. Pass {@code null} for an immediate
-   * fetch.
+   * Fetches the run, optionally asking the API to wait up to {@code waitForFinishSecs} seconds for
+   * the run to reach a terminal state before responding. The value is clamped so the server always
+   * responds before the client's per-request timeout; the API itself caps server-side waiting at 60
+   * seconds. Pass {@code null} for an immediate fetch.
    */
   public Optional<ActorRun> getWithWait(Long waitForFinishSecs) {
     QueryParams params = new QueryParams();
@@ -126,9 +127,12 @@ public final class RunClient {
     body.put("eventName", eventName);
     body.put("count", options.countValue());
     Map<String, String> headers = Map.of(CHARGE_IDEMPOTENCY_HEADER, idempotencyKey);
+    // Route through mergedParams like the run's other actions, so a last-run-seeded context charges
+    // the same run its read methods resolve to (its pinned status/origin filters are preserved).
+    String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("charge"));
     ctx.http.callWithHeaders(
         "POST",
-        ctx.subUrl("charge"),
+        url,
         Json.toBytes(body),
         ResourceContext.CONTENT_TYPE_JSON,
         headers,
