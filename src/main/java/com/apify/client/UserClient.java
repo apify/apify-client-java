@@ -62,9 +62,12 @@ public final class UserClient {
   /** Updates the current account's resource limits. Only available for {@code me}. */
   public void updateLimits(Object newLimits) {
     requireMe();
+    // Route through mergedParams for consistency with the sibling limits() read (a no-op here since
+    // UserClient is never seeded with inherited params, but keeps every call site uniform).
+    String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("limits"));
     http.call(
         "PUT",
-        ctx.subUrl("limits"),
+        url,
         Json.toBytes(newLimits),
         ResourceContext.CONTENT_TYPE_JSON,
         http.baseRequestTimeout());

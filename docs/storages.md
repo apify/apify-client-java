@@ -5,6 +5,18 @@ single-resource client (`get`, `update`, `delete`, plus storage-specific operati
 default storages are reachable via `client.run(id).dataset()` / `.keyValueStore()` /
 `.requestQueue()`.
 
+### Metadata models
+
+The `get()`/`getOrCreate(...)` calls return the storage metadata model. All three share the common
+getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and `getModifiedAt()`
+(`Instant`), plus a type-specific size counter:
+
+| Model | Common getters | Type-specific |
+|---|---|---|
+| `Dataset` | `getId`, `getName`, `getUserId`, `getCreatedAt`, `getModifiedAt` | `getItemCount()` (`long`) |
+| `KeyValueStore` | `getId`, `getName`, `getUserId`, `getCreatedAt`, `getModifiedAt` | — |
+| `RequestQueue` | `getId`, `getName`, `getUserId`, `getCreatedAt`, `getModifiedAt` | `getTotalRequestCount()` (`long`) |
+
 ## Datasets
 
 ### `DatasetCollectionClient` — `client.datasets()`
@@ -105,15 +117,15 @@ expiry-aware storage-content signature — hence only `createKeysPublicUrl` take
 | `listHead(Long limit)` | Requests at the head. Returns `RequestQueueHead`. |
 | `addRequest(RequestQueueRequest, boolean forefront)` | Add a request. Returns `RequestQueueOperationInfo`. |
 | `getRequest(String id)` | Fetch a request. Returns `Optional<RequestQueueRequest>`. |
-| `updateRequest(RequestQueueRequest, boolean forefront)` | Update a request. |
-| `deleteRequest(String id)` | Delete a request. |
+| `updateRequest(RequestQueueRequest, boolean forefront)` | Update a request. Returns `RequestQueueOperationInfo`. |
+| `deleteRequest(String id)` | Delete a request. No return value. |
 | `batchAddRequests(List<RequestQueueRequest>, boolean forefront)` | Add many (auto-chunked at 25, unprocessed requests retried). Returns `BatchAddResult`. |
 | `batchAddRequests(List<RequestQueueRequest>, boolean forefront, BatchAddRequestsOptions)` | As above, tuning `maxUnprocessedRequestsRetries`, `maxParallel` and `minDelayBetweenUnprocessedRequestsRetriesMillis`. |
 | `batchDeleteRequests(Object)` | Delete many. Returns `JsonNode`. |
 | `listAndLockHead(long lockSecs, Long limit)` | Atomically lock the head. Returns `JsonNode`. |
 | `listRequests(ListRequestsOptions)` | List requests. Returns `JsonNode`. |
 | `prolongRequestLock(String id, long lockSecs, boolean forefront)` | Extend a lock. Returns `JsonNode`. |
-| `deleteRequestLock(String id, boolean forefront)` | Release a lock. |
+| `deleteRequestLock(String id, boolean forefront)` | Release a lock. No return value. |
 | `unlockRequests()` | Release all the client's locks. Returns `JsonNode`. |
 | `paginateRequests(Long pageLimit)` | A lazy `Iterator<RequestQueueRequest>` over all requests. |
 

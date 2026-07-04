@@ -20,7 +20,9 @@ public final class BuildClient {
 
   /**
    * Fetches the build, optionally asking the API to wait up to {@code waitForFinishSecs} seconds
-   * (max 60) for the build to finish before responding. Pass {@code null} for an immediate fetch.
+   * for the build to finish before responding. The value is clamped so the server always responds
+   * before the client's per-request timeout; the API itself caps server-side waiting at 60 seconds.
+   * Pass {@code null} for an immediate fetch.
    */
   public Optional<Build> getWithWait(Long waitForFinishSecs) {
     QueryParams params = new QueryParams();

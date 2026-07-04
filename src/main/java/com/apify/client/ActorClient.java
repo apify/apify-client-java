@@ -104,7 +104,9 @@ public final class ActorClient {
    */
   public BuildClient defaultBuild(Long waitForFinish) {
     QueryParams params = new QueryParams();
-    params.addLong("waitForFinish", waitForFinish);
+    // Clamp like the getWithWait twins so a large wait paired with a short client timeout cannot
+    // abort every attempt and burn the retry budget (the API caps server-side waiting at 60s).
+    params.addLong("waitForFinish", ctx.clampServerWait(waitForFinish));
     Build build = ctx.getResourceRequired("builds/default", params, Build.class);
     return new BuildClient(http, baseUrl, build.getId());
   }

@@ -27,10 +27,10 @@ PaginationList<ActorRun> runs = client.runs().list(
 | `update(Object)` | Update the run. Returns `ActorRun`. |
 | `delete()` | Delete the run. |
 | `abort(Boolean gracefully)` | Abort the run (`null` = server default). Returns `ActorRun`. |
-| `metamorph(String targetActorId, Object input, MetamorphOptions)` | Metamorph into another Actor. |
+| `metamorph(String targetActorId, Object input, MetamorphOptions)` | Metamorph into another Actor. Returns `ActorRun`. |
 | `reboot()` | Reboot the run. Returns `ActorRun`. |
 | `resurrect(RunResurrectOptions)` | Resurrect a finished run. Returns `ActorRun`. |
-| `charge(RunChargeOptions)` | Charge a pay-per-event run for a named event. |
+| `charge(RunChargeOptions)` | Charge a pay-per-event run for a named event. No return value. |
 | `waitForFinish(Long waitSecs)` | Poll until the run finishes (`null` waits indefinitely). Returns `ActorRun`. |
 | `dataset()` / `keyValueStore()` / `requestQueue()` | Clients for the run's default storages. |
 | `log()` | A `LogClient` for the run's log (see [Store, users & logs](misc.md#logs--clientlogid)). |
