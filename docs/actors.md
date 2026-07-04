@@ -85,16 +85,51 @@ unmodelled fields.
 `client.actor(id).versions()` lists/creates versions; `client.actor(id).version(v)` reads, updates
 and deletes a single version and exposes its environment variables.
 
+### `ActorVersionCollectionClient` — `client.actor(id).versions()`
+
+| Method | Description |
+|---|---|
+| `list(ListOptions)` | List the Actor's versions. Returns `PaginationList<ActorVersion>`. |
+| `create(Object version)` | Create a version. Returns `ActorVersion`. |
+
+### `ActorVersionClient` — `client.actor(id).version(v)`
+
+| Method | Description |
+|---|---|
+| `get()` | Fetch the version. Returns `Optional<ActorVersion>`. |
+| `update(Object)` | Update the version. Returns `ActorVersion`. |
+| `delete()` | Delete the version. |
+| `envVars()` | An `ActorEnvVarCollectionClient` for the version's environment variables. |
+| `envVar(String name)` | An `ActorEnvVarClient` for a single environment variable. |
+
 ```java
 ActorVersion version = client.actor("me/my-actor").version("0.0").get().orElseThrow();
 System.out.println(version.getSourceType());
 ```
+
+`ActorVersion` fields: `getVersionNumber()`, `getSourceType()`, plus `getExtra()` for any unmodelled
+fields.
 
 ## `ActorEnvVarClient` and `ActorEnvVarCollectionClient`
 
 Attach environment variables to a version. `ActorEnvVar` has a `(name, value)` constructor plus
 fluent setters `setName`, `setValue`, `setIsSecret(Boolean)` (when secret, the value is stored
 encrypted), and matching getters `getName()`, `getValue()`, `getIsSecret()`.
+
+### `ActorEnvVarCollectionClient` — `client.actor(id).version(v).envVars()`
+
+| Method | Description |
+|---|---|
+| `list()` | List the version's environment variables. Returns `PaginationList<ActorEnvVar>`. |
+| `create(ActorEnvVar)` | Create an environment variable. Returns `ActorEnvVar`. |
+
+### `ActorEnvVarClient` — `client.actor(id).version(v).envVar(name)`
+
+| Method | Description |
+|---|---|
+| `get()` | Fetch the environment variable. Returns `Optional<ActorEnvVar>`. |
+| `update(ActorEnvVar)` | Update the environment variable. Returns `ActorEnvVar`. |
+| `delete()` | Delete the environment variable. |
 
 ```java
 client.actor("me/my-actor").version("0.0").envVars()
