@@ -35,7 +35,7 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 |---|---|
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listItems(DatasetListItemsOptions)` | List items as `PaginationList<JsonNode>`. |
-| `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. |
+| `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. Returns `PaginationList<T>`. |
 | `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes (JSON/JSONL/CSV/XLSX/XML/RSS/HTML). |
 | `pushItems(Object)` | Push a single item or a list of items. |
 | `getStatistics()` | Dataset statistics. Returns `Optional<JsonNode>`. |

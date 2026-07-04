@@ -32,7 +32,7 @@ while (shown < 5 && it.hasNext()) {
 | `get()` | Fetch the user. Returns `Optional<User>` (private details for `me()` via `getExtra()`). |
 | `monthlyUsage()` / `monthlyUsage(String date)` | Account monthly usage (`me()` only). Returns `JsonNode`. |
 | `limits()` | Account resource limits (`me()` only). Returns `JsonNode`. |
-| `updateLimits(Object)` | Update account limits (`me()` only). |
+| `updateLimits(Object)` | Update account limits (`me()` only). No return value. |
 
 The usage/limits methods are only available for `me()`; calling them on `user(id)` throws
 `IllegalStateException`.
