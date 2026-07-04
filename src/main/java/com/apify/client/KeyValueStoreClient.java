@@ -161,8 +161,8 @@ public final class KeyValueStoreClient {
         }
       }
     }
-    // Public URL = resource path + signature only, matching the JS reference (see the last-run
-    // caveat documented in docs/storages.md).
+    // Public URL = resource path + the explicit key-listing options + signature, matching the JS
+    // reference (see the last-run caveat documented in docs/storages.md).
     return params.applyToUrl(ctx.publicUrl("keys"));
   }
 }
