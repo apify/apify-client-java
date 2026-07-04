@@ -14,7 +14,7 @@ builds) and a single build with `client.build(id)`.
 | Method | Description |
 |---|---|
 | `get()` | Fetch the build. Returns `Optional<Build>`. |
-| `getWithWait(Long waitForFinishSecs)` | Fetch, waiting up to `waitForFinishSecs` (max 60) server-side. |
+| `getWithWait(Long waitForFinishSecs)` | Fetch, optionally waiting server-side for the build to finish (clamped to the request timeout; the API caps server-side waiting at 60s). Returns `Optional<Build>`. |
 | `abort()` | Abort the build. Returns `Build`. |
 | `delete()` | Delete the build. |
 | `waitForFinish(Long waitSecs)` | Poll until the build finishes (`null` waits indefinitely). Returns `Build`. |

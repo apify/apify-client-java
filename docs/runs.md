@@ -23,7 +23,7 @@ PaginationList<ActorRun> runs = client.runs().list(
 | Method | Description |
 |---|---|
 | `get()` | Fetch the run. Returns `Optional<ActorRun>`. |
-| `getWithWait(Long waitForFinishSecs)` | Fetch, waiting up to `waitForFinishSecs` (max 60) server-side. |
+| `getWithWait(Long waitForFinishSecs)` | Fetch, optionally waiting server-side for the run to finish (clamped to the request timeout; the API caps server-side waiting at 60s). Returns `Optional<ActorRun>`. |
 | `update(Object)` | Update the run. Returns `ActorRun`. |
 | `delete()` | Delete the run. |
 | `abort(Boolean gracefully)` | Abort the run (`null` = server default). Returns `ActorRun`. |
