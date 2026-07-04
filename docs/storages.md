@@ -13,6 +13,7 @@ default storages are reachable via `client.run(id).dataset()` / `.keyValueStore(
 |---|---|
 | `list(StorageListOptions)` | List datasets. Returns `PaginationList<Dataset>`. |
 | `getOrCreate(String name)` | Get or create a named dataset (empty name → unnamed). Returns `Dataset`. |
+| `getOrCreate(String name, Object schema)` | As above, sending a creation-time dataset `schema` when a new dataset is created. Returns `Dataset`. |
 
 `StorageListOptions` adds `unnamed(Boolean)` and `ownership(String)` on top of offset/limit/desc.
 
@@ -53,7 +54,8 @@ unsigned.
 
 ### `KeyValueStoreCollectionClient` — `client.keyValueStores()`
 
-`list(StorageListOptions)` and `getOrCreate(String)`, as for datasets.
+`list(StorageListOptions)`, `getOrCreate(String)`, and `getOrCreate(String, Object schema)` (the
+latter sends a creation-time store `schema`), as for datasets.
 
 ### `KeyValueStoreClient` — `client.keyValueStore(id)`
 

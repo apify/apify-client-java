@@ -46,6 +46,10 @@ PaginationList<JsonNode> items =
 System.out.println("Item count: " + items.getCount());
 ```
 
+All public client types live in the `com.apify.client` package (e.g. `import com.apify.client.*;`).
+The snippets also use `com.fasterxml.jackson.databind.JsonNode` (from the Jackson dependency) for
+untyped data and `java.time.Duration` in the configuration examples below.
+
 `ApifyClient.create` takes the token as an explicit argument — it does **not** read `APIFY_TOKEN` (or
 any other environment variable) automatically. Read it yourself if you want that, e.g.
 `ApifyClient.create(System.getenv("APIFY_TOKEN"))`.

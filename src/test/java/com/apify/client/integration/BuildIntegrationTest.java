@@ -1,5 +1,6 @@
 package com.apify.client.integration;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.Actor;
@@ -29,6 +30,9 @@ class BuildIntegrationTest extends IntegrationBase {
 
       assertTrue(client.build(build.getId()).get().isPresent());
       client.build(build.getId()).log().get();
+      // Exercise the standalone log endpoint (GET /v2/logs/{buildOrRunId}) directly, not only via
+      // the build-nested .../log accessor, so the "simple GET per endpoint" rule is met for it.
+      assertNotNull(client.log(build.getId()).get());
       client.build(build.getId()).getOpenApiDefinition();
     } finally {
       client.actor(created.getId()).delete();

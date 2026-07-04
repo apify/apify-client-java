@@ -108,9 +108,12 @@ public final class DatasetClient {
    * array of objects.
    */
   public void pushItems(Object items) {
+    // Route through mergedParams like every sibling method, so a context seeded with pinned filters
+    // (e.g. actor(id).lastRun(...).dataset()) targets the same run's dataset on write as on read.
+    String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("items"));
     http.call(
         "POST",
-        ctx.subUrl("items"),
+        url,
         Json.toBytes(items),
         ResourceContext.CONTENT_TYPE_JSON_CHARSET,
         http.baseRequestTimeout());
