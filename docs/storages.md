@@ -62,6 +62,14 @@ dataset is private, the client fetches it, reads its URL-signing secret, and app
 signature (bounded by `expiresInSecs`, or non-expiring when `null`); for public datasets the URL is
 unsigned.
 
+> **Public-URL limitation (matches the JavaScript reference client).** The public-URL builders
+> (`createItemsPublicUrl`, and the key-value-store `getRecordPublicUrl` / `createKeysPublicUrl`)
+> build the URL from the client's own resource path plus the signature. When called on a *last-run
+> nested* client (e.g. `client.actor(id).lastRun("SUCCEEDED").dataset().createItemsPublicUrl(...)`)
+> the returned URL keeps the unpinned `.../runs/last/dataset` path and does not carry the `status`
+> filter, so it may resolve a different run when opened. Build public URLs from a concrete
+> `client.dataset(id)` / `client.keyValueStore(id)` client when you need a stable shareable URL.
+
 ## Key-value stores
 
 ### `KeyValueStoreCollectionClient` — `client.keyValueStores()`
@@ -91,6 +99,9 @@ client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42)
 Optional<KeyValueStoreRecord> rec = client.keyValueStore(store.getId()).getRecord("OUTPUT");
 rec.ifPresent(r -> System.out.println(new String(r.getValue())));
 ```
+
+`GetRecordOptions` (for `getRecord(String key, GetRecordOptions)`) fields: `attachment(Boolean)`
+(request a download disposition) and `signature(String)` (a pre-computed access signature).
 
 `KeyValueStoreRecord` exposes `getKey()`, `getValue()` (raw bytes) and `getContentType()`.
 `KeyValueStoreKeysPage` exposes `getItems()` (a list of `KeyValueStoreKey` with `getKey()`/`getSize()`),

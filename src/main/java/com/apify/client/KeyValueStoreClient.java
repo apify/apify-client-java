@@ -125,6 +125,9 @@ public final class KeyValueStoreClient {
         params.addString("signature", Signatures.createHmacSignature(secret, key));
       }
     }
+    // Public URL = resource path + signature only, matching the JS reference.
+    // Seeded filters are not carried; see DatasetClient.createItemsPublicUrl and
+    // docs/storages.md for the last-run caveat.
     return params.applyToUrl(ctx.publicUrl("records/" + ResourceContext.encodePathSegment(key)));
   }
 
@@ -158,6 +161,8 @@ public final class KeyValueStoreClient {
         }
       }
     }
+    // Public URL = resource path + signature only, matching the JS reference (see the last-run
+    // caveat documented in docs/storages.md).
     return params.applyToUrl(ctx.publicUrl("keys"));
   }
 }
