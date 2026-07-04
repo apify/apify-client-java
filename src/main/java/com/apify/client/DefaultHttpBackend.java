@@ -25,7 +25,17 @@ public final class DefaultHttpBackend implements HttpBackend {
 
   /** Creates a backend with a sensible default {@link java.net.http.HttpClient}. */
   public DefaultHttpBackend() {
-    this(HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build());
+    // Follow redirects (NORMAL, matching the reference clients): some endpoints — e.g. a
+    // non-attachment key-value-store record GET — answer with a 302 to external storage, which the
+    // JDK's default Redirect.NEVER would otherwise surface as an error. NORMAL does not follow an
+    // HTTPS->HTTP downgrade and the JDK strips the Authorization header on cross-origin hops, so
+    // the
+    // bearer token is not leaked to the redirect target.
+    this(
+        HttpClient.newBuilder()
+            .connectTimeout(CONNECT_TIMEOUT)
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build());
   }
 
   /** Wraps a caller-provided {@link java.net.http.HttpClient} (share a pool, custom proxy/TLS). */
