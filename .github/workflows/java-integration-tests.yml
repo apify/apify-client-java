@@ -1,0 +1,77 @@
+name: Java integration tests
+
+# Language-specific workflow: only runs for the Java client. Triggers on PRs to master that touch
+# Java client, test, example, or documentation code, and can be dispatched manually from any branch.
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '**/*.java'
+      - 'pom.xml'
+      # The "Test examples" step validates the in-documentation snippets, so doc changes must
+      # re-run the workflow even though Markdown is not Java code.
+      - 'docs/**'
+      - 'README.md'
+      - '.github/workflows/java-integration-tests.yml'
+  workflow_dispatch:
+
+# Avoid concurrent runs of the same ref racing on the shared test account.
+concurrency:
+  group: java-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      # The formatter/lint gate mandated by the coding rules (google-java-format + import hygiene).
+      - name: Check formatting (Spotless)
+        run: mvn -B spotless:check
+
+      - name: Build
+        run: mvn -B -DskipTests test-compile
+
+      # Static-analysis linter (bug finder), the coding-rules-mandated CI lint gate.
+      - name: Static analysis (SpotBugs)
+        run: mvn -B -DskipTests compile spotbugs:check
+
+      # Offline unit tests (mock HTTP backend): prove the retry/error/signature logic without the API.
+      - name: Unit tests
+        run: mvn -B test -Dtest='UnitHttpTest,ReviewFixesTest,ClientMetaTest,SignatureTest,ConfigTest' -DfailIfNoTests=true
+
+      # Fail fast if the integration-test secret is missing or empty. Without this guard the
+      # integration tests silently "pass" (JUnit assumptions skip them when APIFY_TOKEN is unset),
+      # so a green run would not prove the API logic actually executed.
+      - name: Require APIFY_TOKEN secret
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          if [ -z "${APIFY_TOKEN}" ]; then
+            echo "::error::APIFY_TOKEN secret is empty or missing; integration tests would not run against the API."
+            exit 1
+          fi
+
+      - name: Integration tests
+        env:
+          # The integration-test token is stored as a repository secret.
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        # Run every test except the example/doc-snippet harnesses (exercised by the step below).
+        run: mvn -B test -Dtest='!ExamplesTest,!DocSnippetsTest' -DfailIfNoTests=true
+
+      # Standalone CI step that verifies the documentation examples actually work end-to-end against
+      # the live API (ExamplesTest runs each example's main), and that every in-documentation Java
+      # snippet is valid, runnable code (DocSnippetsTest compiles each fenced block).
+      - name: Test examples
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: mvn -B test -Dtest='ExamplesTest,DocSnippetsTest' -DfailIfNoTests=true
