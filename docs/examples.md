@@ -17,28 +17,38 @@ System.out.println("Item count: " + items.getCount());
 ## Each storage: create, push, read
 
 ```java
-// Dataset
+// Named storages persist on your account; each block deletes its storage in a finally so the
+// example does not leak them.
+
+// Dataset: create, push items, read them back.
 Dataset dataset = client.datasets().getOrCreate("example-ds");
-client.dataset(dataset.getId()).pushItems(List.of(Map.of("hello", "world")));
-PaginationList<JsonNode> dsItems = client.dataset(dataset.getId()).listItems(new DatasetListItemsOptions());
-System.out.println("Dataset items: " + dsItems.getCount());
+try {
+  client.dataset(dataset.getId()).pushItems(List.of(Map.of("hello", "world")));
+  PaginationList<JsonNode> items = client.dataset(dataset.getId()).listItems(new DatasetListItemsOptions());
+  System.out.println("Dataset items: " + items.getItems());
+} finally {
+  client.dataset(dataset.getId()).delete();
+}
 
-// Key-value store
+// Key-value store: create, set a record, read it back.
 KeyValueStore store = client.keyValueStores().getOrCreate("example-kvs");
-client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42));
-Optional<KeyValueStoreRecord> record = client.keyValueStore(store.getId()).getRecord("OUTPUT");
-record.ifPresent(r -> System.out.println("OUTPUT bytes: " + r.getValue().length));
+try {
+  client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42));
+  Optional<KeyValueStoreRecord> record = client.keyValueStore(store.getId()).getRecord("OUTPUT");
+  record.ifPresent(r -> System.out.println("KVS record bytes: " + r.getValue().length));
+} finally {
+  client.keyValueStore(store.getId()).delete();
+}
 
-// Request queue
+// Request queue: create, add a request, read the head.
 RequestQueue queue = client.requestQueues().getOrCreate("example-rq");
-client.requestQueue(queue.getId()).addRequest(new RequestQueueRequest("https://example.com", "example"), false);
-RequestQueueHead head = client.requestQueue(queue.getId()).listHead(10L);
-System.out.println("Queue head items: " + head.getItems().size());
-
-// Named storages persist on your account; delete them when done so the example does not leak them.
-client.dataset(dataset.getId()).delete();
-client.keyValueStore(store.getId()).delete();
-client.requestQueue(queue.getId()).delete();
+try {
+  client.requestQueue(queue.getId()).addRequest(new RequestQueueRequest("https://example.com", "example"), false);
+  RequestQueueHead head = client.requestQueue(queue.getId()).listHead(10L);
+  System.out.println("Request queue head size: " + head.getItems().size());
+} finally {
+  client.requestQueue(queue.getId()).delete();
+}
 ```
 
 ## Get own account details

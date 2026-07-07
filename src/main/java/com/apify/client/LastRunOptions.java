@@ -4,9 +4,10 @@ package com.apify.client;
  * Filters which "last" run the {@link ActorClient#lastRun}/{@link TaskClient#lastRun} accessors
  * resolve to. Leave a field unset to leave that filter unset.
  *
- * <p>{@code origin} is an Apify-platform convenience exposed by the reference client but not
- * documented as a query parameter in the OpenAPI spec; it is included for parity, threaded to the
- * same {@code runs/last} endpoint.
+ * <p>{@code origin} is now a spec-declared query parameter on the {@code runs/last} endpoints
+ * (alongside {@code status}), matching the reference client's {@code lastRun({status, origin})}.
+ * The spec also declares {@code waitForFinish} on those endpoints, but the reference client does
+ * not expose it on {@code lastRun}, so neither do we.
  */
 public final class LastRunOptions {
   private String status;
