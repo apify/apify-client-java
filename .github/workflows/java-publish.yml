@@ -40,6 +40,42 @@ jobs:
             exit 1
           fi
 
+      # Fail fast before the expensive build if the "Publishing" environment is missing any secret
+      # this run needs, so a release can never die deep inside Maven with a cryptic error on a
+      # mis-provisioned environment. GPG signing is bound to the release profile's `verify` phase, so
+      # the signing secrets are required for BOTH the dry run (`verify`) and the real publish
+      # (`deploy`) — this step therefore always runs; without it a missing MAVEN_GPG_PRIVATE_KEY only
+      # surfaces as maven-gpg-plugin's opaque "No secret key". The Maven Central repository
+      # credentials are consumed only by `deploy`, so they are required only on a real (non-dry) run.
+      - name: Require publishing secrets
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          MAVEN_CENTRAL_REPOSITORY_USERNAME: ${{ secrets.MAVEN_CENTRAL_REPOSITORY_USERNAME }}
+          MAVEN_CENTRAL_REPOSITORY_PASSWORD: ${{ secrets.MAVEN_CENTRAL_REPOSITORY_PASSWORD }}
+          MAVEN_CENTRAL_REPOSITORY_USERNAME_PASSWORD_BASE64: ${{ secrets.MAVEN_CENTRAL_REPOSITORY_USERNAME_PASSWORD_BASE64 }}
+        run: |
+          missing=""
+          # This project signs with a passphrase-protected key (setup-java is wired with
+          # gpg-passphrase), so both the key and its passphrase are mandatory.
+          [ -z "${MAVEN_GPG_PRIVATE_KEY}" ] && missing="${missing} MAVEN_GPG_PRIVATE_KEY"
+          [ -z "${MAVEN_GPG_PASSPHRASE}" ] && missing="${missing} MAVEN_GPG_PASSPHRASE"
+          # Maven Central credentials are only consumed by the real `deploy`. USERNAME/PASSWORD feed
+          # setup-java's "central" server; the base64 form is the same credential pre-encoded as the
+          # Central Portal bearer token (username:password), mandated in the Publishing environment by
+          # the client's publishing policy, so it is validated here to catch a mis-provisioned
+          # environment before a release proceeds.
+          if [ "${DRY_RUN}" != "true" ]; then
+            [ -z "${MAVEN_CENTRAL_REPOSITORY_USERNAME}" ] && missing="${missing} MAVEN_CENTRAL_REPOSITORY_USERNAME"
+            [ -z "${MAVEN_CENTRAL_REPOSITORY_PASSWORD}" ] && missing="${missing} MAVEN_CENTRAL_REPOSITORY_PASSWORD"
+            [ -z "${MAVEN_CENTRAL_REPOSITORY_USERNAME_PASSWORD_BASE64}" ] && missing="${missing} MAVEN_CENTRAL_REPOSITORY_USERNAME_PASSWORD_BASE64"
+          fi
+          if [ -n "${missing}" ]; then
+            echo "::error::Missing Publishing environment secret(s):${missing}"
+            exit 1
+          fi
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -82,28 +118,6 @@ jobs:
         run: |
           if git ls-remote --exit-code --tags origin "${TAG}" >/dev/null 2>&1; then
             echo "::error::Tag ${TAG} already exists on origin; bump the version in pom.xml first."
-            exit 1
-          fi
-
-      # Verify the "Publishing" environment holds the three Maven Central repository secrets that the
-      # project's publishing policy mandates, so a release cannot silently proceed with a
-      # mis-provisioned environment. The mvn deploy below authenticates the "central" server with the
-      # username/password pair; the base64 form is the same credential pre-encoded as the Central
-      # Portal bearer token (username:password), kept in the environment per policy for tooling that
-      # talks to the Central Portal API directly.
-      - name: Require Maven Central credentials
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        env:
-          MAVEN_CENTRAL_REPOSITORY_USERNAME: ${{ secrets.MAVEN_CENTRAL_REPOSITORY_USERNAME }}
-          MAVEN_CENTRAL_REPOSITORY_PASSWORD: ${{ secrets.MAVEN_CENTRAL_REPOSITORY_PASSWORD }}
-          MAVEN_CENTRAL_REPOSITORY_USERNAME_PASSWORD_BASE64: ${{ secrets.MAVEN_CENTRAL_REPOSITORY_USERNAME_PASSWORD_BASE64 }}
-        run: |
-          missing=""
-          [ -z "${MAVEN_CENTRAL_REPOSITORY_USERNAME}" ] && missing="${missing} MAVEN_CENTRAL_REPOSITORY_USERNAME"
-          [ -z "${MAVEN_CENTRAL_REPOSITORY_PASSWORD}" ] && missing="${missing} MAVEN_CENTRAL_REPOSITORY_PASSWORD"
-          [ -z "${MAVEN_CENTRAL_REPOSITORY_USERNAME_PASSWORD_BASE64}" ] && missing="${missing} MAVEN_CENTRAL_REPOSITORY_USERNAME_PASSWORD_BASE64"
-          if [ -n "${missing}" ]; then
-            echo "::error::Missing Publishing environment secret(s):${missing}"
             exit 1
           fi
 

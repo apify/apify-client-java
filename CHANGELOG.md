@@ -5,6 +5,14 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-07-07
+
+### Fixed
+
+- `Publish Java client` workflow now fails fast with an explicit message when a required `Publishing`
+  environment secret is missing (GPG signing secrets on dry runs and real publishes, Maven Central
+  credentials on real publishes only).
+
 ## [0.1.0] - 2026-07-03
 
 Initial release of the official (experimental, AI-generated and AI-maintained) Java client for the
