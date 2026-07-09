@@ -4,6 +4,7 @@ import com.apify.client.ActorRun;
 import com.apify.client.ActorStartOptions;
 import com.apify.client.ApifyClient;
 import com.apify.client.DatasetListItemsOptions;
+import com.apify.client.RunStatus;
 import java.util.Optional;
 
 /**
@@ -18,7 +19,8 @@ public final class RunAndLastRunStorages {
 
     client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
 
-    Optional<ActorRun> lastRun = client.actor("apify/hello-world").lastRun("SUCCEEDED").get();
+    Optional<ActorRun> lastRun =
+        client.actor("apify/hello-world").lastRun(RunStatus.SUCCEEDED).get();
     if (lastRun.isEmpty()) {
       throw new IllegalStateException("no succeeded run found");
     }

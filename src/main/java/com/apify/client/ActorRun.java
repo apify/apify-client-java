@@ -8,7 +8,7 @@ public final class ActorRun extends ApifyResource {
   private String actId;
   private String actorTaskId;
   private String userId;
-  private String status;
+  private RunStatus status;
   private String statusMessage;
   private Instant startedAt;
   private Instant finishedAt;
@@ -38,12 +38,8 @@ public final class ActorRun extends ApifyResource {
     return userId;
   }
 
-  /**
-   * The current run status. One of the eight {@code ActorJobStatus} values: {@code READY}, {@code
-   * RUNNING}, {@code SUCCEEDED}, {@code FAILED}, {@code TIMING-OUT}, {@code TIMED-OUT}, {@code
-   * ABORTING}, {@code ABORTED}.
-   */
-  public String getStatus() {
+  /** The current run status, or {@code null} if the API did not report one. */
+  public RunStatus getStatus() {
     return status;
   }
 
@@ -89,6 +85,6 @@ public final class ActorRun extends ApifyResource {
 
   /** Whether the run has reached a terminal (finished) status. */
   public boolean isTerminal() {
-    return Statuses.isTerminal(status);
+    return status != null && status.isTerminal();
   }
 }

@@ -50,24 +50,27 @@ Actor created = client.actors().create(Map.of(
 | `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Returns `boolean`. `ValidateInputOptions` fields (optional): `build`, `contentType`. |
 | `build(String versionNumber, ActorBuildOptions)` | Build a version. Returns `Build`. |
 | `defaultBuild(Long waitForFinish)` | Resolve the default build. Returns `BuildClient`. |
-| `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run. |
+| `lastRun(RunStatus status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run. |
 | `builds()` / `runs()` / `versions()` | Nested collection clients. |
 | `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, list only). |
 | `version(String)` | An `ActorVersionClient`. |
 
 `ActorStartOptions` fields (all optional): `build`, `memoryMbytes`, `timeoutSecs`, `waitForFinish`,
 `maxItems`, `maxTotalChargeUsd`, `contentType`, `restartOnError`, `forcePermissionLevel`
-(`LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), and `webhooks(List<Object>)` — ad-hoc webhook definitions
-(each a JSON-serializable `Map`, as in [Webhooks](webhooks.md)) that the client base64-encodes on the
-wire.
+(a `PermissionLevel` enum: `LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), and `webhooks(List<Object>)` —
+ad-hoc webhook definitions (each a JSON-serializable `Map`, as in [Webhooks](webhooks.md)) that the
+client base64-encodes on the wire.
 
-`lastRun(String status)` filters only by status; `lastRun(LastRunOptions)` also accepts an origin
-filter. `LastRunOptions` has fluent setters `status(String)` (e.g. `SUCCEEDED`, `RUNNING`) and
-`origin(String)` (e.g. `API`, `WEB`, `SCHEDULER`); leave a setter uncalled to omit that filter.
+`lastRun(RunStatus status)` filters only by status; `lastRun(LastRunOptions)` also accepts an origin
+filter. `LastRunOptions` has fluent setters `status(RunStatus)` (e.g. `RunStatus.SUCCEEDED`,
+`RunStatus.RUNNING`) and `origin(RunOrigin)` (e.g. `RunOrigin.API`, `RunOrigin.WEB`,
+`RunOrigin.SCHEDULER`); leave a setter uncalled to omit that filter.
 
 ```java
 Optional<ActorRun> last =
-    client.actor("apify/hello-world").lastRun(new LastRunOptions().status("SUCCEEDED").origin("API")).get();
+    client.actor("apify/hello-world")
+        .lastRun(new LastRunOptions().status(RunStatus.SUCCEEDED).origin(RunOrigin.API))
+        .get();
 ```
 
 ```java

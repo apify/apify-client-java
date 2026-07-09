@@ -9,13 +9,14 @@ Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 |---|---|
 | `list(ListOptions, RunListOptions)` | List runs. Returns `PaginationList<ActorRun>`. |
 
-`RunListOptions` adds `status(List<String>)` (e.g. `SUCCEEDED`, `RUNNING`; sent comma-separated) and,
-for Actor/task-scoped collections, `startedAfter(String)` / `startedBefore(String)` (ISO-8601).
+`RunListOptions` adds `status(List<RunStatus>)` (e.g. `RunStatus.SUCCEEDED`, `RunStatus.RUNNING`; sent
+comma-separated) and, for Actor/task-scoped collections, `startedAfter(String)` /
+`startedBefore(String)` (ISO-8601).
 
 ```java
 PaginationList<ActorRun> runs = client.runs().list(
     new ListOptions().limit(10L),
-    new RunListOptions().status(List.of("SUCCEEDED")));
+    new RunListOptions().status(List.of(RunStatus.SUCCEEDED)));
 ```
 
 ## `RunClient`
@@ -26,7 +27,7 @@ PaginationList<ActorRun> runs = client.runs().list(
 | `getWithWait(Long waitForFinishSecs)` | Fetch, optionally waiting server-side for the run to finish (clamped to the request timeout; the API caps server-side waiting at 60s). Returns `Optional<ActorRun>`. |
 | `update(Object)` | Update the run. Returns `ActorRun`. |
 | `delete()` | Delete the run. |
-| `abort(Boolean gracefully)` | Abort the run (`null` = server default). Returns `ActorRun`. |
+| `abort()` / `abort(boolean gracefully)` | Abort the run (no-arg = server default). Returns `ActorRun`. |
 | `metamorph(String targetActorId, Object input, MetamorphOptions)` | Metamorph into another Actor. Returns `ActorRun`. |
 | `reboot()` | Reboot the run. Returns `ActorRun`. |
 | `resurrect(RunResurrectOptions)` | Resurrect a finished run. Returns `ActorRun`. |
@@ -42,9 +43,12 @@ use `log()` for the full log text or for non-raw/download options.
 To set the current run's status message from inside an Actor, use the top-level
 `client.setStatusMessage(...)` (see [the docs index](README.md#setting-single-resource-status)).
 
-`ActorRun` fields include `getId()`, `getActId()`, `getUserId()`, `getStatus()`,
+`ActorRun` fields include `getId()`, `getActId()`, `getUserId()`, `getStatus()` (a `RunStatus` enum),
 `getStatusMessage()`, `getStartedAt()`, `getFinishedAt()`, `getBuildId()`, `getDefaultDatasetId()`,
 `getDefaultKeyValueStoreId()`, `getDefaultRequestQueueId()`, `getContainerUrl()`, plus `isTerminal()`.
+`RunStatus` is the run/build lifecycle enum (`READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING_OUT`,
+`TIMED_OUT`, `ABORTING`, `ABORTED`, and `UNKNOWN` for a value this client version does not recognise);
+`RunStatus.isTerminal()` reports whether a status is final.
 
 `RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)` and
 `idempotencyKey(String)` — the latter is auto-generated when unset so a transport-retried charge is

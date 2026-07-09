@@ -7,20 +7,16 @@ Browse public Actors in the Apify Store.
 | Method | Description |
 |---|---|
 | `list(StoreListOptions)` | A page of Store Actors. Returns `PaginationList<ActorStoreListItem>`. |
-| `iterate(StoreListOptions)` | A lazy `Iterator<ActorStoreListItem>` fetching pages on demand. |
+| `iterate(StoreListOptions)` | A lazy `Stream<ActorStoreListItem>` fetching pages on demand. |
 
 `StoreListOptions` fields: `offset`, `limit`, `search`, `sortBy`, `category`, `username`,
 `pricingModel` (`FREE`, `FLAT_PRICE_PER_MONTH`, `PRICE_PER_DATASET_ITEM`, `PAY_PER_EVENT`),
 `includeUnrunnableActors`, `allowsAgenticUsers`, `responseFormat` (`full`, `agent`).
 
 ```java
-Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().search("crawler").limit(20L));
-int shown = 0;
-while (shown < 5 && it.hasNext()) {
-  ActorStoreListItem item = it.next();
-  System.out.println(item.getUsername() + "/" + item.getName());
-  shown++;
-}
+client.store().iterate(new StoreListOptions().search("crawler").limit(20L))
+    .limit(5)
+    .forEach(item -> System.out.println(item.getUsername() + "/" + item.getName()));
 ```
 
 `ActorStoreListItem` fields: `getId()`, `getName()`, `getUsername()`, `getTitle()`.

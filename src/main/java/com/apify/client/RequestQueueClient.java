@@ -9,11 +9,15 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 /** A client for a specific request queue (and run-nested variants). */
 public final class RequestQueueClient {
@@ -411,11 +415,15 @@ public final class RequestQueueClient {
   }
 
   /**
-   * Returns a lazy iterator over all requests in the queue, fetching pages of up to {@code
-   * pageLimit} requests at a time ({@code null} for the server default).
+   * Returns a lazy {@link Stream} over all requests in the queue, fetching pages of up to {@code
+   * pageLimit} requests at a time ({@code null} for the server default) as the stream is consumed.
+   * The stream is sequential and need not be closed.
    */
-  public Iterator<RequestQueueRequest> paginateRequests(Long pageLimit) {
-    return new RequestsIterator(pageLimit);
+  public Stream<RequestQueueRequest> paginateRequests(Long pageLimit) {
+    Spliterator<RequestQueueRequest> spliterator =
+        Spliterators.spliteratorUnknownSize(
+            new RequestsIterator(pageLimit), Spliterator.ORDERED | Spliterator.NONNULL);
+    return StreamSupport.stream(spliterator, false);
   }
 
   /** Shape of a paginated requests listing. */

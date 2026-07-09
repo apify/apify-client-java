@@ -13,7 +13,6 @@ import com.apify.client.RequestQueueRequest;
 import com.apify.client.StorageListOptions;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,10 +76,7 @@ class RequestQueueIntegrationTest extends IntegrationBase {
         queue.addRequest(new RequestQueueRequest(url, url), false);
       }
       Set<String> seen = new HashSet<>();
-      Iterator<RequestQueueRequest> it = queue.paginateRequests(2L);
-      while (it.hasNext()) {
-        seen.add(it.next().getUrl());
-      }
+      queue.paginateRequests(2L).forEach(request -> seen.add(request.getUrl()));
       assertEquals(total, seen.size());
     } finally {
       client.requestQueue(rq.getId()).delete();

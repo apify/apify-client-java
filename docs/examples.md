@@ -87,7 +87,7 @@ try {
 
 ```java
 client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
-Optional<ActorRun> last = client.actor("apify/hello-world").lastRun("SUCCEEDED").get();
+Optional<ActorRun> last = client.actor("apify/hello-world").lastRun(RunStatus.SUCCEEDED).get();
 if (last.isPresent()) {
   ActorRun run = last.get();
   client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
@@ -98,12 +98,9 @@ if (last.isPresent()) {
 ## Lazy iteration of Store Actors
 
 ```java
-Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().limit(10L));
-int shown = 0;
-while (shown < 5 && it.hasNext()) {
-  System.out.println(it.next().getName());
-  shown++;
-}
+client.store().iterate(new StoreListOptions().limit(10L))
+    .limit(5)
+    .forEach(item -> System.out.println(item.getName()));
 ```
 
 ## Run an Actor with log redirection

@@ -6,7 +6,7 @@ import java.time.Instant;
 public final class Build extends ApifyResource {
   private String id;
   private String actId;
-  private String status;
+  private RunStatus status;
   private Instant startedAt;
   private Instant finishedAt;
   private String buildNumber;
@@ -21,12 +21,8 @@ public final class Build extends ApifyResource {
     return actId;
   }
 
-  /**
-   * The current build status. One of the eight {@code ActorJobStatus} values: {@code READY}, {@code
-   * RUNNING}, {@code SUCCEEDED}, {@code FAILED}, {@code TIMING-OUT}, {@code TIMED-OUT}, {@code
-   * ABORTING}, {@code ABORTED}.
-   */
-  public String getStatus() {
+  /** The current build status, or {@code null} if the API did not report one. */
+  public RunStatus getStatus() {
     return status;
   }
 
@@ -47,6 +43,6 @@ public final class Build extends ApifyResource {
 
   /** Whether the build has reached a terminal (finished) status. */
   public boolean isTerminal() {
-    return Statuses.isTerminal(status);
+    return status != null && status.isTerminal();
   }
 }

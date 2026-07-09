@@ -68,12 +68,20 @@ public final class RunClient {
     ctx.deleteResource("");
   }
 
+  /** Aborts the run immediately, applying the server default (an immediate abort). */
+  public ActorRun abort() {
+    return abortInternal(null);
+  }
+
   /**
    * Aborts the run. If {@code gracefully} is {@code true}, the run is signalled so it can finish
-   * the current request before terminating; if {@code false} it is aborted immediately. Pass {@code
-   * null} to omit the parameter and let the server apply its default (immediate abort).
+   * the current request before terminating; if {@code false} it is aborted immediately.
    */
-  public ActorRun abort(Boolean gracefully) {
+  public ActorRun abort(boolean gracefully) {
+    return abortInternal(gracefully);
+  }
+
+  private ActorRun abortInternal(Boolean gracefully) {
     QueryParams params = new QueryParams();
     params.addBool("gracefully", gracefully);
     return ctx.postWithBody("abort", params, null, "", ActorRun.class);

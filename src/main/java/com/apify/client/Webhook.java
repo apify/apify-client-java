@@ -8,7 +8,7 @@ public final class Webhook extends ApifyResource {
   private String id;
   private String userId;
   private String requestUrl;
-  private List<String> eventTypes = List.of();
+  private List<WebhookEventType> eventTypes = List.of();
 
   /** The unique webhook ID. */
   public String getId() {
@@ -26,7 +26,7 @@ public final class Webhook extends ApifyResource {
   }
 
   /** The events that trigger the webhook. */
-  public List<String> getEventTypes() {
+  public List<WebhookEventType> getEventTypes() {
     return Collections.unmodifiableList(eventTypes);
   }
 }

@@ -44,7 +44,7 @@ class ReviewFixesTest {
     MockBackend ds = MockBackend.ofConstant(200, "[]");
     client(ds)
         .actor("me/x")
-        .lastRun("SUCCEEDED")
+        .lastRun(RunStatus.SUCCEEDED)
         .dataset()
         .listItems(new DatasetListItemsOptions());
     assertTrue(ds.lastUrl.contains("runs/last/dataset/items"), ds.lastUrl);
@@ -53,7 +53,7 @@ class ReviewFixesTest {
     MockBackend log = MockBackend.ofConstant(200, "log-text");
     client(log)
         .actor("me/x")
-        .lastRun(new LastRunOptions().status("SUCCEEDED").origin("API"))
+        .lastRun(new LastRunOptions().status(RunStatus.SUCCEEDED).origin(RunOrigin.API))
         .log()
         .get();
     assertTrue(log.lastUrl.contains("runs/last/log"), log.lastUrl);
@@ -267,7 +267,7 @@ class ReviewFixesTest {
         MockBackend.ofConstant(
             200, "{\"data\":{\"items\":[],\"total\":0,\"offset\":0,\"limit\":0,\"count\":0}}");
     StoreListOptions options = new StoreListOptions().offset(100L).limit(50L);
-    client(backend).store().iterate(options).hasNext();
+    client(backend).store().iterate(options).findFirst();
     // The caller's initial offset must be honored for paging and left untouched afterwards.
     assertTrue(backend.lastUrl.contains("offset=100"), backend.lastUrl);
     assertEquals(100L, options.offsetValue(), "iteration must not mutate the caller's options");
@@ -284,13 +284,7 @@ class ReviewFixesTest {
                 MockBackend.ok(
                     200,
                     "{\"data\":{\"items\":[{}],\"total\":3,\"offset\":2,\"limit\":2,\"count\":1}}")));
-    java.util.Iterator<ActorStoreListItem> it =
-        client(backend).store().iterate(new StoreListOptions().limit(2L));
-    int count = 0;
-    while (it.hasNext()) {
-      it.next();
-      count++;
-    }
+    long count = client(backend).store().iterate(new StoreListOptions().limit(2L)).count();
     assertEquals(3, count, "iteration should walk across both pages");
     assertEquals(2, backend.calls, "one API call per page");
   }
@@ -381,7 +375,7 @@ class ReviewFixesTest {
                 MockBackend.ok(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}")));
     ActorRun run = client(backend).run("r1").waitForFinish(5L);
     assertEquals("r1", run.getId());
-    assertEquals("SUCCEEDED", run.getStatus());
+    assertEquals(RunStatus.SUCCEEDED, run.getStatus());
     assertEquals(2, backend.calls, "one 404 poll then the terminal poll");
   }
 

@@ -9,6 +9,8 @@ import com.apify.client.ApifyClient;
 import com.apify.client.LastRunOptions;
 import com.apify.client.ListOptions;
 import com.apify.client.RunListOptions;
+import com.apify.client.RunOrigin;
+import com.apify.client.RunStatus;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +27,7 @@ class ActorRunIntegrationTest extends IntegrationBase {
   void runActorAndReadOutputs() {
     ApifyClient client = requireClient();
     ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
-    assertEquals("SUCCEEDED", run.getStatus());
+    assertEquals(RunStatus.SUCCEEDED, run.getStatus());
 
     assertTrue(client.run(run.getId()).get().isPresent());
 
@@ -41,16 +43,16 @@ class ActorRunIntegrationTest extends IntegrationBase {
     ApifyClient client = requireClient();
     client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
 
-    var lastRun = client.actor("apify/hello-world").lastRun("SUCCEEDED").get();
+    var lastRun = client.actor("apify/hello-world").lastRun(RunStatus.SUCCEEDED).get();
     assertTrue(lastRun.isPresent());
-    assertEquals("SUCCEEDED", lastRun.get().getStatus());
+    assertEquals(RunStatus.SUCCEEDED, lastRun.get().getStatus());
 
     var byOrigin =
         client
             .actor("apify/hello-world")
-            .lastRun(new LastRunOptions().status("SUCCEEDED").origin("API"))
+            .lastRun(new LastRunOptions().status(RunStatus.SUCCEEDED).origin(RunOrigin.API))
             .get();
     assertTrue(byOrigin.isPresent());
-    assertEquals("SUCCEEDED", byOrigin.get().getStatus());
+    assertEquals(RunStatus.SUCCEEDED, byOrigin.get().getStatus());
   }
 }

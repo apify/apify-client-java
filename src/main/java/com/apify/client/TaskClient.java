@@ -81,10 +81,10 @@ public final class TaskClient {
   }
 
   /**
-   * Returns a client for the last run of this task, optionally filtered by status (e.g. {@code
-   * "SUCCEEDED"}). Pass {@code null} or empty for no filter.
+   * Returns a client for the last run of this task, optionally filtered by status (e.g. {@link
+   * RunStatus#SUCCEEDED}). Pass {@code null} for no filter.
    */
-  public RunClient lastRun(String status) {
+  public RunClient lastRun(RunStatus status) {
     return lastRun(new LastRunOptions().status(status));
   }
 

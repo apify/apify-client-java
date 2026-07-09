@@ -5,7 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.apify.client.ActorStoreListItem;
 import com.apify.client.ApifyClient;
 import com.apify.client.StoreListOptions;
-import java.util.Iterator;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 class StoreIntegrationTest extends IntegrationBase {
@@ -20,13 +21,16 @@ class StoreIntegrationTest extends IntegrationBase {
   @Test
   void iterateStore() {
     ApifyClient client = requireClient();
-    Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().limit(5L));
-    int count = 0;
-    while (count < 12 && it.hasNext()) {
-      ActorStoreListItem item = it.next();
+    List<ActorStoreListItem> items =
+        client
+            .store()
+            .iterate(new StoreListOptions().limit(5L))
+            .limit(12)
+            .collect(Collectors.toList());
+    for (ActorStoreListItem item : items) {
       assertTrue(item.getId() != null && !item.getId().isEmpty());
-      count++;
     }
-    assertTrue(count >= 12, "expected to iterate at least 12 store actors, got " + count);
+    assertTrue(
+        items.size() >= 12, "expected to iterate at least 12 store actors, got " + items.size());
   }
 }

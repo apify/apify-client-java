@@ -3,6 +3,10 @@ package com.apify.client;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Spliterator;
+import java.util.Spliterators;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 /** A client for browsing the Apify Store ({@code GET /v2/store}). */
 public final class StoreCollectionClient {
@@ -20,11 +24,15 @@ public final class StoreCollectionClient {
   }
 
   /**
-   * Returns a lazy iterator over all Store Actors matching the options, fetching pages on demand.
-   * The options' {@code limit} (if set) is used as the per-page size.
+   * Returns a lazy {@link Stream} over all Store Actors matching the options, fetching pages on
+   * demand as the stream is consumed. The options' {@code limit} (if set) is used as the per-page
+   * size. The stream is sequential and need not be closed.
    */
-  public Iterator<ActorStoreListItem> iterate(StoreListOptions options) {
-    return new StoreIterator(options);
+  public Stream<ActorStoreListItem> iterate(StoreListOptions options) {
+    Spliterator<ActorStoreListItem> spliterator =
+        Spliterators.spliteratorUnknownSize(
+            new StoreIterator(options), Spliterator.ORDERED | Spliterator.NONNULL);
+    return StreamSupport.stream(spliterator, false);
   }
 
   /** Lazily iterates over Apify Store Actors, fetching one page at a time. */

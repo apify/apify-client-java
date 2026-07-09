@@ -65,7 +65,7 @@ unsigned.
 > **Public-URL limitation (matches the JavaScript reference client).** The public-URL builders
 > (`createItemsPublicUrl`, and the key-value-store `getRecordPublicUrl` / `createKeysPublicUrl`)
 > build the URL from the client's own resource path plus the signature. When called on a *last-run
-> nested* client (e.g. `client.actor(id).lastRun("SUCCEEDED").dataset().createItemsPublicUrl(...)`)
+> nested* client (e.g. `client.actor(id).lastRun(RunStatus.SUCCEEDED).dataset().createItemsPublicUrl(...)`)
 > the returned URL keeps the unpinned `.../runs/last/dataset` path and does not carry the `status`
 > filter, so it may resolve a different run when opened. Build public URLs from a concrete
 > `client.dataset(id)` / `client.keyValueStore(id)` client when you need a stable shareable URL.
@@ -138,16 +138,13 @@ expiry-aware storage-content signature — hence only `createKeysPublicUrl` take
 | `prolongRequestLock(String id, long lockSecs, boolean forefront)` | Extend a lock. Returns `JsonNode`. |
 | `deleteRequestLock(String id, boolean forefront)` | Release a lock. No return value. |
 | `unlockRequests()` | Release all the client's locks. Returns `JsonNode`. |
-| `paginateRequests(Long pageLimit)` | A lazy `Iterator<RequestQueueRequest>` over all requests. |
+| `paginateRequests(Long pageLimit)` | A lazy `Stream<RequestQueueRequest>` over all requests. |
 
 ```java
 RequestQueue rq = client.requestQueues().getOrCreate("my-queue");
 RequestQueueClient queue = client.requestQueue(rq.getId());
 queue.addRequest(new RequestQueueRequest("https://example.com", "example"), false);
-Iterator<RequestQueueRequest> it = queue.paginateRequests(100L);
-while (it.hasNext()) {
-  System.out.println(it.next().getUrl());
-}
+queue.paginateRequests(100L).forEach(request -> System.out.println(request.getUrl()));
 ```
 
 `ListRequestsOptions` fields: `limit`, `exclusiveStartId`, `cursor` (mutually exclusive with

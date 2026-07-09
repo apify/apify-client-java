@@ -23,10 +23,12 @@ exposes `list(ListOptions)` only — it has no `create(...)`. To create a webhoo
 Actor or task, use `client.webhooks().create(...)` and set the Actor/task in the webhook's
 `condition`.
 
-A webhook definition supplies `eventTypes` (a list of event-type strings such as
+A webhook definition supplies `eventTypes` (the events that trigger it, such as
 `ACTOR.RUN.SUCCEEDED`, `ACTOR.RUN.FAILED`, `ACTOR.RUN.ABORTED`, `ACTOR.RUN.TIMED_OUT`,
-`ACTOR.RUN.CREATED`, `ACTOR.BUILD.SUCCEEDED`, …), a `condition` and a `requestUrl`. The definition is
-a plain JSON-serializable value (e.g. a `Map`); this client does not wrap it in a typed enum:
+`ACTOR.RUN.CREATED`, `ACTOR.BUILD.SUCCEEDED`, …), a `condition` and a `requestUrl`. The definition you
+pass to `create(...)` is a plain JSON-serializable value (e.g. a `Map`), so its event types are wire
+strings; when reading a webhook back, `Webhook.getEventTypes()` returns them as a typed
+`WebhookEventType` enum (with `UNKNOWN` for any value this client version does not recognise):
 
 ```java
 Webhook webhook = client.webhooks().create(Map.of(
@@ -49,7 +51,8 @@ WebhookDispatch dispatch = client.webhook("WEBHOOK_ID").test();
 System.out.println(dispatch.getId());
 ```
 
-`Webhook` fields: `getId()`, `getUserId()`, `getRequestUrl()`, `getEventTypes()`.
+`Webhook` fields: `getId()`, `getUserId()`, `getRequestUrl()`, `getEventTypes()` (a
+`List<WebhookEventType>`).
 
 ## `WebhookDispatchCollectionClient` and `WebhookDispatchClient`
 

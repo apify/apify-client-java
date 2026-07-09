@@ -8,15 +8,15 @@ import java.util.List;
  * task-scoped run collections.
  */
 public final class RunListOptions {
-  private List<String> status;
+  private List<RunStatus> status;
   private String startedAfter;
   private String startedBefore;
 
   /**
-   * Filter by one or more run statuses (e.g. {@code "SUCCEEDED"}, {@code "RUNNING"}). Sent as a
-   * comma-separated list, as the API accepts.
+   * Filter by one or more run statuses (e.g. {@link RunStatus#SUCCEEDED}, {@link
+   * RunStatus#RUNNING}). Sent as a comma-separated list, as the API accepts.
    */
-  public RunListOptions status(List<String> status) {
+  public RunListOptions status(List<RunStatus> status) {
     this.status = status == null ? null : List.copyOf(status);
     return this;
   }
@@ -34,7 +34,9 @@ public final class RunListOptions {
   }
 
   void apply(QueryParams q) {
-    q.addCsv("status", status)
+    List<String> statusValues =
+        status == null ? null : status.stream().map(RunStatus::getWireValue).toList();
+    q.addCsv("status", statusValues)
         .addString("startedAfter", startedAfter)
         .addString("startedBefore", startedBefore);
   }

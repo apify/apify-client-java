@@ -5,6 +5,29 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-09
+
+Idiomatic-Java refactor. This release contains breaking changes to the public interface.
+
+### Changed
+
+- `ActorRun.getStatus()` and `Build.getStatus()` now return a `RunStatus` enum instead of a `String`.
+- `Webhook.getEventTypes()` now returns a `List<WebhookEventType>` instead of a `List<String>`.
+- `ActorClient.lastRun(...)` and `TaskClient.lastRun(...)` now take a `RunStatus` instead of a
+  `String`; `LastRunOptions.status(...)`/`origin(...)` now take `RunStatus`/`RunOrigin` enums.
+- `RunListOptions.status(...)` now takes a `List<RunStatus>` instead of a `List<String>`.
+- `ActorStartOptions.forcePermissionLevel(...)` now takes a `PermissionLevel` enum instead of a
+  `String`.
+- `StoreCollectionClient.iterate(...)` and `RequestQueueClient.paginateRequests(...)` now return a
+  lazy `Stream<T>` instead of an `Iterator<T>`.
+- `RunClient.abort(Boolean)` is replaced by the overloads `abort()` (server default) and
+  `abort(boolean gracefully)`.
+
+### Added
+
+- `RunStatus`, `RunOrigin`, `PermissionLevel` and `WebhookEventType` enums (each parsing unrecognised
+  server values to an `UNKNOWN` constant where applicable), with `RunStatus.isTerminal()`.
+
 ## [0.1.1] - 2026-07-07
 
 ### Changed

@@ -16,7 +16,7 @@ public final class ActorStartOptions {
   private Double maxTotalChargeUsd;
   private String contentType;
   private Boolean restartOnError;
-  private String forcePermissionLevel;
+  private PermissionLevel forcePermissionLevel;
   private List<Object> webhooks;
 
   /** The tag or number of the build to run (e.g. {@code "latest"}, {@code "0.1.2"}). */
@@ -67,11 +67,8 @@ public final class ActorStartOptions {
     return this;
   }
 
-  /**
-   * Override the Actor's permission level for this run ({@code LIMITED_PERMISSIONS}/{@code
-   * FULL_PERMISSIONS}).
-   */
-  public ActorStartOptions forcePermissionLevel(String forcePermissionLevel) {
+  /** Override the Actor's permission level for this run. */
+  public ActorStartOptions forcePermissionLevel(PermissionLevel forcePermissionLevel) {
     this.forcePermissionLevel = forcePermissionLevel;
     return this;
   }
@@ -99,7 +96,9 @@ public final class ActorStartOptions {
         .addLong("maxItems", maxItems)
         .addDouble("maxTotalChargeUsd", maxTotalChargeUsd)
         .addBool("restartOnError", restartOnError)
-        .addString("forcePermissionLevel", forcePermissionLevel);
+        .addString(
+            "forcePermissionLevel",
+            forcePermissionLevel == null ? null : forcePermissionLevel.getWireValue());
     q.addString("webhooks", encodeWebhooks(webhooks));
   }
 

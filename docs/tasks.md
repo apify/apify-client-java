@@ -27,7 +27,7 @@ Task task = client.tasks().create(Map.of(
 | `call(Object input, TaskStartOptions, Long waitSecs)` | Start and poll until finished. |
 | `getInput()` | The stored input. Returns `Optional<JsonNode>`. |
 | `updateInput(Object)` | Replace the stored input. Returns `JsonNode`. |
-| `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run (see [`LastRunOptions`](actors.md#actorclient)). |
+| `lastRun(RunStatus status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run (see [`LastRunOptions`](actors.md#actorclient)). |
 | `runs()` | Nested run collection client. |
 | `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, list only). |
 
