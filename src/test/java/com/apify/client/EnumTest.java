@@ -57,15 +57,11 @@ class EnumTest {
   }
 
   @Test
-  void runOriginRoundTripsAndFallsBack() {
-    for (RunOrigin origin : RunOrigin.values()) {
-      if (origin == RunOrigin.UNKNOWN) {
-        continue;
-      }
-      assertEquals(origin, RunOrigin.fromWire(origin.getWireValue()));
-    }
-    assertEquals(RunOrigin.UNKNOWN, RunOrigin.fromWire("FUTURE-ORIGIN"));
-    assertNull(RunOrigin.fromWire(null));
+  void runOriginEmitsItsWireValue() {
+    // RunOrigin is write-only (only ever emitted to the origin query param), so it only needs a
+    // wire-value getter; there is no fromWire/UNKNOWN read path to exercise.
+    assertEquals("API", RunOrigin.API.getWireValue());
+    assertEquals("SCHEDULER", RunOrigin.SCHEDULER.getWireValue());
   }
 
   @Test

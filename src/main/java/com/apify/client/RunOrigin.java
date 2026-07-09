@@ -1,13 +1,12 @@
 package com.apify.client;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonValue;
-
 /**
- * How an Actor run was started (the API's {@code RunOrigin} / {@code meta.origin}).
+ * How an Actor run was started (the API's {@code RunOrigin} / {@code meta.origin}), used to filter
+ * the "last" run via {@link LastRunOptions#origin(RunOrigin)}.
  *
- * <p>{@link #UNKNOWN} is returned for any origin value the API introduces that this client version
- * does not yet recognise, so deserialization never fails on a newer server.
+ * <p>This enum is write-only: it is only ever turned into the {@code origin} query parameter via
+ * {@link #getWireValue()}, never deserialized, so it needs no Jackson annotations and no {@code
+ * UNKNOWN} read sentinel.
  */
 public enum RunOrigin {
   /** Started from the Actor's development console. */
@@ -31,9 +30,7 @@ public enum RunOrigin {
   /** Started from an Actor Standby request. */
   STANDBY("STANDBY"),
   /** Started through the Model Context Protocol integration. */
-  MCP("MCP"),
-  /** An origin value the API returned that this client version does not recognise. */
-  UNKNOWN(null);
+  MCP("MCP");
 
   private final String wireValue;
 
@@ -41,23 +38,8 @@ public enum RunOrigin {
     this.wireValue = wireValue;
   }
 
-  /** The value used on the wire; {@code null} for {@link #UNKNOWN}. */
-  @JsonValue
+  /** The value sent in the {@code origin} query parameter. */
   public String getWireValue() {
     return wireValue;
-  }
-
-  /** Maps a wire value to its constant, or {@link #UNKNOWN} for an unrecognised non-null value. */
-  @JsonCreator
-  public static RunOrigin fromWire(String value) {
-    if (value == null) {
-      return null;
-    }
-    for (RunOrigin origin : values()) {
-      if (value.equals(origin.wireValue)) {
-        return origin;
-      }
-    }
-    return UNKNOWN;
   }
 }
