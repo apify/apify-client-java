@@ -26,14 +26,18 @@ Actor or task, use `client.webhooks().create(...)` and set the Actor/task in the
 A webhook definition supplies `eventTypes` (the events that trigger it, such as
 `ACTOR.RUN.SUCCEEDED`, `ACTOR.RUN.FAILED`, `ACTOR.RUN.ABORTED`, `ACTOR.RUN.TIMED_OUT`,
 `ACTOR.RUN.CREATED`, `ACTOR.BUILD.SUCCEEDED`, …), a `condition` and a `requestUrl`. The definition you
-pass to `create(...)` is a plain JSON-serializable value (e.g. a `Map`), so its event types are wire
-strings; when reading a webhook back, `Webhook.getEventTypes()` returns them as a typed
-`WebhookEventType` enum (with `UNKNOWN` for any value this client version does not recognise):
+pass to `create(...)` is a plain JSON-serializable value (e.g. a `Map`), so on create the event types
+must be their wire strings (e.g. `"ACTOR.RUN.SUCCEEDED"`). When reading a webhook back,
+`Webhook.getEventTypes()` returns them as a typed `WebhookEventType` enum (with `UNKNOWN` for any value
+this client version does not recognise). To stay type-safe on create, derive the wire strings from the
+enum with `WebhookEventType.getWireValue()`:
 
 ```java
 Webhook webhook = client.webhooks().create(Map.of(
     "isAdHoc", false,
-    "eventTypes", List.of("ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED"),
+    "eventTypes", List.of(
+        WebhookEventType.ACTOR_RUN_SUCCEEDED.getWireValue(),
+        WebhookEventType.ACTOR_RUN_FAILED.getWireValue()),
     "condition", Map.of("actorId", "apify/hello-world"),
     "requestUrl", "https://example.com/webhook"));
 ```

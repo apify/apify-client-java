@@ -1,10 +1,11 @@
 package com.apify.client;
 
-import com.fasterxml.jackson.annotation.JsonValue;
-
 /**
  * The permission level an Actor run executes with, used to override the Actor's default via {@link
  * ActorStartOptions#forcePermissionLevel(PermissionLevel)}.
+ *
+ * <p>This enum is write-only: it is only ever turned into the {@code forcePermissionLevel} query
+ * parameter via {@link #getWireValue()}, never deserialized, so it needs no Jackson annotations.
  */
 public enum PermissionLevel {
   /** The run is restricted to a limited set of permissions. */
@@ -19,7 +20,6 @@ public enum PermissionLevel {
   }
 
   /** The value sent in the {@code forcePermissionLevel} query parameter. */
-  @JsonValue
   public String getWireValue() {
     return wireValue;
   }

@@ -1,6 +1,7 @@
 package com.apify.client;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Run-specific filters for {@link RunCollectionClient#list(ListOptions, RunListOptions)}. The
@@ -34,8 +35,12 @@ public final class RunListOptions {
   }
 
   void apply(QueryParams q) {
+    // Filter out null wire values (e.g. RunStatus.UNKNOWN, the read-only sentinel) so the
+    // parse-only fallback can never leak a literal "null" into the status query parameter.
     List<String> statusValues =
-        status == null ? null : status.stream().map(RunStatus::getWireValue).toList();
+        status == null
+            ? null
+            : status.stream().map(RunStatus::getWireValue).filter(Objects::nonNull).toList();
     q.addCsv("status", statusValues)
         .addString("startedAfter", startedAfter)
         .addString("startedBefore", startedBefore);

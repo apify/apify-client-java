@@ -21,14 +21,14 @@ Maven:
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.1.1</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```groovy
-implementation 'com.apify:apify-client:0.1.1'
+implementation 'com.apify:apify-client:0.2.0'
 ```
 
 ## Quick start
