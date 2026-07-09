@@ -68,7 +68,7 @@ public final class RunClient {
     ctx.deleteResource("");
   }
 
-  /** Aborts the run immediately, applying the server default (an immediate abort). */
+  /** Aborts the run, applying the server default (an immediate abort). */
   public ActorRun abort() {
     return abortInternal(null);
   }

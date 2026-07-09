@@ -21,7 +21,10 @@ Idiomatic-Java refactor. This release contains breaking changes to the public in
 - `StoreCollectionClient.iterate(...)` and `RequestQueueClient.paginateRequests(...)` now return a
   lazy `Stream<T>` instead of an `Iterator<T>`.
 - `RunClient.abort(Boolean)` is replaced by the overloads `abort()` (server default) and
-  `abort(boolean gracefully)`. Migration: replace `abort(null)` with `abort()`.
+  `abort(boolean gracefully)`. Migration: replace `abort(null)` with `abort()`. Callers passing a
+  nullable `Boolean` variable are also affected — it now auto-unboxes to `abort(boolean)` and throws
+  a `NullPointerException` on `null` instead of falling through to the server default; use `abort()`
+  when the value is absent.
 
 ### Added
 

@@ -398,4 +398,45 @@ class ReviewFixesTest {
         assertThrows(ApifyApiException.class, () -> client(backend).log("run1").stream());
     assertEquals(403, ex.getStatusCode());
   }
+
+  @Test
+  void abortNoArgOmitsGracefullyParam() {
+    // abort() applies the server default, so the gracefully query param must not be sent at all.
+    MockBackend backend =
+        MockBackend.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"ABORTING\"}}");
+    ActorRun run = client(backend).run("r1").abort();
+    assertEquals("r1", run.getId());
+    assertTrue(backend.lastUrl.contains("/actor-runs/r1/abort"), backend.lastUrl);
+    assertFalse(backend.lastUrl.contains("gracefully="), backend.lastUrl);
+  }
+
+  @Test
+  void abortGracefullyTrueMapsToOne() {
+    MockBackend backend =
+        MockBackend.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"ABORTING\"}}");
+    client(backend).run("r1").abort(true);
+    assertTrue(backend.lastUrl.contains("gracefully=1"), backend.lastUrl);
+  }
+
+  @Test
+  void abortGracefullyFalseMapsToZero() {
+    MockBackend backend =
+        MockBackend.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"ABORTING\"}}");
+    client(backend).run("r1").abort(false);
+    assertTrue(backend.lastUrl.contains("gracefully=0"), backend.lastUrl);
+  }
+
+  @Test
+  void runListOptionsFiltersUnknownStatusFromWire() {
+    // RunStatus.UNKNOWN is a read-only parse sentinel with a null wire value; it must be dropped
+    // from the status filter so a literal "status=null" can never reach the query string.
+    MockBackend backend =
+        MockBackend.ofConstant(
+            200, "{\"data\":{\"items\":[],\"total\":0,\"offset\":0,\"limit\":0,\"count\":0}}");
+    client(backend)
+        .runs()
+        .list(null, new RunListOptions().status(List.of(RunStatus.SUCCEEDED, RunStatus.UNKNOWN)));
+    assertTrue(backend.lastUrl.contains("status=SUCCEEDED"), backend.lastUrl);
+    assertFalse(backend.lastUrl.contains("null"), backend.lastUrl);
+  }
 }

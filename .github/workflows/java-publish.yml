@@ -63,7 +63,7 @@ jobs:
         run: mvn -B -DskipTests compile spotbugs:check
 
       - name: Unit tests
-        run: mvn -B test -Dtest='UnitHttpTest,ReviewFixesTest,ClientMetaTest,SignatureTest,ConfigTest' -DfailIfNoTests=true
+        run: mvn -B test -Dtest='UnitHttpTest,ReviewFixesTest,ClientMetaTest,SignatureTest,ConfigTest,EnumTest' -DfailIfNoTests=true
 
       - name: Resolve version from pom.xml
         id: version
