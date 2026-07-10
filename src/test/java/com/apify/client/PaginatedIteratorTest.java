@@ -12,37 +12,43 @@ import org.junit.jupiter.api.Test;
 /**
  * Hermetic (token-free) tests for the offset/limit iteration engine. They drive {@link
  * PaginatedIterator} with a stub page fetcher over a synthetic collection, pinning the total-cap /
- * chunk-size arithmetic and termination that mirror the reference JS {@code
- * _listPaginatedFromCallback} — without any network or {@code APIFY_TOKEN}.
+ * chunk-size arithmetic, server-side page-size clamping, and termination — without any network or
+ * {@code APIFY_TOKEN}.
  */
 class PaginatedIteratorTest {
 
-  /** A fake paginated endpoint over integers {@code [0, available)} reporting {@code total}. */
+  /**
+   * A fake paginated endpoint over integers {@code [0, available)}. Like the real API, it clamps a
+   * requested page size (or an unset one) to {@code maxPageSize} ({@code 0} = no clamp).
+   */
   private static final class StubFetcher implements PaginatedIterator.PageFetcher<Integer> {
-    final long total;
     final long available;
+    final long maxPageSize;
     final List<long[]> requests = new ArrayList<>();
 
-    StubFetcher(long total) {
-      this(total, total);
+    StubFetcher(long available) {
+      this(available, 0);
     }
 
-    StubFetcher(long total, long available) {
-      this.total = total;
+    StubFetcher(long available, long maxPageSize) {
       this.available = available;
+      this.maxPageSize = maxPageSize;
     }
 
     @Override
     public PaginationList<Integer> fetch(long offset, Long limit) {
       requests.add(new long[] {offset, limit == null ? -1 : limit});
-      long take = limit == null ? Long.MAX_VALUE : limit;
+      long requested = limit == null ? Long.MAX_VALUE : limit;
+      long take = maxPageSize > 0 ? Math.min(requested, maxPageSize) : requested;
       List<Integer> items = new ArrayList<>();
       for (long i = offset; i < available && items.size() < take; i++) {
         items.add((int) i);
       }
       PaginationList<Integer> page = new PaginationList<>();
       page.setItems(items);
-      page.setTotal(total);
+      // Some endpoints (e.g. dataset items) report a total of 0 or a lagging value; the engine must
+      // not depend on it, so the stub deliberately reports an unhelpful total.
+      page.setTotal(0);
       page.setOffset(offset);
       page.setCount(items.size());
       return page;
@@ -62,7 +68,8 @@ class PaginatedIteratorTest {
     StubFetcher f = new StubFetcher(10);
     List<Integer> got = drain(new PaginatedIterator<>(3L, 2L, null, f));
     assertEquals(List.of(0, 1, 2), got, "limit=3 caps the total yielded across pages");
-    // First page requests min(cap,chunk)=2; second page requests min(remaining=1,chunk=2)=1.
+    // First page requests min(cap,chunk)=2; second requests min(remaining=1,chunk=2)=1; the cap is
+    // reached exactly, so no trailing empty request is made.
     assertEquals(2, f.requests.size());
     assertEquals(0L, f.requests.get(0)[0]);
     assertEquals(2L, f.requests.get(0)[1]);
@@ -71,32 +78,44 @@ class PaginatedIteratorTest {
   }
 
   @Test
-  void chunkSizePagesAll() {
+  void chunkSizePagesAllThenStopsOnEmptyPage() {
     StubFetcher f = new StubFetcher(5);
     List<Integer> got = drain(new PaginatedIterator<>(null, 2L, null, f));
     assertEquals(List.of(0, 1, 2, 3, 4), got);
-    assertEquals(3, f.requests.size(), "5 items / page size 2 => 3 pages");
+    // 5 items / page size 2 => pages of 2,2,1 then a trailing empty page confirms the end.
+    assertEquals(4, f.requests.size());
+    assertEquals(5L, f.requests.get(3)[0], "trailing request pages past the last item");
+    assertEquals(2L, f.requests.get(3)[1], "each page still requests the chunk size");
   }
 
   @Test
-  void noCapNoChunkUsesServerDefault() {
+  void serverClampsLargePageSizeSoShortPageIsNotTheEnd() {
+    // Server caps every page at 2 items; the caller asks for far more. A page shorter than the
+    // request must NOT be treated as end-of-collection.
+    StubFetcher f = new StubFetcher(5, 2);
+    List<Integer> got = drain(new PaginatedIterator<>(null, 100L, null, f));
+    assertEquals(List.of(0, 1, 2, 3, 4), got, "clamped short pages must keep paging to the end");
+  }
+
+  @Test
+  void capIsHonoredEvenWhenServerClampsPages() {
+    StubFetcher f = new StubFetcher(100, 2);
+    List<Integer> got = drain(new PaginatedIterator<>(5L, 100L, null, f));
+    assertEquals(List.of(0, 1, 2, 3, 4), got, "the total cap holds despite server page clamping");
+  }
+
+  @Test
+  void noChunkUsesServerDefaultAndPagesToEmpty() {
     StubFetcher f = new StubFetcher(4);
     List<Integer> got = drain(new PaginatedIterator<>(null, null, null, f));
     assertEquals(List.of(0, 1, 2, 3), got);
-    assertEquals(1, f.requests.size());
     assertEquals(-1L, f.requests.get(0)[1], "no cap and no chunk => null limit (server default)");
-  }
-
-  @Test
-  void capLargerThanTotalYieldsAll() {
-    StubFetcher f = new StubFetcher(4);
-    assertEquals(List.of(0, 1, 2, 3), drain(new PaginatedIterator<>(100L, null, null, f)));
   }
 
   @Test
   void startOffsetIsHonored() {
     StubFetcher f = new StubFetcher(10);
-    List<Integer> got = drain(new PaginatedIterator<>(null, null, 7L, f));
+    List<Integer> got = drain(new PaginatedIterator<>(null, 5L, 7L, f));
     assertEquals(List.of(7, 8, 9), got, "iteration starts at the requested offset");
     assertEquals(7L, f.requests.get(0)[0]);
   }

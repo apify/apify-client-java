@@ -9,7 +9,8 @@ import java.util.NoSuchElementException;
  * time. Internal reusable engine shared by every collection client's {@code iterate} method, so the
  * paging arithmetic lives in one place (DRY).
  *
- * <p>The end-user behaviour matches the reference JS client's {@code _listPaginatedFromCallback}:
+ * <p>Behaviour, mirroring the end-user contract of the reference JS client's iterable {@code
+ * list()}:
  *
  * <ul>
  *   <li>{@code totalLimit} caps the <em>total</em> number of items yielded across all pages ({@code
@@ -19,12 +20,13 @@ import java.util.NoSuchElementException;
  *       overshot.
  * </ul>
  *
- * <p>Iteration stops when the cap is reached, the API returns an empty page, or a page comes back
- * shorter than requested (the last page). The short-page check — rather than relying solely on the
- * reported {@code total} — makes iteration robust to a momentarily under-reported {@code total}
- * (the count can lag right after a write), which would otherwise truncate a full page. The reported
- * total is only consulted to terminate the "unbounded, server-chosen page size" case, where no page
- * size is known to compare against.
+ * <p>Each page advances the offset by the number of items actually returned, and iteration stops
+ * only when the cap is reached or the API returns an empty page. It deliberately does <em>not</em>
+ * stop on a short page or a reported {@code total}: the API clamps an over-large requested page
+ * size to its own maximum (so a "short" page is common mid-collection), and some endpoints report a
+ * {@code total} of {@code 0} or a value that lags right after a write (e.g. dataset items) — either
+ * signal would truncate iteration. Terminating on an empty page costs one extra request at the end
+ * but yields the complete result in every case.
  */
 final class PaginatedIterator<T> implements Iterator<T> {
 
@@ -79,13 +81,9 @@ final class PaginatedIterator<T> implements Iterator<T> {
     int count = buffer.size();
     offset += count;
     yielded += count;
-
-    boolean capReached = totalLimit != null && yielded >= totalLimit;
-    boolean shortPage = pageLimit != null && count < pageLimit;
-    // With no explicit page size the API returns its default page, so there is nothing to compare a
-    // short page against — fall back to the reported total to detect the end of the collection.
-    boolean totalReached = pageLimit == null && offset >= page.getTotal();
-    if (count == 0 || capReached || shortPage || totalReached) {
+    // Stop on the caller's cap or an empty page; never on a short page (the API clamps large page
+    // sizes) or the reported total (unreliable on some endpoints — see class doc).
+    if (count == 0 || (totalLimit != null && yielded >= totalLimit)) {
       exhausted = true;
     }
   }

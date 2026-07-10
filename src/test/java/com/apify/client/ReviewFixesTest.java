@@ -283,8 +283,14 @@ class ReviewFixesTest {
                     "{\"data\":{\"items\":[{},{}],\"total\":3,\"offset\":0,\"limit\":2,\"count\":2}}"),
                 MockBackend.ok(
                     200,
-                    "{\"data\":{\"items\":[{}],\"total\":3,\"offset\":2,\"limit\":2,\"count\":1}}")));
-    // No total cap; page size 2 drives paging across the reported total of 3.
+                    "{\"data\":{\"items\":[{}],\"total\":3,\"offset\":2,\"limit\":2,\"count\":1}}"),
+                // Trailing empty page: the iterator stops on an empty page (it does not trust the
+                // reported total, which some endpoints under-report), so a final empty page is
+                // required to terminate an uncapped walk.
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[],\"total\":3,\"offset\":3,\"limit\":2,\"count\":0}}")));
+    // No total cap; page size 2 drives paging until the empty page.
     java.util.Iterator<ActorStoreListItem> it =
         client(backend).store().iterate(new StoreListOptions(), 2L);
     int count = 0;
@@ -292,8 +298,8 @@ class ReviewFixesTest {
       it.next();
       count++;
     }
-    assertEquals(3, count, "iteration should walk across both pages");
-    assertEquals(2, backend.calls, "one API call per page");
+    assertEquals(3, count, "iteration should walk across both non-empty pages");
+    assertEquals(3, backend.calls, "two data pages plus the terminating empty page");
   }
 
   @Test
