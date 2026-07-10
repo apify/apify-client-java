@@ -42,10 +42,25 @@ public final class ListKeysOptions {
     return signature;
   }
 
+  Long limitValue() {
+    return limit;
+  }
+
+  String exclusiveStartKeyValue() {
+    return exclusiveStartKey;
+  }
+
   void apply(QueryParams q) {
-    q.addLong("limit", limit)
-        .addString("exclusiveStartKey", exclusiveStartKey)
-        .addString("prefix", prefix)
+    q.addLong("limit", limit).addString("exclusiveStartKey", exclusiveStartKey);
+    applyFilters(q);
+  }
+
+  /**
+   * Applies every filter except {@code limit}/{@code exclusiveStartKey}, which the key iterator
+   * drives per page.
+   */
+  void applyFilters(QueryParams q) {
+    q.addString("prefix", prefix)
         .addString("collection", collection)
         .addString("signature", signature);
   }

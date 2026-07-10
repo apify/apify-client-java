@@ -1,5 +1,7 @@
 package com.apify.client;
 
+import java.util.Iterator;
+
 /** A client for the request queue collection ({@code GET/POST /v2/request-queues}). */
 public final class RequestQueueCollectionClient {
   private final ResourceContext ctx;
@@ -13,6 +15,22 @@ public final class RequestQueueCollectionClient {
     QueryParams params = new QueryParams();
     options.apply(params);
     return ctx.listResource("", params, RequestQueue.class);
+  }
+
+  /**
+   * Returns a lazy iterator over the request queues. The options' {@code limit} caps the total
+   * number yielded ({@code null} = all); {@code chunkSize} is the per-request page size ({@code
+   * null} = server default).
+   */
+  public Iterator<RequestQueue> iterate(StorageListOptions options, Long chunkSize) {
+    StorageListOptions opts = options != null ? options : new StorageListOptions();
+    return ctx.iterateResource(
+        "",
+        opts.limitValue(),
+        chunkSize,
+        opts.offsetValue(),
+        opts::applyFilters,
+        RequestQueue.class);
   }
 
   /**

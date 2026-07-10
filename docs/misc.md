@@ -7,14 +7,15 @@ Browse public Actors in the Apify Store.
 | Method | Description |
 |---|---|
 | `list(StoreListOptions)` | A page of Store Actors. Returns `PaginationList<ActorStoreListItem>`. |
-| `iterate(StoreListOptions)` | A lazy `Iterator<ActorStoreListItem>` fetching pages on demand. |
+| `iterate(StoreListOptions, Long chunkSize)` | A lazy `Iterator<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of Actors yielded (`null` = all); `chunkSize` is the per-request page size (`null` = server default). |
 
 `StoreListOptions` fields: `offset`, `limit`, `search`, `sortBy`, `category`, `username`,
 `pricingModel` (`FREE`, `FLAT_PRICE_PER_MONTH`, `PRICE_PER_DATASET_ITEM`, `PAY_PER_EVENT`),
 `includeUnrunnableActors`, `allowsAgenticUsers`, `responseFormat` (`full`, `agent`).
 
 ```java
-Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().search("crawler").limit(20L));
+Iterator<ActorStoreListItem> it =
+    client.store().iterate(new StoreListOptions().search("crawler").limit(20L), 10L);
 int shown = 0;
 while (shown < 5 && it.hasNext()) {
   ActorStoreListItem item = it.next();

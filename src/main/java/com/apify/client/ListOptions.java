@@ -28,7 +28,23 @@ public final class ListOptions {
     return this;
   }
 
+  Long offsetValue() {
+    return offset;
+  }
+
+  Long limitValue() {
+    return limit;
+  }
+
   void apply(QueryParams q) {
-    q.addLong("offset", offset).addLong("limit", limit).addBool("desc", desc);
+    q.addLong("offset", offset).addLong("limit", limit);
+    applyFilters(q);
+  }
+
+  /**
+   * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
+   */
+  void applyFilters(QueryParams q) {
+    q.addBool("desc", desc);
   }
 }

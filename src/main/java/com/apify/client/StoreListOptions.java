@@ -84,31 +84,16 @@ public final class StoreListOptions {
     return offset;
   }
 
-  StoreListOptions offsetInternal(long offset) {
-    this.offset = offset;
-    return this;
-  }
-
-  /** Returns an independent copy, so iteration paging cannot mutate a caller-owned instance. */
-  StoreListOptions copy() {
-    StoreListOptions c = new StoreListOptions();
-    c.offset = offset;
-    c.limit = limit;
-    c.search = search;
-    c.sortBy = sortBy;
-    c.category = category;
-    c.username = username;
-    c.pricingModel = pricingModel;
-    c.includeUnrunnableActors = includeUnrunnableActors;
-    c.allowsAgenticUsers = allowsAgenticUsers;
-    c.responseFormat = responseFormat;
-    return c;
-  }
-
   void apply(QueryParams q) {
-    q.addLong("offset", offset)
-        .addLong("limit", limit)
-        .addString("search", search)
+    q.addLong("offset", offset).addLong("limit", limit);
+    applyFilters(q);
+  }
+
+  /**
+   * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
+   */
+  void applyFilters(QueryParams q) {
+    q.addString("search", search)
         .addString("sortBy", sortBy)
         .addString("category", category)
         .addString("username", username)

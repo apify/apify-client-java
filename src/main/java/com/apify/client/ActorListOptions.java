@@ -38,11 +38,23 @@ public final class ActorListOptions {
     return this;
   }
 
+  Long offsetValue() {
+    return offset;
+  }
+
+  Long limitValue() {
+    return limit;
+  }
+
   void apply(QueryParams q) {
-    q.addLong("offset", offset)
-        .addLong("limit", limit)
-        .addBool("desc", desc)
-        .addBool("my", my)
-        .addString("sortBy", sortBy);
+    q.addLong("offset", offset).addLong("limit", limit);
+    applyFilters(q);
+  }
+
+  /**
+   * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
+   */
+  void applyFilters(QueryParams q) {
+    q.addBool("desc", desc).addBool("my", my).addString("sortBy", sortBy);
   }
 }

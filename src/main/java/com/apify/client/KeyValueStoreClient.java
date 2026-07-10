@@ -1,5 +1,8 @@
 package com.apify.client;
 
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 /** A client for a specific key-value store (and run-nested variants). */
@@ -51,6 +54,78 @@ public final class KeyValueStoreClient {
     QueryParams params = new QueryParams();
     options.apply(params);
     return ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class);
+  }
+
+  /**
+   * Returns a lazy iterator over this store's keys, fetching pages on demand via the cursor-based
+   * ({@code exclusiveStartKey}) listing endpoint. The options' {@code limit} caps the total number
+   * of keys yielded ({@code null} = all); any {@code exclusiveStartKey} sets the starting point.
+   */
+  public Iterator<KeyValueStoreKey> iterateKeys(ListKeysOptions options) {
+    return new KeysIterator(options != null ? options : new ListKeysOptions());
+  }
+
+  /**
+   * Lazily iterates over a store's keys via the cursor-based ({@code exclusiveStartKey}) listing.
+   */
+  private final class KeysIterator implements Iterator<KeyValueStoreKey> {
+    private final ListKeysOptions options;
+    private List<KeyValueStoreKey> buffer = List.of();
+    private int pos;
+    private String cursor;
+    private Long remaining;
+    private boolean exhausted;
+
+    KeysIterator(ListKeysOptions options) {
+      this.options = options;
+      this.cursor = options.exclusiveStartKeyValue();
+      Long limit = options.limitValue();
+      this.remaining = limit != null && limit > 0 ? limit : null;
+    }
+
+    @Override
+    public boolean hasNext() {
+      while (pos >= buffer.size()) {
+        if (exhausted) {
+          return false;
+        }
+        fetchPage();
+      }
+      return true;
+    }
+
+    @Override
+    public KeyValueStoreKey next() {
+      if (!hasNext()) {
+        throw new NoSuchElementException();
+      }
+      return buffer.get(pos++);
+    }
+
+    private void fetchPage() {
+      QueryParams params = new QueryParams();
+      // The API caps the page size; requesting `remaining` keeps the last page from overshooting
+      // the
+      // caller's total cap. A null limit lets the server choose its default page size.
+      params.addLong("limit", remaining);
+      params.addString("exclusiveStartKey", cursor);
+      options.applyFilters(params);
+      KeyValueStoreKeysPage page =
+          ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class);
+      buffer = page.getItems();
+      pos = 0;
+      cursor = page.getNextExclusiveStartKey();
+      if (remaining != null) {
+        remaining -= buffer.size();
+      }
+      // Stop when the page is empty, there is no next cursor, or the total cap is reached.
+      if (buffer.isEmpty()
+          || cursor == null
+          || cursor.isEmpty()
+          || (remaining != null && remaining <= 0)) {
+        exhausted = true;
+      }
+    }
   }
 
   /** Reports whether a record with the given key exists. */

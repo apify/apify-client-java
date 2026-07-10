@@ -12,6 +12,7 @@ The account-wide collection supports both listing and creation.
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List webhooks. Returns `PaginationList<Webhook>`. |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Webhook>` over all webhooks; `limit` caps the total, `chunkSize` sets the page size. Also available on the read-only nested collections. |
 | `create(Object)` | Create a webhook. Returns `Webhook`. |
 
 ### Nested webhook collections (read-only)
@@ -56,6 +57,7 @@ System.out.println(dispatch.getId());
 | Method | Description |
 |---|---|
 | `webhookDispatches().list(ListOptions)` | List dispatches. Returns `PaginationList<WebhookDispatch>`. |
+| `webhookDispatches().iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<WebhookDispatch>` over all dispatches; `limit` caps the total, `chunkSize` sets the page size. |
 | `webhookDispatch(id).get()` | Fetch a dispatch. Returns `Optional<WebhookDispatch>`. |
 
 `WebhookDispatch` fields: `getId()`, `getWebhookId()`.

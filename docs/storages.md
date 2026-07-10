@@ -24,6 +24,7 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | Method | Description |
 |---|---|
 | `list(StorageListOptions)` | List datasets. Returns `PaginationList<Dataset>`. |
+| `iterate(StorageListOptions, Long chunkSize)` | Lazy `Iterator<Dataset>` over all datasets; `limit` caps the total, `chunkSize` sets the page size. |
 | `getOrCreate(String name)` | Get or create a named dataset (empty name → unnamed). Returns `Dataset`. |
 | `getOrCreate(String name, Object schema)` | As above, sending a creation-time dataset `schema` when a new dataset is created. Returns `Dataset`. |
 
@@ -36,6 +37,8 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listItems(DatasetListItemsOptions)` | List items as `PaginationList<JsonNode>`. |
 | `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. Returns `PaginationList<T>`. |
+| `iterateItems(DatasetListItemsOptions, Long chunkSize)` | Lazy `Iterator<JsonNode>` over all items; `limit` caps the total, `chunkSize` sets the page size. |
+| `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Iterator<T>`. |
 | `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes (JSON/JSONL/CSV/XLSX/XML/RSS/HTML). |
 | `pushItems(Object)` | Push a single item or a list of items. |
 | `getStatistics()` | Dataset statistics. Returns `Optional<JsonNode>`. |
@@ -74,8 +77,9 @@ unsigned.
 
 ### `KeyValueStoreCollectionClient` — `client.keyValueStores()`
 
-`list(StorageListOptions)`, `getOrCreate(String)`, and `getOrCreate(String, Object schema)` (the
-latter sends a creation-time store `schema`), as for datasets.
+`list(StorageListOptions)`, `iterate(StorageListOptions, Long chunkSize)`, `getOrCreate(String)`, and
+`getOrCreate(String, Object schema)` (the latter sends a creation-time store `schema`), as for
+datasets.
 
 ### `KeyValueStoreClient` — `client.keyValueStore(id)`
 
@@ -83,6 +87,7 @@ latter sends a creation-time store `schema`), as for datasets.
 |---|---|
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listKeys(ListKeysOptions)` | List keys. Returns `KeyValueStoreKeysPage`. |
+| `iterateKeys(ListKeysOptions)` | Lazy `Iterator<KeyValueStoreKey>` over all keys, paging with the cursor (`exclusiveStartKey`); the options' `limit` caps the total number of keys yielded. |
 | `recordExists(String key)` | Whether a record exists. |
 | `getRecord(String key)` / `getRecord(String key, GetRecordOptions)` | Fetch a record. Returns `Optional<KeyValueStoreRecord>`. |
 | `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. |
@@ -117,7 +122,8 @@ expiry-aware storage-content signature — hence only `createKeysPublicUrl` take
 
 ### `RequestQueueCollectionClient` — `client.requestQueues()`
 
-`list(StorageListOptions)` and `getOrCreate(String)`, as for datasets.
+`list(StorageListOptions)`, `iterate(StorageListOptions, Long chunkSize)`, and `getOrCreate(String)`,
+as for datasets.
 
 ### `RequestQueueClient` — `client.requestQueue(id)`
 

@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JavaType;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Iterator;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -165,6 +167,30 @@ final class ResourceContext {
   <T> PaginationList<T> listResource(String subPath, QueryParams params, Class<T> itemClass) {
     JavaType listType = Json.parametric(PaginationList.class, Json.type(itemClass));
     return getResourceRequired(subPath, params, listType);
+  }
+
+  /**
+   * Builds a lazy iterator over an offset/limit-paginated endpoint. {@code applyFilters} adds the
+   * per-endpoint filter params (everything except {@code offset}/{@code limit}, which the iterator
+   * drives per page). {@code totalLimit} caps the total items yielded; {@code chunkSize} is the
+   * page size (both {@code null} meaning "unbounded" / "server default").
+   */
+  <T> Iterator<T> iterateResource(
+      String subPath,
+      Long totalLimit,
+      Long chunkSize,
+      Long startOffset,
+      Consumer<QueryParams> applyFilters,
+      Class<T> itemClass) {
+    return new PaginatedIterator<>(
+        totalLimit,
+        chunkSize,
+        startOffset,
+        (offset, pageLimit) -> {
+          QueryParams p = new QueryParams().addLong("offset", offset).addLong("limit", pageLimit);
+          applyFilters.accept(p);
+          return listResource(subPath, p, itemClass);
+        });
   }
 
   <T> T createResource(QueryParams params, Object body, Class<T> dataClass) {

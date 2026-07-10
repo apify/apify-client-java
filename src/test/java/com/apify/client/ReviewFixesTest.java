@@ -267,7 +267,7 @@ class ReviewFixesTest {
         MockBackend.ofConstant(
             200, "{\"data\":{\"items\":[],\"total\":0,\"offset\":0,\"limit\":0,\"count\":0}}");
     StoreListOptions options = new StoreListOptions().offset(100L).limit(50L);
-    client(backend).store().iterate(options).hasNext();
+    client(backend).store().iterate(options, null).hasNext();
     // The caller's initial offset must be honored for paging and left untouched afterwards.
     assertTrue(backend.lastUrl.contains("offset=100"), backend.lastUrl);
     assertEquals(100L, options.offsetValue(), "iteration must not mutate the caller's options");
@@ -284,8 +284,9 @@ class ReviewFixesTest {
                 MockBackend.ok(
                     200,
                     "{\"data\":{\"items\":[{}],\"total\":3,\"offset\":2,\"limit\":2,\"count\":1}}")));
+    // No total cap; page size 2 drives paging across the reported total of 3.
     java.util.Iterator<ActorStoreListItem> it =
-        client(backend).store().iterate(new StoreListOptions().limit(2L));
+        client(backend).store().iterate(new StoreListOptions(), 2L);
     int count = 0;
     while (it.hasNext()) {
       it.next();

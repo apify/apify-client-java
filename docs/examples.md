@@ -100,7 +100,7 @@ if (last.isPresent()) {
 ## Lazy iteration of Store Actors
 
 ```java
-Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().limit(10L));
+Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().limit(10L), 10L);
 int shown = 0;
 while (shown < 5 && it.hasNext()) {
   System.out.println(it.next().getName());

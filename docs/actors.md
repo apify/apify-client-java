@@ -8,6 +8,7 @@ where `id` is an Actor ID or `username~name` (a `/` in the id is accepted and no
 | Method | Description |
 |---|---|
 | `list(ActorListOptions)` | List the account's Actors. Returns `PaginationList<Actor>`. |
+| `iterate(ActorListOptions, Long chunkSize)` | Lazy `Iterator<Actor>` over all matches; the options' `limit` caps the total yielded, `chunkSize` sets the page size (both `null` = all / server default). |
 | `create(Object)` | Create a new Actor from a JSON-serializable definition. Returns `Actor`. |
 
 `ActorListOptions` adds `my(Boolean)` (only Actors owned by the current user) and
@@ -90,6 +91,7 @@ and deletes a single version and exposes its environment variables.
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List the Actor's versions. Returns `PaginationList<ActorVersion>`. |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<ActorVersion>` over all versions; `limit` caps the total, `chunkSize` sets the page size. |
 | `create(Object version)` | Create a version. Returns `ActorVersion`. |
 
 ### `ActorVersionClient` — `client.actor(id).version(v)`
@@ -121,6 +123,7 @@ encrypted), and matching getters `getName()`, `getValue()`, `getIsSecret()`.
 | Method | Description |
 |---|---|
 | `list()` | List the version's environment variables. Returns `PaginationList<ActorEnvVar>`. |
+| `iterate()` | `Iterator<ActorEnvVar>` over the variables. The env-var collection is not paginated (all variables are returned at once), so this iterates a single fetched page; provided for API consistency. |
 | `create(ActorEnvVar)` | Create an environment variable. Returns `ActorEnvVar`. |
 
 ### `ActorEnvVarClient` — `client.actor(id).version(v).envVar(name)`

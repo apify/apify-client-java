@@ -8,6 +8,7 @@ Schedules automatically start Actor or task runs at specified times. Access the 
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List schedules. Returns `PaginationList<Schedule>`. |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Schedule>` over all schedules; `limit` caps the total, `chunkSize` sets the page size. |
 | `create(Object)` | Create a schedule from a JSON-serializable definition. Returns `Schedule`. |
 
 The `actions` array describes what the schedule runs (e.g. a `RUN_ACTOR` action):

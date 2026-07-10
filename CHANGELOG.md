@@ -5,15 +5,33 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.4] - 2026-07-10
+## [0.2.0] - 2026-07-10
+
+### Added
+
+- Lazy iteration helpers over every paginated collection, matching the reference JS client's
+  iterable `list()`: `iterate(options, chunkSize)` on the Actor, Actor-version, build, run, dataset,
+  key-value-store, request-queue, task, schedule, webhook, and webhook-dispatch collection clients;
+  `ActorEnvVarCollectionClient.iterate()` (the non-paginated env-var collection); and
+  `DatasetClient.iterateItems(...)` for dataset items and `KeyValueStoreClient.iterateKeys(...)` for
+  store keys. The options' `limit` caps the total number of items yielded and `chunkSize` sets the
+  per-request page size.
 
 ### Changed
 
 - Verified the client against OpenAPI specification version `v2-2026-07-10T105921Z` and bumped
   `Version.API_SPEC_VERSION` accordingly. The spec delta is forward-compatible: new `401`/`402`
   error responses on several endpoints (handled generically by `ApifyApiException`) and relaxed
-  nullability/optionality on some response fields, all already tolerated by the response models
-  (which ignore unknown fields and collect them in an `extra` map).
+  nullability/optionality on some response fields — already tolerated because the models use
+  nullable boxed field types (a JSON `null` deserializes to `null`) and an optional field simply
+  stays unset.
+
+### Breaking
+
+- `StoreCollectionClient.iterate` now takes `iterate(StoreListOptions, Long chunkSize)`, where the
+  options' `limit` is the total-items cap and `chunkSize` is the page size. Previously `limit` was
+  the per-page size. This aligns Store iteration with the reference client and the new collection
+  iterators.
 
 ## [0.1.3] - 2026-07-10
 

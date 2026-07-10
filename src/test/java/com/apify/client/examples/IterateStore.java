@@ -15,7 +15,8 @@ public final class IterateStore {
   public static void main(String[] args) {
     ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
 
-    Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().limit(10L));
+    Iterator<ActorStoreListItem> it =
+        client.store().iterate(new StoreListOptions().limit(10L), 10L);
     int count = 0;
     while (count < 5 && it.hasNext()) {
       ActorStoreListItem item = it.next();

@@ -2,6 +2,7 @@ package com.apify.client;
 
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
@@ -70,6 +71,44 @@ public final class DatasetClient {
   public <T> PaginationList<T> listItems(DatasetListItemsOptions options, Class<T> itemClass) {
     QueryParams params = new QueryParams();
     options.apply(params);
+    return fetchItemsPage(params, options.descValue(), itemClass);
+  }
+
+  /**
+   * Returns a lazy iterator over the dataset's items, decoding each into a generic {@link
+   * JsonNode}. For typed decoding use {@link #iterateItems(DatasetListItemsOptions, Long, Class)}.
+   */
+  public Iterator<JsonNode> iterateItems(DatasetListItemsOptions options, Long chunkSize) {
+    return iterateItems(options, chunkSize, JsonNode.class);
+  }
+
+  /**
+   * Returns a lazy iterator over the dataset's items, decoding each into {@code itemClass},
+   * fetching pages on demand. The options' {@code limit} caps the total number of items yielded
+   * ({@code null} = all); {@code chunkSize} is the per-request page size ({@code null} = server
+   * default).
+   */
+  public <T> Iterator<T> iterateItems(
+      DatasetListItemsOptions options, Long chunkSize, Class<T> itemClass) {
+    DatasetListItemsOptions opts = options != null ? options : new DatasetListItemsOptions();
+    return new PaginatedIterator<>(
+        opts.limitValue(),
+        chunkSize,
+        opts.offsetValue(),
+        (offset, pageLimit) -> {
+          QueryParams p = new QueryParams().addLong("offset", offset).addLong("limit", pageLimit);
+          opts.applyFilters(p);
+          return fetchItemsPage(p, opts.descValue(), itemClass);
+        });
+  }
+
+  /**
+   * Fetches a single page of dataset items for the already-built query {@code params}. The dataset
+   * items endpoint returns a bare JSON array (not a data envelope) and reports pagination via
+   * {@code X-Apify-Pagination-*} headers, surfaced in the returned {@link PaginationList}.
+   */
+  private <T> PaginationList<T> fetchItemsPage(
+      QueryParams params, Boolean desc, Class<T> itemClass) {
     String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
     ApiResponse resp = http.call("GET", url, null, "", http.baseRequestTimeout());
 
@@ -83,8 +122,8 @@ public final class DatasetClient {
     result.setTotal(headerLong(resp, "X-Apify-Pagination-Total", count));
     result.setOffset(headerLong(resp, "X-Apify-Pagination-Offset", 0));
     result.setLimit(headerLong(resp, "X-Apify-Pagination-Limit", count));
-    if (options.descValue() != null) {
-      result.setDesc(options.descValue());
+    if (desc != null) {
+      result.setDesc(desc);
     }
     return result;
   }

@@ -21,14 +21,14 @@ Maven:
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.1.4</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```groovy
-implementation 'com.apify:apify-client:0.1.4'
+implementation 'com.apify:apify-client:0.2.0'
 ```
 
 ## Quick start
@@ -153,7 +153,7 @@ try {
 
 ## Versioning
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.1.4`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.2.0`).
 - `Version.API_SPEC_VERSION` — the Apify OpenAPI specification version this client was verified
   against (`v2-2026-07-10T105921Z`).
 

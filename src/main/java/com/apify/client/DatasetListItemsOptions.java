@@ -120,10 +120,24 @@ public final class DatasetListItemsOptions {
     return desc;
   }
 
+  Long offsetValue() {
+    return offset;
+  }
+
+  Long limitValue() {
+    return limit;
+  }
+
   void apply(QueryParams q) {
-    q.addLong("offset", offset)
-        .addLong("limit", limit)
-        .addBool("desc", desc)
+    q.addLong("offset", offset).addLong("limit", limit);
+    applyFilters(q);
+  }
+
+  /**
+   * Applies every option except {@code offset}/{@code limit}, which the iterator drives per page.
+   */
+  void applyFilters(QueryParams q) {
+    q.addBool("desc", desc)
         .addCsv("fields", fields)
         .addCsv("outputFields", outputFields)
         .addCsv("omit", omit)
