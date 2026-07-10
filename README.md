@@ -21,20 +21,31 @@ Maven:
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.1.2</version>
+  <version>0.1.3</version>
 </dependency>
 ```
 
 Gradle:
 
 ```groovy
-implementation 'com.apify:apify-client:0.1.2'
+implementation 'com.apify:apify-client:0.1.3'
 ```
 
 ## Quick start
 
-A complete, copy-pasteable first program (save as `HelloApify.java`, then
-`java -cp .:apify-client.jar:jackson-*.jar HelloApify`):
+A complete, copy-pasteable first program (save as `HelloApify.java`). Populate a `lib/` directory
+with the client and its runtime dependencies (from a directory whose `pom.xml` declares the
+dependency shown in [Installation](#installation) above), then compile and run against the JVM's
+`lib/*` classpath wildcard — quote it so the shell does not expand it:
+
+```bash
+# 1. Collect apify-client and its runtime dependencies (Jackson, brotli4j codecs, …) into lib/.
+mvn dependency:copy-dependencies -DoutputDirectory=lib -DincludeScope=runtime
+
+# 2. Compile and run. '.' is for the compiled HelloApify.class; lib/* is the JVM classpath wildcard.
+javac -cp 'lib/*' HelloApify.java
+java  -cp '.:lib/*' HelloApify   # Windows: java -cp ".;lib/*" HelloApify
+```
 
 ```java
 import com.apify.client.ApifyClient;
@@ -142,7 +153,7 @@ try {
 
 ## Versioning
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.1.2`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.1.3`).
 - `Version.API_SPEC_VERSION` — the Apify OpenAPI specification version this client was verified
   against (`v2-2026-07-08T143931Z`).
 
