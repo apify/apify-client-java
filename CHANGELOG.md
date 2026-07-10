@@ -5,6 +5,17 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-07-10
+
+### Changed
+
+- Verified the client against OpenAPI specification version `v2-2026-07-10T105921Z` and bumped
+  `Version.API_SPEC_VERSION` accordingly. The spec delta is forward-compatible: new `401`/`402`
+  error responses on several endpoints (handled generically by `ApifyApiException`) and relaxed
+  response-field nullability/optionality (`RunOptions.maxTotalChargeUsd`, `maxItems` minimum,
+  `KeyValueStoreStats.deleteCount`/`listCount`, `UserPrivateInfo.proxy`, `Webhook.requestUrl`,
+  `StoreListActor.currentPricingInfo`, `notice`), all already tolerated by the response models.
+
 ## [0.1.3] - 2026-07-10
 
 ### Added
