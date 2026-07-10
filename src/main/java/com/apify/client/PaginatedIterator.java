@@ -81,6 +81,12 @@ final class PaginatedIterator<T> implements Iterator<T> {
     int count = buffer.size();
     offset += count;
     yielded += count;
+    // Defensively trim the last page to the cap in case the server returned more than requested, so
+    // the caller never sees more than `totalLimit` items.
+    if (totalLimit != null && yielded > totalLimit) {
+      buffer = buffer.subList(0, count - (int) (yielded - totalLimit));
+      yielded = totalLimit;
+    }
     // Stop on the caller's cap or an empty page; never on a short page (the API clamps large page
     // sizes) or the reported total (unreliable on some endpoints — see class doc).
     if (count == 0 || (totalLimit != null && yielded >= totalLimit)) {

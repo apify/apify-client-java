@@ -33,10 +33,30 @@ implementation 'com.apify:apify-client:0.2.0'
 
 ## Quick start
 
-A complete, copy-pasteable first program (save as `HelloApify.java`). Populate a `lib/` directory
-with the client and its runtime dependencies (from a directory whose `pom.xml` declares the
-dependency shown in [Installation](#installation) above), then compile and run against the JVM's
-`lib/*` classpath wildcard — quote it so the shell does not expand it:
+A complete, copy-pasteable first program (save as `HelloApify.java`). First scaffold a minimal
+`pom.xml` next to it so Maven can resolve the client and its runtime dependencies:
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>hello-apify</artifactId>
+  <version>1.0.0</version>
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>com.apify</groupId>
+      <artifactId>apify-client</artifactId>
+      <version>0.2.0</version>
+    </dependency>
+  </dependencies>
+</project>
+```
+
+Then populate a `lib/` directory with the client and its runtime dependencies, and compile and run
+against the JVM's `lib/*` classpath wildcard — quote it so the shell does not expand it:
 
 ```bash
 # 1. Collect apify-client and its runtime dependencies (Jackson, brotli4j codecs, …) into lib/.

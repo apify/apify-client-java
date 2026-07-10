@@ -45,9 +45,12 @@ jobs:
       - name: Static analysis (SpotBugs)
         run: mvn -B -DskipTests compile spotbugs:check
 
-      # Offline unit tests (mock HTTP backend): prove the retry/error/signature logic without the API.
+      # Offline unit tests (mock HTTP backend): prove the retry/error/signature/pagination logic
+      # without the API. Selected by pattern — every hermetic test in the base package runs, and the
+      # token-gated integration/example/doc-snippet suites are excluded — so new hermetic tests are
+      # covered here automatically without editing this list.
       - name: Unit tests
-        run: mvn -B test -Dtest='UnitHttpTest,ReviewFixesTest,ClientMetaTest,SignatureTest,ConfigTest,CompressionTest' -DfailIfNoTests=true
+        run: mvn -B test -Dtest='!*IntegrationTest,!ExamplesTest,!DocSnippetsTest' -DfailIfNoTests=true
 
       # Fail fast if the integration-test secret is missing or empty. Without this guard the
       # integration tests silently "pass" (JUnit assumptions skip them when APIFY_TOKEN is unset),

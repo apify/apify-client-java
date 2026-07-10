@@ -8,7 +8,7 @@ Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 | Method | Description |
 |---|---|
 | `list(ListOptions, RunListOptions)` | List runs. Returns `PaginationList<ActorRun>`. |
-| `iterate(ListOptions, RunListOptions, Long chunkSize)` | Lazy `Iterator<ActorRun>` over all matching runs; `limit` caps the total, `chunkSize` sets the page size. |
+| `iterate(ListOptions, RunListOptions, Long chunkSize)` | Lazy `Iterator<ActorRun>` over all matching runs; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
 
 `RunListOptions` adds `status(List<String>)` (e.g. `SUCCEEDED`, `RUNNING`; sent comma-separated) and,
 for Actor/task-scoped collections, `startedAfter(String)` / `startedBefore(String)` (ISO-8601).
@@ -46,6 +46,9 @@ To set the current run's status message from inside an Actor, use the top-level
 `ActorRun` fields include `getId()`, `getActId()`, `getUserId()`, `getStatus()`,
 `getStatusMessage()`, `getStartedAt()`, `getFinishedAt()`, `getBuildId()`, `getDefaultDatasetId()`,
 `getDefaultKeyValueStoreId()`, `getDefaultRequestQueueId()`, `getContainerUrl()`, plus `isTerminal()`.
+The status is one of `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`,
+`ABORTING`, `ABORTED`; `isTerminal()` is true for the finished states (`SUCCEEDED`, `FAILED`,
+`TIMED-OUT`, `ABORTED`).
 
 `RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)` and
 `idempotencyKey(String)` — the latter is auto-generated when unset so a transport-retried charge is

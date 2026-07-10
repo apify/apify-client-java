@@ -26,6 +26,9 @@ replay_pid*
 # Maven build output
 target/
 
+# Local build-classpath dumps (e.g. from `mvn dependency:build-classpath`)
+cp.txt
+
 # IDE
 .idea/
 *.iml

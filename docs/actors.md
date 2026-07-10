@@ -53,7 +53,7 @@ Actor created = client.actors().create(Map.of(
 | `defaultBuild(Long waitForFinish)` | Resolve the default build. Returns `BuildClient`. |
 | `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run. |
 | `builds()` / `runs()` / `versions()` | Nested collection clients. |
-| `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, list only). |
+| `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, `list` + `iterate`, no `create`). |
 | `version(String)` | An `ActorVersionClient`. |
 
 `ActorStartOptions` fields (all optional): `build`, `memoryMbytes`, `timeoutSecs`, `waitForFinish`,

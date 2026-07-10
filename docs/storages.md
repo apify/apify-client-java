@@ -24,7 +24,7 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | Method | Description |
 |---|---|
 | `list(StorageListOptions)` | List datasets. Returns `PaginationList<Dataset>`. |
-| `iterate(StorageListOptions, Long chunkSize)` | Lazy `Iterator<Dataset>` over all datasets; `limit` caps the total, `chunkSize` sets the page size. |
+| `iterate(StorageListOptions, Long chunkSize)` | Lazy `Iterator<Dataset>` over all datasets; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `getOrCreate(String name)` | Get or create a named dataset (empty name → unnamed). Returns `Dataset`. |
 | `getOrCreate(String name, Object schema)` | As above, sending a creation-time dataset `schema` when a new dataset is created. Returns `Dataset`. |
 
@@ -37,10 +37,17 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listItems(DatasetListItemsOptions)` | List items as `PaginationList<JsonNode>`. |
 | `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. Returns `PaginationList<T>`. |
-| `iterateItems(DatasetListItemsOptions, Long chunkSize)` | Lazy `Iterator<JsonNode>` over all items; `limit` caps the total, `chunkSize` sets the page size. |
+| `iterateItems(DatasetListItemsOptions, Long chunkSize)` | Lazy `Iterator<JsonNode>` over all items; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Iterator<T>`. |
+
+> **Server-side item filters and iteration.** The dataset-items endpoint applies `offset`/`limit` to
+> the raw items and then drops those removed by a server-side filter (`skipEmpty`, `skipHidden`,
+> `clean`, `simplified`), so a page can contain fewer items than requested. Because `iterateItems`
+> advances the offset by the number of items actually returned, combining it with those filters over a
+> multi-page dataset can make page windows overlap and repeat items. Prefer paging without server-side
+> item filters when iterating, or de-duplicate on the client.
 | `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes (JSON/JSONL/CSV/XLSX/XML/RSS/HTML). |
-| `pushItems(Object)` | Push a single item or a list of items. |
+| `pushItems(Object)` | Push a single item or a list of items. No return value. |
 | `getStatistics()` | Dataset statistics. Returns `Optional<JsonNode>`. |
 | `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL. |
 
@@ -87,13 +94,13 @@ datasets.
 |---|---|
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listKeys(ListKeysOptions)` | List keys. Returns `KeyValueStoreKeysPage`. |
-| `iterateKeys(ListKeysOptions)` | Lazy `Iterator<KeyValueStoreKey>` over all keys, paging with the cursor (`exclusiveStartKey`); the options' `limit` caps the total number of keys yielded. |
+| `iterateKeys(ListKeysOptions)` | Lazy `Iterator<KeyValueStoreKey>` over all keys, paging with the cursor (`exclusiveStartKey`). Note: here the options' `limit` caps the **total** number of keys yielded (`null` = all), whereas for `listKeys`/`createKeysPublicUrl` the same `ListKeysOptions.limit` is a single-request page size. Key iteration is cursor-based, so it has no separate `chunkSize`. |
 | `recordExists(String key)` | Whether a record exists. |
 | `getRecord(String key)` / `getRecord(String key, GetRecordOptions)` | Fetch a record. Returns `Optional<KeyValueStoreRecord>`. |
-| `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. |
-| `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`timeoutSecs`, `doNotRetryTimeouts`). |
-| `setRecordJson(String key, Object value)` | Store JSON. |
-| `deleteRecord(String key)` | Delete a record. |
+| `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. No return value. |
+| `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`timeoutSecs`, `doNotRetryTimeouts`). No return value. |
+| `setRecordJson(String key, Object value)` | Store JSON. No return value. |
+| `deleteRecord(String key)` | Delete a record. No return value. |
 | `getRecordPublicUrl(String key)` | A public (optionally signed) record URL. |
 | `createKeysPublicUrl(Long expiresInSecs)` | A public (optionally signed) key-list URL. |
 | `createKeysPublicUrl(ListKeysOptions, Long expiresInSecs)` | As above, forwarding key-listing filters (`limit`, `prefix`, `collection`, `exclusiveStartKey`). |
@@ -144,7 +151,12 @@ as for datasets.
 | `prolongRequestLock(String id, long lockSecs, boolean forefront)` | Extend a lock. Returns `JsonNode`. |
 | `deleteRequestLock(String id, boolean forefront)` | Release a lock. No return value. |
 | `unlockRequests()` | Release all the client's locks. Returns `JsonNode`. |
-| `paginateRequests(Long pageLimit)` | A lazy `Iterator<RequestQueueRequest>` over all requests. |
+| `paginateRequests(Long pageLimit)` | A lazy `Iterator<RequestQueueRequest>` over all requests, paging with the queue's forward cursor. |
+
+> **Naming exception.** Request-queue *requests* are iterated with `paginateRequests(Long pageLimit)`
+> — not an `iterate(...)` method — because the request-queue listing is cursor-based rather than
+> offset/limit. Its single argument is the per-request page size; there is no total-items cap. Every
+> other resource uses the `iterate`/`iterateItems`/`iterateKeys` family.
 
 ```java
 RequestQueue rq = client.requestQueues().getOrCreate("my-queue");

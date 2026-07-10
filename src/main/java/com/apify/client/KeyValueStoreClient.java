@@ -116,6 +116,11 @@ public final class KeyValueStoreClient {
       pos = 0;
       cursor = page.getNextExclusiveStartKey();
       if (remaining != null) {
+        // Defensively trim the last page to the cap in case the server returned more than
+        // requested.
+        if (buffer.size() > remaining) {
+          buffer = buffer.subList(0, remaining.intValue());
+        }
         remaining -= buffer.size();
       }
       // Stop when the page is empty, there is no next cursor, or the total cap is reached.

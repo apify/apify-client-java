@@ -8,7 +8,7 @@ Tasks are pre-configured Actor runs with stored input. Access the task collectio
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List tasks. Returns `PaginationList<Task>`. |
-| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Task>` over all tasks; `limit` caps the total, `chunkSize` sets the page size. |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Task>` over all tasks; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `create(Object)` | Create a task from a JSON-serializable definition. Returns `Task`. |
 
 ```java
@@ -30,7 +30,7 @@ Task task = client.tasks().create(Map.of(
 | `updateInput(Object)` | Replace the stored input. Returns `JsonNode`. |
 | `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run (see [`LastRunOptions`](actors.md#actorclient)). |
 | `runs()` | Nested run collection client. |
-| `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, list only). |
+| `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, `list` + `iterate`, no `create`). |
 
 `TaskStartOptions` mirrors `ActorStartOptions` but omits the Actor-only `contentType` and
 `forcePermissionLevel`: `build`, `memoryMbytes`, `timeoutSecs`, `waitForFinish`, `maxItems`,

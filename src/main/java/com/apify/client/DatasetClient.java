@@ -87,6 +87,11 @@ public final class DatasetClient {
    * fetching pages on demand. The options' {@code limit} caps the total number of items yielded
    * ({@code null} = all); {@code chunkSize} is the per-request page size ({@code null} = server
    * default).
+   *
+   * <p>Note: server-side item filters ({@code skipEmpty}, {@code skipHidden}, {@code clean}, {@code
+   * simplified}) are applied after {@code offset}/{@code limit}, so a page can return fewer items
+   * than requested and paging windows may overlap — combining those filters with iteration can
+   * repeat items. Iterate without server-side item filters, or de-duplicate on the client.
    */
   public <T> Iterator<T> iterateItems(
       DatasetListItemsOptions options, Long chunkSize, Class<T> itemClass) {
