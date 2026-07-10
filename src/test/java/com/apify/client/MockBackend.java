@@ -43,6 +43,7 @@ final class MockBackend implements HttpBackend {
   HttpHeaders lastHeaders;
   String lastUrl;
   String lastBody;
+  byte[] lastBodyBytes;
   final List<String> bodies = new ArrayList<>();
 
   MockBackend(List<Scripted> responses) {
@@ -71,7 +72,8 @@ final class MockBackend implements HttpBackend {
     int idx = calls++;
     lastHeaders = request.headers();
     lastUrl = request.uri().toString();
-    lastBody = readBody(request);
+    lastBodyBytes = readBody(request);
+    lastBody = lastBodyBytes == null ? null : new String(lastBodyBytes, StandardCharsets.UTF_8);
     if (lastBody != null) {
       bodies.add(lastBody);
     }
@@ -105,7 +107,7 @@ final class MockBackend implements HttpBackend {
         request.uri(), r.status, new java.io.ByteArrayInputStream(r.body));
   }
 
-  private static String readBody(HttpRequest request) {
+  private static byte[] readBody(HttpRequest request) {
     Optional<HttpRequest.BodyPublisher> publisher = request.bodyPublisher();
     if (publisher.isEmpty() || publisher.get().contentLength() == 0) {
       return null;
@@ -143,7 +145,7 @@ final class MockBackend implements HttpBackend {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     }
-    return out.toString(StandardCharsets.UTF_8);
+    return out.toByteArray();
   }
 
   /** Minimal {@link HttpResponse} implementation over a byte[] body. */

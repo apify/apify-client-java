@@ -6,7 +6,7 @@
 
     <groupId>com.apify</groupId>
     <artifactId>apify-client</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.3</version>
     <packaging>jar</packaging>
 
     <name>Apify Java Client</name>
@@ -41,6 +41,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jackson.version>2.17.2</jackson.version>
         <junit.version>5.10.2</junit.version>
+        <brotli4j.version>1.23.0</brotli4j.version>
     </properties>
 
     <dependencies>
@@ -53,6 +54,46 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- Brotli request-body compression. The client prefers brotli (Content-Encoding: br) and
+             falls back to gzip when no native codec is available for the running platform. The core
+             artifact provides the Java API; the native codecs are pulled in per platform at runtime
+             scope. Platforms without a bundled native transparently use the JDK's gzip codec. -->
+        <dependency>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>brotli4j</artifactId>
+            <version>${brotli4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>native-linux-x86_64</artifactId>
+            <version>${brotli4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>native-linux-aarch64</artifactId>
+            <version>${brotli4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>native-osx-x86_64</artifactId>
+            <version>${brotli4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>native-osx-aarch64</artifactId>
+            <version>${brotli4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>native-windows-x86_64</artifactId>
+            <version>${brotli4j.version}</version>
+            <scope>runtime</scope>
         </dependency>
 
         <dependency>

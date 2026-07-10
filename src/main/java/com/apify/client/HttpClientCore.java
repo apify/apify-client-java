@@ -1,14 +1,19 @@
 package com.apify.client;
 
+import com.aayushatharva.brotli4j.Brotli4jLoader;
+import com.aayushatharva.brotli4j.encoder.Encoder;
 import com.fasterxml.jackson.databind.JsonNode;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.zip.GZIPOutputStream;
 
 /**
  * The orchestrating HTTP client shared by every resource client. It owns the backend, the optional
@@ -28,6 +33,47 @@ final class HttpClientCore {
 
   /** Exponential-backoff multiplier applied to the inter-retry delay after each attempt. */
   private static final int BACKOFF_FACTOR = 2;
+
+  /**
+   * Request bodies at or above this size (in bytes) are compressed before being sent. Small bodies
+   * are left uncompressed because the CPU cost outweighs the transfer saving. Matches the reference
+   * JS client's 1024-byte threshold.
+   */
+  private static final int MIN_COMPRESS_BYTES = 1024;
+
+  /** Header announcing the request-body content coding to the server. */
+  private static final String CONTENT_ENCODING_HEADER = "Content-Encoding";
+
+  /** {@code Content-Encoding} value for brotli-compressed bodies (matches the reference client). */
+  private static final String ENCODING_BROTLI = "br";
+
+  /** {@code Content-Encoding} value for gzip-compressed bodies (the fallback coding). */
+  private static final String ENCODING_GZIP = "gzip";
+
+  /**
+   * Whether a brotli native codec loaded for the running platform. Resolved once at class load:
+   * brotli4j needs a platform-specific native library, so on platforms without one (or if loading
+   * fails) the client falls back to gzip. Mirrors the reference JS client, which prefers brotli and
+   * falls back to gzip.
+   */
+  private static final boolean BROTLI_AVAILABLE = detectBrotli();
+
+  private static boolean detectBrotli() {
+    try {
+      Brotli4jLoader.ensureAvailability();
+      return true;
+    } catch (Throwable t) {
+      // Native codec unavailable (no bundled binary for this OS/arch, or a link error). Catch
+      // Throwable because native loading can raise UnsatisfiedLinkError/NoClassDefFoundError, not
+      // just Exception. The client stays fully functional using gzip.
+      return false;
+    }
+  }
+
+  /** Reports whether the brotli path is active on this platform (package-private for tests). */
+  static boolean brotliAvailable() {
+    return BROTLI_AVAILABLE;
+  }
 
   private final HttpBackend backend;
   private final String token;
@@ -105,6 +151,16 @@ final class HttpClientCore {
       Duration baseTimeout,
       boolean doNotRetryTimeouts) {
 
+    // Compress the body once, up front, so every retry reuses the same encoded payload.
+    byte[] requestBody = body;
+    Map<String, String> headers = extraHeaders;
+    if (shouldCompress(requestBody, extraHeaders)) {
+      Compressed compressed = compress(requestBody, BROTLI_AVAILABLE);
+      requestBody = compressed.body;
+      headers = new LinkedHashMap<>(extraHeaders == null ? Map.of() : extraHeaders);
+      headers.put(CONTENT_ENCODING_HEADER, compressed.encoding);
+    }
+
     Duration delay = retry.minDelayBetweenRetries;
     int maxAttempts = retry.maxRetries + 1;
     String path = extractPath(url);
@@ -115,7 +171,12 @@ final class HttpClientCore {
       try {
         ApiResponse resp =
             doAttempt(
-                method, url, body, contentType, extraHeaders, attemptTimeout(baseTimeout, attempt));
+                method,
+                url,
+                requestBody,
+                contentType,
+                headers,
+                attemptTimeout(baseTimeout, attempt));
         if (resp.statusCode < MAX_SUCCESS_STATUS) {
           return resp;
         }
@@ -202,6 +263,78 @@ final class HttpClientCore {
       }
     }
     return minDuration(scaled, retry.timeout);
+  }
+
+  /**
+   * Reports whether a request body should be compressed: it must be present, at least {@link
+   * #MIN_COMPRESS_BYTES} bytes, and the caller must not have already set a {@code Content-Encoding}
+   * header (which would mean the body is pre-encoded).
+   */
+  private static boolean shouldCompress(byte[] body, Map<String, String> extraHeaders) {
+    if (body == null || body.length < MIN_COMPRESS_BYTES) {
+      return false;
+    }
+    if (extraHeaders != null) {
+      for (String key : extraHeaders.keySet()) {
+        if (CONTENT_ENCODING_HEADER.equalsIgnoreCase(key)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /**
+   * A compressed request body together with the {@code Content-Encoding} token that describes it.
+   */
+  static final class Compressed {
+    final byte[] body;
+    final String encoding;
+
+    Compressed(byte[] body, String encoding) {
+      this.body = body;
+      this.encoding = encoding;
+    }
+  }
+
+  /**
+   * Compresses a request body, preferring brotli and falling back to gzip, matching the reference
+   * JS client. When {@code preferBrotli} is {@code true} the body is brotli-encoded ({@code
+   * Content-Encoding: br}); otherwise it is gzip-encoded ({@code Content-Encoding: gzip}). Callers
+   * pass {@link #BROTLI_AVAILABLE}; making the coding an explicit parameter keeps this a pure
+   * function of its inputs rather than of hidden static state. Package-private.
+   */
+  static Compressed compress(byte[] data, boolean preferBrotli) {
+    return preferBrotli
+        ? new Compressed(brotli(data), ENCODING_BROTLI)
+        : new Compressed(gzip(data), ENCODING_GZIP);
+  }
+
+  /** Brotli-compresses a request body using the loaded native codec. */
+  private static byte[] brotli(byte[] data) {
+    try {
+      return Encoder.compress(data);
+    } catch (IOException e) {
+      // Encoding an in-memory byte[] performs no real I/O, so this is unreachable in practice.
+      throw new TransportException(e);
+    }
+  }
+
+  /**
+   * Gzip-compresses a request body. Used as the fallback coding when no brotli native codec is
+   * available for the running platform; the JDK always ships a gzip codec ({@link
+   * GZIPOutputStream}).
+   */
+  private static byte[] gzip(byte[] data) {
+    ByteArrayOutputStream out = new ByteArrayOutputStream(data.length);
+    try (GZIPOutputStream gz = new GZIPOutputStream(out)) {
+      gz.write(data);
+    } catch (IOException e) {
+      // Compressing an in-memory byte[] cannot perform real I/O, so this is unreachable in
+      // practice.
+      throw new TransportException(e);
+    }
+    return out.toByteArray();
   }
 
   private static boolean isStatusRetryable(int status) {

@@ -19,6 +19,6 @@ public final class RunStoreActor {
     System.out.println("Run " + run.getId() + " finished with status " + run.getStatus());
 
     var items = client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
-    System.out.println("Default dataset item count: " + items.getCount());
+    System.out.println("Items in this page of the default dataset: " + items.getCount());
   }
 }

@@ -21,17 +21,48 @@ Maven:
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.1.1</version>
+  <version>0.1.3</version>
 </dependency>
 ```
 
 Gradle:
 
 ```groovy
-implementation 'com.apify:apify-client:0.1.1'
+implementation 'com.apify:apify-client:0.1.3'
 ```
 
 ## Quick start
+
+A complete, copy-pasteable first program (save as `HelloApify.java`). Populate a `lib/` directory
+with the client and its runtime dependencies (from a directory whose `pom.xml` declares the
+dependency shown in [Installation](#installation) above), then compile and run against the JVM's
+`lib/*` classpath wildcard — quote it so the shell does not expand it:
+
+```bash
+# 1. Collect apify-client and its runtime dependencies (Jackson, brotli4j codecs, …) into lib/.
+mvn dependency:copy-dependencies -DoutputDirectory=lib -DincludeScope=runtime
+
+# 2. Compile and run. '.' is for the compiled HelloApify.class; lib/* is the JVM classpath wildcard.
+javac -cp 'lib/*' HelloApify.java
+java  -cp '.:lib/*' HelloApify   # Windows: java -cp ".;lib/*" HelloApify
+```
+
+```java
+import com.apify.client.ApifyClient;
+import com.apify.client.ActorRun;
+import com.apify.client.ActorStartOptions;
+
+class HelloApify {
+  public static void main(String[] args) {
+    ApifyClient client = ApifyClient.create("my-api-token");
+    ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
+    System.out.println("Run " + run.getId() + " finished with status " + run.getStatus());
+  }
+}
+```
+
+The remaining snippets below are fragments that assume a configured `client` (see the imports note
+after the next block):
 
 ```java
 ApifyClient client = ApifyClient.create("my-api-token");
@@ -43,7 +74,7 @@ ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOption
 // Read items from the run's default dataset.
 PaginationList<JsonNode> items =
     client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
-System.out.println("Item count: " + items.getCount());
+System.out.println("Items in this page: " + items.getCount());
 ```
 
 All public client types live in the `com.apify.client` package (e.g. `import com.apify.client.*;`).
@@ -122,9 +153,9 @@ try {
 
 ## Versioning
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.1.1`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.1.3`).
 - `Version.API_SPEC_VERSION` — the Apify OpenAPI specification version this client was verified
-  against (`v2-2026-07-07T132551Z`).
+  against (`v2-2026-07-08T143931Z`).
 
 Changes to the public interface other than additive ones are considered breaking changes and follow
 [Semantic Versioning](https://semver.org/).

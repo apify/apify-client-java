@@ -1,9 +1,11 @@
 # Runnable examples
 
-Each example below is a self-contained snippet assuming a configured `client`. The same programs
-live under [`src/test/java/com/apify/client/examples/`](../src/test/java/com/apify/client/examples)
-and are executed end-to-end against the live API by the `Test examples` CI step (see
-`ExamplesTest`), so they are guaranteed to stay runnable.
+Each example below is a code fragment that assumes a configured `client` and the imports listed in
+the [documentation index](README.md#imports-and-dependencies); it is not a standalone `main`. The
+complete, runnable programs live under
+[`src/test/java/com/apify/client/examples/`](../src/test/java/com/apify/client/examples) and are
+executed end-to-end against the live API by the `Test examples` CI step (see `ExamplesTest`), so
+they are guaranteed to stay runnable.
 
 ## Run a store Actor and read its default dataset
 
@@ -11,7 +13,7 @@ and are executed end-to-end against the live API by the `Test examples` CI step 
 ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
 PaginationList<JsonNode> items =
     client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
-System.out.println("Item count: " + items.getCount());
+System.out.println("Items in this page: " + items.getCount());
 ```
 
 ## Each storage: create, push, read
