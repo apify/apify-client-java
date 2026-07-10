@@ -5,6 +5,21 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-07-09
+
+### Changed
+
+- Verified the client against OpenAPI specification version `v2-2026-07-08T143931Z` and bumped
+  `Version.API_SPEC_VERSION` accordingly.
+- Aligned the `User-Agent` OS token with the reference JS client's `os.platform()` token: it now
+  uses the short, lowercase platform identifier (`linux`, `darwin`, `win32`, `android`, …) instead
+  of the human-readable `os.name` value.
+
+### Added
+
+- Request bodies of 1024 bytes or more are now gzip-compressed and sent with
+  `Content-Encoding: gzip`.
+
 ## [0.1.1] - 2026-07-07
 
 ### Changed

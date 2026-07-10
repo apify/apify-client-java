@@ -1,14 +1,17 @@
 package com.apify.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.zip.GZIPOutputStream;
 
 /**
  * The orchestrating HTTP client shared by every resource client. It owns the backend, the optional
@@ -28,6 +31,16 @@ final class HttpClientCore {
 
   /** Exponential-backoff multiplier applied to the inter-retry delay after each attempt. */
   private static final int BACKOFF_FACTOR = 2;
+
+  /**
+   * Request bodies at or above this size (in bytes) are compressed before being sent. Small bodies
+   * are left uncompressed because the CPU cost outweighs the transfer saving. Matches the reference
+   * JS client's 1024-byte threshold.
+   */
+  private static final int MIN_COMPRESS_BYTES = 1024;
+
+  /** Header announcing the request-body content coding to the server. */
+  private static final String CONTENT_ENCODING_HEADER = "Content-Encoding";
 
   private final HttpBackend backend;
   private final String token;
@@ -105,6 +118,15 @@ final class HttpClientCore {
       Duration baseTimeout,
       boolean doNotRetryTimeouts) {
 
+    // Compress the body once, up front, so every retry reuses the same encoded payload.
+    byte[] requestBody = body;
+    Map<String, String> headers = extraHeaders;
+    if (shouldCompress(requestBody, extraHeaders)) {
+      requestBody = gzip(requestBody);
+      headers = new LinkedHashMap<>(extraHeaders == null ? Map.of() : extraHeaders);
+      headers.put(CONTENT_ENCODING_HEADER, "gzip");
+    }
+
     Duration delay = retry.minDelayBetweenRetries;
     int maxAttempts = retry.maxRetries + 1;
     String path = extractPath(url);
@@ -115,7 +137,12 @@ final class HttpClientCore {
       try {
         ApiResponse resp =
             doAttempt(
-                method, url, body, contentType, extraHeaders, attemptTimeout(baseTimeout, attempt));
+                method,
+                url,
+                requestBody,
+                contentType,
+                headers,
+                attemptTimeout(baseTimeout, attempt));
         if (resp.statusCode < MAX_SUCCESS_STATUS) {
           return resp;
         }
@@ -202,6 +229,45 @@ final class HttpClientCore {
       }
     }
     return minDuration(scaled, retry.timeout);
+  }
+
+  /**
+   * Reports whether a request body should be compressed: it must be present, at least {@link
+   * #MIN_COMPRESS_BYTES} bytes, and the caller must not have already set a {@code Content-Encoding}
+   * header (which would mean the body is pre-encoded).
+   */
+  private static boolean shouldCompress(byte[] body, Map<String, String> extraHeaders) {
+    if (body == null || body.length < MIN_COMPRESS_BYTES) {
+      return false;
+    }
+    if (extraHeaders != null) {
+      for (String key : extraHeaders.keySet()) {
+        if (CONTENT_ENCODING_HEADER.equalsIgnoreCase(key)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Gzip-compresses a request body. The reference JS client prefers brotli and falls back to gzip;
+   * the JDK ships a gzip codec ({@link GZIPOutputStream}) but no brotli encoder, and pulling in a
+   * native brotli library would be a heavyweight, non-idiomatic dependency for a client whose only
+   * runtime dependencies are the JDK HTTP client and Jackson. Gzip is the idiomatic Java choice and
+   * is explicitly permitted by the requirements; the server negotiates the coding via the {@code
+   * Content-Encoding} header regardless.
+   */
+  private static byte[] gzip(byte[] data) {
+    ByteArrayOutputStream out = new ByteArrayOutputStream(data.length);
+    try (GZIPOutputStream gz = new GZIPOutputStream(out)) {
+      gz.write(data);
+    } catch (IOException e) {
+      // Compressing an in-memory byte[] cannot perform real I/O, so this is unreachable in
+      // practice.
+      throw new TransportException(e);
+    }
+    return out.toByteArray();
   }
 
   private static boolean isStatusRetryable(int status) {

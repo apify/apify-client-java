@@ -133,7 +133,7 @@ public final class ApifyClientBuilder {
    * ApifyClient/{version} ({os}; Java/{javaVersion}); isAtHome/{true|false}}.
    */
   static String buildUserAgent(String suffix, BooleanSupplier isAtHomeFn) {
-    String os = System.getProperty("os.name", "unknown").toLowerCase(java.util.Locale.ROOT);
+    String os = platformToken();
     String javaVersion = System.getProperty("java.version", "unknown");
     String atHome = isAtHomeFn.getAsBoolean() ? "true" : "false";
     String ua =
@@ -149,5 +149,56 @@ public final class ApifyClientBuilder {
       ua += "; " + suffix;
     }
     return ua;
+  }
+
+  /**
+   * Returns the short, lowercase OS token used in the {@code User-Agent}. It matches the
+   * identifiers emitted by the reference JS client's {@code os.platform()} (Node) — {@code linux},
+   * {@code darwin}, {@code win32}, {@code android}, etc. — so all Apify clients report the platform
+   * uniformly. Java's {@code os.name} system property returns human-readable names ({@code Linux},
+   * {@code Mac OS X}, {@code Windows 10}), so it is mapped to the aligned token here.
+   */
+  static String platformToken() {
+    return platformToken(System.getProperty("os.name", ""), System.getProperty("java.vm.name", ""));
+  }
+
+  /**
+   * Maps the given {@code os.name} / {@code java.vm.name} property values to the aligned platform
+   * token. Split out from {@link #platformToken()} as a pure function so the mapping can be tested
+   * for every platform without depending on the host the tests run on.
+   */
+  static String platformToken(String osName, String vmName) {
+    // Android runs on a Linux kernel (os.name == "Linux"); detect it via its VM name ("Dalvik").
+    String vm = vmName.toLowerCase(java.util.Locale.ROOT);
+    if (vm.contains("dalvik")) {
+      return "android";
+    }
+    String os = osName.toLowerCase(java.util.Locale.ROOT);
+    // macOS/Darwin is checked before Windows because the literal "darwin" contains "win"; the
+    // reverse order would misclassify a "Darwin" os.name as "win32".
+    if (os.contains("mac") || os.contains("darwin")) {
+      return "darwin";
+    }
+    if (os.contains("win")) {
+      return "win32";
+    }
+    if (os.contains("nux") || os.contains("nix")) {
+      return "linux";
+    }
+    if (os.contains("aix")) {
+      return "aix";
+    }
+    if (os.contains("sunos") || os.contains("solaris")) {
+      return "sunos";
+    }
+    if (os.contains("freebsd")) {
+      return "freebsd";
+    }
+    if (os.contains("openbsd")) {
+      return "openbsd";
+    }
+    // Fallback: the first whitespace-delimited word, lowercased, to keep the token short and
+    // stable.
+    return os.isEmpty() ? "unknown" : os.split("\\s+")[0];
   }
 }

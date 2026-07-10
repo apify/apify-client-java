@@ -5,8 +5,12 @@
 > in production and report issues on the repository.
 
 This directory documents the public API of the Apify Java client, organized by resource. Each page
-lists the available methods with their parameters and short, runnable snippets. For an overview,
-configuration, error handling and the full resource table, see the [top-level README](../README.md).
+lists the available methods with their parameters and short snippets. The snippets are code
+fragments that assume a configured `client` and the imports listed below, not standalone `main`
+programs; for complete, runnable programs see [examples.md](examples.md) and
+[`src/test/java/com/apify/client/examples/`](../src/test/java/com/apify/client/examples). For an
+overview, configuration, error handling and the full resource table, see the
+[top-level README](../README.md).
 
 All snippets assume a configured client:
 

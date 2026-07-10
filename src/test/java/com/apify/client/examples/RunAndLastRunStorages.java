@@ -26,7 +26,7 @@ public final class RunAndLastRunStorages {
     System.out.println("Last run: " + run.getId());
 
     var items = client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
-    System.out.println("Last run dataset item count: " + items.getCount());
+    System.out.println("Items in this page of the last run's dataset: " + items.getCount());
     client.keyValueStore(run.getDefaultKeyValueStoreId()).getRecord("OUTPUT");
   }
 }
