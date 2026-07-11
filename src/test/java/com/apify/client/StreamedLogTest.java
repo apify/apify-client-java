@@ -1,6 +1,7 @@
 package com.apify.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -160,9 +161,10 @@ class StreamedLogTest {
 
   @Test
   void closeAfterStopIsNoOp() throws InterruptedException {
-    // close() must be idempotent: after an explicit stop() (which nulls the running thread), a
-    // trailing close() - e.g. from try-with-resources - must not throw. Guards the documented
-    // "no-op otherwise" contract against the former check-then-act race with stop().
+    // Sequential idempotency: after an explicit stop() (which nulls the running thread), a trailing
+    // close() - e.g. from try-with-resources - and any repeat close() must be no-ops, not throws,
+    // honouring the documented "no-op otherwise" contract. (The concurrent stop()/close() race is
+    // covered separately by concurrentCloseNeverThrowsWhileStopRaces.)
     MockBackend backend = MockBackend.ofConstant(200, "");
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
     StreamedLog streamedLog =
@@ -171,6 +173,61 @@ class StreamedLogTest {
     streamedLog.stop();
     streamedLog.close(); // must be a no-op, not an IllegalStateException
     streamedLog.close(); // idempotent on repeat
+  }
+
+  @Test
+  void concurrentCloseNeverThrowsWhileStopRaces() throws InterruptedException {
+    // Reproduces the concurrent case the fix targets: a stop() and a close() fire simultaneously.
+    // Because close() does its running-check and stop atomically under the monitor, it must never
+    // throw regardless of interleaving. (stop() may legitimately throw when it loses the race - its
+    // explicit-misuse contract - so only close()'s outcome is asserted.) The pre-fix check-then-act
+    // close() could observe a non-null thread, release the lock, then call a stop() that had
+    // already nulled the field and threw. Run several rounds to make the interleaving likely.
+    for (int round = 0; round < 50; round++) {
+      MockBackend backend = MockBackend.ofConstant(200, "");
+      backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
+      StreamedLog streamedLog =
+          client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
+      streamedLog.start();
+
+      CountDownLatch go = new CountDownLatch(1);
+      java.util.concurrent.atomic.AtomicReference<Throwable> closeError =
+          new java.util.concurrent.atomic.AtomicReference<>();
+      Thread stopper =
+          new Thread(
+              () -> {
+                awaitQuietly(go);
+                try {
+                  streamedLog.stop();
+                } catch (IllegalStateException ignored) {
+                  // Allowed: stop() throws when it loses the race to close().
+                }
+              });
+      Thread closer =
+          new Thread(
+              () -> {
+                awaitQuietly(go);
+                try {
+                  streamedLog.close();
+                } catch (Throwable t) {
+                  closeError.set(t);
+                }
+              });
+      stopper.start();
+      closer.start();
+      go.countDown(); // release both together to maximise the overlap
+      stopper.join();
+      closer.join();
+      assertNull(closeError.get(), "close() must never throw, even when racing stop()");
+    }
+  }
+
+  private static void awaitQuietly(CountDownLatch latch) {
+    try {
+      latch.await();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
   }
 
   @Test
