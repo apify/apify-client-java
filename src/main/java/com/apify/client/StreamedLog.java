@@ -125,20 +125,29 @@ public final class StreamedLog implements AutoCloseable {
   }
 
   /**
-   * Signals the reader to stop, unblocks it by closing the live stream, and joins it. Callers must
-   * hold the monitor and must have already checked that a thread is running.
+   * Signals the reader to stop, unblocks it by closing the live stream, and joins it (unless called
+   * from the reader thread itself, which cannot join itself). Callers must hold the monitor and
+   * must have already checked that a thread is running.
    */
   private void stopStreaming() {
     stopLogging = true;
     // Close the live stream so a blocked read returns promptly instead of waiting for more bytes.
     closeQuietly(activeStream);
-    try {
-      streamingThread.join();
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    } finally {
-      streamingThread = null;
+    // A thread must never join itself. The destination consumer runs on the streaming thread, so a
+    // user calling stop()/close() from inside that consumer (e.g. "stop redirecting once I see line
+    // X") would otherwise join() the current thread on itself and block forever - and because
+    // stop()/close() are synchronized, that hung thread keeps the monitor, deadlocking every later
+    // start/stop/close with no exception. Setting stopLogging + closing the stream already unwinds
+    // the reader loop, so in that self-stop case we skip only the join; the field is still cleared
+    // below so lifecycle state stays consistent.
+    if (Thread.currentThread() != streamingThread) {
+      try {
+        streamingThread.join();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
     }
+    streamingThread = null;
   }
 
   /** Reads the live raw log stream and forwards complete messages to the destination. */

@@ -227,15 +227,22 @@ public final class RunClient {
    * followed by {@code " -> "}. Falls back to just the run id when the Actor name is unavailable.
    */
   private String buildDefaultLogPrefix() {
-    String actorName = "";
-    Optional<ActorRun> run = get();
-    if (run.isPresent() && run.get().getActId() != null && !run.get().getActId().isEmpty()) {
-      Optional<Actor> actor = root.actor(run.get().getActId()).get();
-      if (actor.isPresent() && actor.get().getName() != null) {
-        actorName = actor.get().getName();
-      }
-    }
     String runPart = "runId:" + id;
+    String actorName = "";
+    try {
+      Optional<ActorRun> run = get();
+      if (run.isPresent() && run.get().getActId() != null && !run.get().getActId().isEmpty()) {
+        Optional<Actor> actor = root.actor(run.get().getActId()).get();
+        if (actor.isPresent() && actor.get().getName() != null) {
+          actorName = actor.get().getName();
+        }
+      }
+    } catch (RuntimeException e) {
+      // The Actor-name lookup is cosmetic. The getters swallow 404, but an auth (401/403),
+      // transport, or 5xx-after-retries failure would otherwise throw out of getStreamedLog() and
+      // abort helper creation even though streaming itself might have worked. Fall back to the
+      // runId-only prefix (actorName stays "") so the helper is always created.
+    }
     String name = actorName.isEmpty() ? runPart : actorName + " " + runPart;
     return name + " -> ";
   }

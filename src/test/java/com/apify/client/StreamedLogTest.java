@@ -1,6 +1,8 @@
 package com.apify.client;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -12,6 +14,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -244,6 +247,93 @@ class StreamedLogTest {
       Thread.sleep(Duration.ofMillis(50).toMillis());
     }
     assertTrue(collected.contains("2999-01-01T00:00:00.000Z x"));
+  }
+
+  @Test
+  void stopFromInsideConsumerDoesNotDeadlock() throws InterruptedException {
+    // The destination consumer runs on the background reader thread. A user may stop redirection
+    // from inside it ("stop once I see line X"). Because that calls stopStreaming() on the reader
+    // thread itself, an unguarded streamingThread.join() would join the thread on itself and hang
+    // forever - and, since stop() is synchronized, hold the monitor so every later start/stop/close
+    // deadlocks too. The self-join guard must let the call return so the reader breaks its loop and
+    // flushes the retained message. If it deadlocked, "b" would never be flushed and the poll below
+    // would time out with only "a" collected. A blocking stream is required: a finite one would end
+    // on its own and mask the hang.
+    MockBackend backend = MockBackend.ofConstant(200, "");
+    backend.scriptStream(
+        200, new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n"));
+    List<String> collected = new CopyOnWriteArrayList<>();
+    AtomicReference<StreamedLog> ref = new AtomicReference<>();
+    AtomicBoolean stopRequested = new AtomicBoolean(false);
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(
+                new StreamedLogOptions()
+                    .toLog(
+                        message -> {
+                          collected.add(message);
+                          // Self-stop on the reader thread; fire once (stop() throws after the
+                          // thread reference is cleared).
+                          if (stopRequested.compareAndSet(false, true)) {
+                            ref.get().stop();
+                          }
+                        }));
+    ref.set(streamedLog);
+    streamedLog.start();
+    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+    while (collected.size() < 2 && System.nanoTime() < deadline) {
+      Thread.sleep(5);
+    }
+    assertEquals(
+        List.of("2999-01-01T00:00:00.000Z a", "2999-01-01T00:00:01.000Z b"),
+        collected,
+        "self-stop from inside the consumer must not deadlock and must flush the retained message");
+  }
+
+  @Test
+  void closeFromInsideConsumerDoesNotDeadlock() throws InterruptedException {
+    // Same self-join hazard as stopFromInsideConsumerDoesNotDeadlock, via close() (which routes
+    // through the same stopStreaming()). close() is idempotent, so the consumer can call it on
+    // every
+    // message without guarding.
+    MockBackend backend = MockBackend.ofConstant(200, "");
+    backend.scriptStream(
+        200, new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n"));
+    List<String> collected = new CopyOnWriteArrayList<>();
+    AtomicReference<StreamedLog> ref = new AtomicReference<>();
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(
+                new StreamedLogOptions()
+                    .toLog(
+                        message -> {
+                          collected.add(message);
+                          ref.get().close(); // idempotent self-close on the reader thread
+                        }));
+    ref.set(streamedLog);
+    streamedLog.start();
+    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+    while (collected.size() < 2 && System.nanoTime() < deadline) {
+      Thread.sleep(5);
+    }
+    assertEquals(
+        List.of("2999-01-01T00:00:00.000Z a", "2999-01-01T00:00:01.000Z b"),
+        collected,
+        "self-close from inside the consumer must not deadlock and must flush the retained message");
+  }
+
+  @Test
+  void defaultPrefixLookupFailureStillCreatesHelper() {
+    // The no-arg getStreamedLog() builds a cosmetic per-run prefix by GETting the run (and its
+    // Actor). Those getters swallow only 404; a 401/403/5xx-after-retries would otherwise throw out
+    // of getStreamedLog() and abort helper creation even though streaming might work. The lookup is
+    // wrapped so it falls back to the runId-only prefix instead of failing.
+    MockBackend backend = new MockBackend(List.of(MockBackend.ok(401, "{\"error\":{}}")));
+    StreamedLog streamedLog =
+        assertDoesNotThrow(() -> client(backend).run("run123").getStreamedLog());
+    assertNotNull(streamedLog);
   }
 
   /**
