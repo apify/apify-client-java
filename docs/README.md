@@ -32,8 +32,9 @@ empty `Optional` rather than an exception. API failures are thrown as `ApifyApiE
 ## Imports and dependencies
 
 Snippets in these docs assume the client types are imported from `com.apify.client` (e.g.
-`import com.apify.client.*;`) plus standard-library types (`java.util.List`, `java.util.Map`,
-`java.util.Optional`, `java.util.Iterator`, `java.time.Duration`, `java.io.InputStream`).
+`import com.apify.client.*;`) plus standard-library types (`java.util.List`, `java.util.ArrayList`,
+`java.util.Map`, `java.util.Optional`, `java.util.Iterator`, `java.util.function.Consumer`,
+`java.time.Duration`, `java.io.InputStream`).
 
 Raw-JSON return values use Jackson's `com.fasterxml.jackson.databind.JsonNode`. Jackson is a
 transitive dependency of this client, so it is already on your classpath.

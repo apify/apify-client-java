@@ -24,6 +24,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Standardized the "official, but experimental" disclaimer wording across the README and all
   documentation pages.
 
+### Fixed
+
+- Documentation: added `java.util.ArrayList` and `java.util.function.Consumer` to the stated
+  snippet import list in `docs/README.md` so the streamed-log example compiles as written.
+
 ## [0.2.0] - 2026-07-10
 
 ### Added
