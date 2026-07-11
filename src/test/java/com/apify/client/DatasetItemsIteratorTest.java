@@ -8,7 +8,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -62,17 +61,20 @@ class DatasetItemsIteratorTest {
     assertEquals(1, backend.calls);
   }
 
+  /** A typed item for {@link #decodesIntoRequestedType()}. */
+  public record Item(int n) {}
+
   @Test
   void decodesIntoRequestedType() {
     MockBackend backend =
         new MockBackend(List.of(MockBackend.ok(200, "[{\"n\":7}]"), MockBackend.ok(200, "[]")));
-    List<Object> seen = new ArrayList<>();
-    Iterator<Map> it =
-        client(backend).dataset("d1").iterateItems(new DatasetListItemsOptions(), 2L, Map.class);
+    List<Item> seen = new ArrayList<>();
+    Iterator<Item> it =
+        client(backend).dataset("d1").iterateItems(new DatasetListItemsOptions(), 2L, Item.class);
     while (it.hasNext()) {
-      seen.add(it.next().get("n"));
+      seen.add(it.next());
     }
     assertEquals(1, seen.size(), "typed iteration should decode and yield the item");
-    assertEquals(7, ((Number) seen.get(0)).intValue());
+    assertEquals(7, seen.get(0).n());
   }
 }
