@@ -135,7 +135,11 @@ class StreamedLogTest {
       assertNull(
           uncaught.get(),
           "a throwing destination consumer must not escape as an uncaught daemon-thread exception");
-      assertTrue(calls.get() >= 1, "the destination consumer should have been invoked");
+      // Two complete lines are streamed, but redirection must unwind on the first throw and forward
+      // nothing further (no re-invocation for the remaining line or the final flush), matching the
+      // reference client's single warning.
+      assertEquals(
+          1, calls.get(), "the destination consumer must not be invoked again after it throws");
     } finally {
       Thread.setDefaultUncaughtExceptionHandler(previous);
     }

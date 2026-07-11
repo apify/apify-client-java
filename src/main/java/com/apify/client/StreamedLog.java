@@ -59,6 +59,13 @@ public final class StreamedLog implements AutoCloseable {
   private final Instant relevancyTimeLimit;
 
   private volatile boolean stopLogging;
+
+  /**
+   * Set once a destination consumer throws, so redirection unwinds on the first failure and
+   * forwards nothing further (matching the reference client). Reset per {@link #start()}.
+   */
+  private volatile boolean forwardingFailed;
+
   private volatile InputStream activeStream;
   private Thread streamingThread;
 
@@ -84,6 +91,7 @@ public final class StreamedLog implements AutoCloseable {
       throw new IllegalStateException("Streaming task already active");
     }
     stopLogging = false;
+    forwardingFailed = false;
     // Open the live stream here, before launching the reader thread, so activeStream is guaranteed
     // to be set once the thread exists. If it were opened inside the thread, a stop() that ran
     // during the HTTP round-trip would close a still-null stream, leaving the reader blocked on a
@@ -203,8 +211,11 @@ public final class StreamedLog implements AutoCloseable {
       // last complete message is held back in `pending` by emitMessages(..., false), and a stop
       // unblocks the read via an IOException that skips the loop body. Running the final flush in
       // finally guarantees that retained message (and any unterminated trailing line) is still
-      // delivered on stop, matching the reference client.
-      emitMessages(pending, new String(lineRemainder, StandardCharsets.UTF_8), true);
+      // delivered on stop, matching the reference client. Skipped once a consumer has thrown: there
+      // is nothing more to deliver and the flush must not re-invoke the failed consumer.
+      if (!forwardingFailed) {
+        emitMessages(pending, new String(lineRemainder, StandardCharsets.UTF_8), true);
+      }
     }
   }
 
@@ -239,6 +250,10 @@ public final class StreamedLog implements AutoCloseable {
       int from = messageStarts.get(i);
       int to = (i + 1 < messageStarts.size()) ? messageStarts.get(i + 1) : buffered.length();
       emitIfRelevant(buffered.substring(from, to).trim(), timestamps.get(i));
+      if (forwardingFailed) {
+        // A consumer threw: unwind on the first failure without forwarding the rest of this batch.
+        return;
+      }
     }
 
     if (flush) {
@@ -271,15 +286,11 @@ public final class StreamedLog implements AutoCloseable {
     try {
       destination.accept(message);
     } catch (RuntimeException e) {
-      // The destination is a user-supplied consumer and runs on this background daemon thread. If
-      // it
-      // throws, letting the exception unwind would kill the daemon thread with an uncaught
-      // exception
-      // (and, via the final flush in finally, throw a second time). Match the reference client:
-      // stop
-      // redirecting and log a warning rather than propagating. Setting stopLogging breaks the
-      // reader
-      // loop so a repeatedly-throwing consumer is not invoked again for every remaining message.
+      // The destination is a user-supplied consumer running on this background daemon thread; an
+      // uncaught throw would kill the thread. Match the reference client: stop redirecting on the
+      // first failure (forwardingFailed unwinds the emit loop and skips the final flush, so the
+      // consumer is not invoked again) and log a single warning instead of propagating.
+      forwardingFailed = true;
       stopLogging = true;
       Logger.getLogger(StreamedLog.class.getName())
           .log(Level.WARNING, "Log redirection stopped due to error", e);
