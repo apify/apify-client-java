@@ -11,8 +11,12 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/** Offline tests pinning correctness behaviours surfaced in review (idempotency, chunking, ...). */
-class ReviewFixesTest {
+/**
+ * Offline regression tests pinning client behaviours: idempotency-key derivation, filter
+ * propagation through nested clients, retry/timeout policy, request chunking, pagination/iteration
+ * termination, and wait/poll semantics.
+ */
+class ClientBehaviourRegressionTest {
 
   private static ApifyClient client(MockBackend backend) {
     return client(backend, 0);

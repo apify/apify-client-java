@@ -59,7 +59,7 @@ Actor name and run id (looked up automatically). `StreamedLogOptions` customizes
   (default `true`).
 
 ```java
-RunClient runClient = client.run("run-id");
+RunClient runClient = client.run("RUN_ID");
 List<String> collected = new ArrayList<>();
 try (StreamedLog streamedLog =
     runClient.getStreamedLog(new StreamedLogOptions().toLog(collected::add).fromStart(true))) {

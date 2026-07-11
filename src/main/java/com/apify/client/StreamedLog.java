@@ -109,6 +109,26 @@ public final class StreamedLog implements AutoCloseable {
     if (streamingThread == null) {
       throw new IllegalStateException("Streaming task is not active");
     }
+    stopStreaming();
+  }
+
+  /**
+   * Stops redirection if it is still running; a no-op otherwise. Fully idempotent and safe under a
+   * concurrent {@link #stop()} or a double {@code close()}: the running-check and the stop happen
+   * atomically under the monitor, so unlike {@link #stop()} this never throws.
+   */
+  @Override
+  public synchronized void close() {
+    if (streamingThread != null) {
+      stopStreaming();
+    }
+  }
+
+  /**
+   * Signals the reader to stop, unblocks it by closing the live stream, and joins it. Callers must
+   * hold the monitor and must have already checked that a thread is running.
+   */
+  private void stopStreaming() {
     stopLogging = true;
     // Close the live stream so a blocked read returns promptly instead of waiting for more bytes.
     closeQuietly(activeStream);
@@ -119,17 +139,6 @@ public final class StreamedLog implements AutoCloseable {
     } finally {
       streamingThread = null;
     }
-  }
-
-  /** Stops redirection if it is still running; a no-op otherwise. */
-  @Override
-  public void close() {
-    synchronized (this) {
-      if (streamingThread == null) {
-        return;
-      }
-    }
-    stop();
   }
 
   /** Reads the live raw log stream and forwards complete messages to the destination. */

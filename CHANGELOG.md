@@ -34,6 +34,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   still-null stream and then waited forever on a read that never returned.
 - Documentation: added `java.util.ArrayList` and `java.util.function.Consumer` to the stated
   snippet import list in `docs/README.md` so the streamed-log example compiles as written.
+- `StreamedLog.close()` is now fully idempotent: the running-check and stop happen atomically under
+  the monitor, so a double or concurrent `close()` can no longer throw `IllegalStateException`.
+- Documentation: `docs/runs.md` streamed-log snippet now uses the `RUN_ID` placeholder, matching the
+  convention used across the other snippets.
 
 ## [0.2.0] - 2026-07-10
 

@@ -159,6 +159,21 @@ class StreamedLogTest {
   }
 
   @Test
+  void closeAfterStopIsNoOp() throws InterruptedException {
+    // close() must be idempotent: after an explicit stop() (which nulls the running thread), a
+    // trailing close() - e.g. from try-with-resources - must not throw. Guards the documented
+    // "no-op otherwise" contract against the former check-then-act race with stop().
+    MockBackend backend = MockBackend.ofConstant(200, "");
+    backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
+    StreamedLog streamedLog =
+        client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
+    streamedLog.start();
+    streamedLog.stop();
+    streamedLog.close(); // must be a no-op, not an IllegalStateException
+    streamedLog.close(); // idempotent on repeat
+  }
+
+  @Test
   void closeStopsActiveRedirection() throws InterruptedException {
     MockBackend backend = MockBackend.ofConstant(200, "");
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");

@@ -42,5 +42,5 @@ class UserIntegrationTest extends IntegrationBase {
   // runs the test-requirements mandate (unlike the per-run resources every other test creates), so
   // a
   // mutating test here would race those runs. Its request behaviour is covered offline instead by
-  // ReviewFixesTest#updateLimitsSendsPutToMeLimits.
+  // ClientBehaviourRegressionTest#updateLimitsSendsPutToMeLimits.
 }
