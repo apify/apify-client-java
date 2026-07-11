@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -95,6 +96,49 @@ class StreamedLogTest {
     streamedLog.start();
     streamedLog.stop();
     // No assertion on output (goes to java.util.logging); the point is it runs without throwing.
+  }
+
+  @Test
+  void throwingConsumerDoesNotKillDaemonThreadUncaught() throws InterruptedException {
+    // The destination consumer runs on the background daemon reader thread. A user consumer that
+    // throws must not escape as an uncaught exception that silently kills that thread (and, via the
+    // final flush, throws again). Matching the reference client, redirection must degrade to a
+    // logged warning. We capture any exception that reaches the reader thread's uncaught handler
+    // and
+    // assert none does, while confirming the consumer was actually exercised.
+    AtomicReference<Throwable> uncaught = new AtomicReference<>();
+    Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+    Thread.setDefaultUncaughtExceptionHandler(
+        (t, e) -> {
+          if ("apify-streamed-log".equals(t.getName())) {
+            uncaught.set(e);
+          } else if (previous != null) {
+            previous.uncaughtException(t, e);
+          }
+        });
+    try {
+      MockBackend backend = MockBackend.ofConstant(200, "");
+      backend.scriptStream(200, "2999-01-01T00:00:00.000Z boom\n2999-01-01T00:00:01.000Z after\n");
+      AtomicInteger calls = new AtomicInteger();
+      StreamedLog streamedLog =
+          client(backend)
+              .run("run123")
+              .getStreamedLog(
+                  new StreamedLogOptions()
+                      .toLog(
+                          message -> {
+                            calls.incrementAndGet();
+                            throw new RuntimeException("consumer failed");
+                          }));
+      streamedLog.start();
+      streamedLog.stop(); // joins the reader; if it died uncaught, the handler above has fired
+      assertNull(
+          uncaught.get(),
+          "a throwing destination consumer must not escape as an uncaught daemon-thread exception");
+      assertTrue(calls.get() >= 1, "the destination consumer should have been invoked");
+    } finally {
+      Thread.setDefaultUncaughtExceptionHandler(previous);
+    }
   }
 
   @Test

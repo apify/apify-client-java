@@ -6,7 +6,7 @@
 
 ## Apify Store — `client.store()`
 
-Browse public Actors in the Apify Store.
+Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollectionClient`.
 
 | Method | Description |
 |---|---|
@@ -47,11 +47,18 @@ The usage/limits methods are only available for `me()`; calling them on `user(id
 
 ```java
 Optional<User> me = client.me().get();
-me.ifPresent(u -> System.out.println("Account: " + u.getId()));
+me.ifPresent(
+    u -> {
+      System.out.println("Account: " + u.getId());
+      // Fields not modelled on User (email, plan, proxy, ...) are exposed through the untyped
+      // extras map, which getExtra() returns as a Map<String, Object>.
+      System.out.println("Email: " + u.getExtra().get("email"));
+    });
 JsonNode usage = client.me().monthlyUsage();
 ```
 
-`User` fields: `getId()`, `getUsername()`, plus `getExtra()`.
+`User` fields: `getId()`, `getUsername()`, plus `getExtra()` — a `Map<String, Object>` carrying any
+account fields not modelled directly (for `me()`, private details such as `email` and `plan`).
 
 ## Logs — `client.log(id)`
 

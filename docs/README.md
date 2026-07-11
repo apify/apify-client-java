@@ -45,9 +45,9 @@ A few methods return data whose shape is not modelled by this client and is inst
 Jackson `JsonNode` (or accept an arbitrary `Object` serialized to JSON):
 
 - Read: `me().monthlyUsage(...)`, `me().limits()`, `task(id).getInput()`,
-  `build(id).getOpenApiDefinition()`, `dataset(id).getStatistics()`, and the raw request-queue
-  operations (`listRequests`, `listAndLockHead`, `prolongRequestLock`, `unlockRequests`,
-  `batchDeleteRequests`).
+  `build(id).getOpenApiDefinition()`, `dataset(id).getStatistics()` (returned as
+  `Optional<JsonNode>`), and the raw request-queue operations (`listRequests`, `listAndLockHead`,
+  `prolongRequestLock`, `unlockRequests`, `batchDeleteRequests`).
 - Write: `task(id).updateInput(...)` and `me().updateLimits(...)` accept an arbitrary
   JSON-serializable value, as do definition/`update`/`create` arguments generally — a `Map`, a
   `JsonNode`, or your own POJO.

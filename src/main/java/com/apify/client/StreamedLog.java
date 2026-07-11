@@ -58,9 +58,6 @@ public final class StreamedLog implements AutoCloseable {
    */
   private final Instant relevancyTimeLimit;
 
-  /** Decoded log text seen so far but not yet split into complete messages. */
-  private final StringBuilder pending = new StringBuilder();
-
   private volatile boolean stopLogging;
   private volatile InputStream activeStream;
   private Thread streamingThread;
@@ -87,7 +84,6 @@ public final class StreamedLog implements AutoCloseable {
       throw new IllegalStateException("Streaming task already active");
     }
     stopLogging = false;
-    pending.setLength(0);
     // Open the live stream here, before launching the reader thread, so activeStream is guaranteed
     // to be set once the thread exists. If it were opened inside the thread, a stop() that ran
     // during the HTTP round-trip would close a still-null stream, leaving the reader blocked on a
@@ -165,6 +161,10 @@ public final class StreamedLog implements AutoCloseable {
     // split across chunk boundaries (including a partial UTF-8 sequence) is not corrupted. Declared
     // outside the try so the final flush in finally can still emit it (see below).
     byte[] lineRemainder = new byte[0];
+    // Decoded log text seen so far but not yet split into complete messages. Local to this reader
+    // (not a shared field) so that if a start() ever races a still-draining reader, the two readers
+    // never mutate the same non-thread-safe buffer.
+    StringBuilder pending = new StringBuilder();
     // The stream was opened in start() and stored in activeStream; own its lifecycle here via
     // try-with-resources so the reader closes it when it exits (idempotent with stop()'s close,
     // which may close it first to unblock a pending read).
@@ -183,7 +183,7 @@ public final class StreamedLog implements AutoCloseable {
           String completeText = new String(combined, 0, lastNewline + 1, StandardCharsets.UTF_8);
           lineRemainder = new byte[combined.length - (lastNewline + 1)];
           System.arraycopy(combined, lastNewline + 1, lineRemainder, 0, lineRemainder.length);
-          emitMessages(completeText, false);
+          emitMessages(pending, completeText, false);
         } else {
           lineRemainder = combined;
         }
@@ -204,7 +204,7 @@ public final class StreamedLog implements AutoCloseable {
       // unblocks the read via an IOException that skips the loop body. Running the final flush in
       // finally guarantees that retained message (and any unterminated trailing line) is still
       // delivered on stop, matching the reference client.
-      emitMessages(new String(lineRemainder, StandardCharsets.UTF_8), true);
+      emitMessages(pending, new String(lineRemainder, StandardCharsets.UTF_8), true);
     }
   }
 
@@ -213,7 +213,7 @@ public final class StreamedLog implements AutoCloseable {
    * When {@code flush} is {@code false} the last message is held back (it may still be growing);
    * when {@code true} everything remaining is emitted.
    */
-  private void emitMessages(String text, boolean flush) {
+  private void emitMessages(StringBuilder pending, String text, boolean flush) {
     pending.append(text);
     String buffered = pending.toString();
 
@@ -268,7 +268,22 @@ public final class StreamedLog implements AutoCloseable {
         // Unparseable timestamp: keep the message rather than silently dropping log output.
       }
     }
-    destination.accept(message);
+    try {
+      destination.accept(message);
+    } catch (RuntimeException e) {
+      // The destination is a user-supplied consumer and runs on this background daemon thread. If
+      // it
+      // throws, letting the exception unwind would kill the daemon thread with an uncaught
+      // exception
+      // (and, via the final flush in finally, throw a second time). Match the reference client:
+      // stop
+      // redirecting and log a warning rather than propagating. Setting stopLogging breaks the
+      // reader
+      // loop so a repeatedly-throwing consumer is not invoked again for every remaining message.
+      stopLogging = true;
+      Logger.getLogger(StreamedLog.class.getName())
+          .log(Level.WARNING, "Log redirection stopped due to error", e);
+    }
   }
 
   private static int lastIndexOf(byte[] bytes, byte target) {

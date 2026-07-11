@@ -38,6 +38,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the monitor, so a double or concurrent `close()` can no longer throw `IllegalStateException`.
 - Documentation: `docs/runs.md` streamed-log snippet now uses the `RUN_ID` placeholder, matching the
   convention used across the other snippets.
+- `StreamedLog`: a destination consumer that throws no longer escapes as an uncaught exception on the
+  background daemon thread. Matching the reference client, the failure is caught, redirection stops,
+  and a warning is logged.
+- `StreamedLog`: the pending-message buffer is now local to each reader run instead of a shared
+  field, so a `start()` racing a still-draining reader can no longer corrupt shared parsing state.
+- Documentation: `docs/README.md` now lists `dataset(id).getStatistics()` as returning
+  `Optional<JsonNode>`, matching the method table in `docs/storages.md`.
 
 ## [0.2.0] - 2026-07-10
 
