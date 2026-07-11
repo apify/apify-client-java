@@ -20,10 +20,11 @@ System.out.println("Items in this page: " + items.getCount());
 
 ```java
 // Named storages persist on your account; each block deletes its storage in a finally so the
-// example does not leak them.
+// example does not leak them. A unique suffix keeps the names from colliding across parallel runs.
+String suffix = "-" + System.currentTimeMillis();
 
 // Dataset: create, push items, read them back.
-Dataset dataset = client.datasets().getOrCreate("example-ds");
+Dataset dataset = client.datasets().getOrCreate("example-ds" + suffix);
 try {
   client.dataset(dataset.getId()).pushItems(List.of(Map.of("hello", "world")));
   PaginationList<JsonNode> items = client.dataset(dataset.getId()).listItems(new DatasetListItemsOptions());
@@ -33,7 +34,7 @@ try {
 }
 
 // Key-value store: create, set a record, read it back.
-KeyValueStore store = client.keyValueStores().getOrCreate("example-kvs");
+KeyValueStore store = client.keyValueStores().getOrCreate("example-kvs" + suffix);
 try {
   client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42));
   Optional<KeyValueStoreRecord> record = client.keyValueStore(store.getId()).getRecord("OUTPUT");
@@ -43,7 +44,7 @@ try {
 }
 
 // Request queue: create, add a request, read the head.
-RequestQueue queue = client.requestQueues().getOrCreate("example-rq");
+RequestQueue queue = client.requestQueues().getOrCreate("example-rq" + suffix);
 try {
   client.requestQueue(queue.getId()).addRequest(new RequestQueueRequest("https://example.com", "example"), false);
   RequestQueueHead head = client.requestQueue(queue.getId()).listHead(10L);

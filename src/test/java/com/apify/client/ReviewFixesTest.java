@@ -326,6 +326,21 @@ class ReviewFixesTest {
   }
 
   @Test
+  void iterateSnapshotsOptionsSoLaterMutationsDoNotLeak() {
+    // The iterator must capture the options (offset/limit AND filters) at call time; mutating the
+    // caller's options object afterwards must not change subsequent page requests.
+    MockBackend backend =
+        MockBackend.ofConstant(
+            200, "{\"data\":{\"items\":[{}],\"total\":1,\"offset\":0,\"limit\":0,\"count\":1}}");
+    ActorListOptions options = new ActorListOptions().sortBy("createdAt");
+    java.util.Iterator<Actor> it = client(backend).actors().iterate(options);
+    options.sortBy("modifiedAt"); // mutate after obtaining the iterator
+    it.hasNext(); // triggers the first page fetch
+    assertTrue(backend.lastUrl.contains("sortBy=createdAt"), backend.lastUrl);
+    assertFalse(backend.lastUrl.contains("modifiedAt"), backend.lastUrl);
+  }
+
+  @Test
   void runCollectionListToleratesNullOptionsAndFilter() {
     MockBackend backend =
         MockBackend.ofConstant(

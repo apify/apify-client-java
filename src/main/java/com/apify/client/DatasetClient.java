@@ -103,14 +103,19 @@ public final class DatasetClient {
   public <T> Iterator<T> iterateItems(
       DatasetListItemsOptions options, Long chunkSize, Class<T> itemClass) {
     DatasetListItemsOptions opts = options != null ? options : new DatasetListItemsOptions();
+    // Snapshot the filters/offset/limit/desc once so mutating the options mid-iteration cannot
+    // leak.
+    QueryParams filters = new QueryParams();
+    opts.applyFilters(filters);
+    Boolean desc = opts.descValue();
     return new PaginatedIterator<>(
         opts.limitValue(),
         chunkSize,
         opts.offsetValue(),
         (offset, pageLimit) -> {
           QueryParams p = new QueryParams().addLong("offset", offset).addLong("limit", pageLimit);
-          opts.applyFilters(p);
-          return fetchItemsPage(p, opts.descValue(), itemClass);
+          p.extend(filters);
+          return fetchItemsPage(p, desc, itemClass);
         });
   }
 

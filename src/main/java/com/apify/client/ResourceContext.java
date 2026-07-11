@@ -182,13 +182,17 @@ final class ResourceContext {
       Long startOffset,
       Consumer<QueryParams> applyFilters,
       Class<T> itemClass) {
+    // Snapshot the caller's filters once, so mutating the options object mid-iteration cannot leak
+    // into later pages (the iterator owns an independent copy of every filter, offset and limit).
+    QueryParams filters = new QueryParams();
+    applyFilters.accept(filters);
     return new PaginatedIterator<>(
         totalLimit,
         chunkSize,
         startOffset,
         (offset, pageLimit) -> {
           QueryParams p = new QueryParams().addLong("offset", offset).addLong("limit", pageLimit);
-          applyFilters.accept(p);
+          p.extend(filters);
           return listResource(subPath, p, itemClass);
         });
   }

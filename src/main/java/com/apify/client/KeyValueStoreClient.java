@@ -79,8 +79,8 @@ public final class KeyValueStoreClient {
    * Lazily iterates over a store's keys via the cursor-based ({@code exclusiveStartKey}) listing.
    */
   private final class KeysIterator implements Iterator<KeyValueStoreKey> {
-    private final ListKeysOptions options;
     private final Long chunkSize;
+    private final QueryParams filters;
     private List<KeyValueStoreKey> buffer = List.of();
     private int pos;
     private String cursor;
@@ -88,11 +88,14 @@ public final class KeyValueStoreClient {
     private boolean exhausted;
 
     KeysIterator(ListKeysOptions options, Long chunkSize) {
-      this.options = options;
       this.chunkSize = chunkSize != null && chunkSize > 0 ? chunkSize : null;
       this.cursor = options.exclusiveStartKeyValue();
       Long limit = options.limitValue();
       this.remaining = limit != null && limit > 0 ? limit : null;
+      // Snapshot the filters once so mutating the options mid-iteration cannot leak into later
+      // pages.
+      this.filters = new QueryParams();
+      options.applyFilters(this.filters);
     }
 
     @Override
@@ -124,7 +127,7 @@ public final class KeyValueStoreClient {
       }
       params.addLong("limit", pageLimit);
       params.addString("exclusiveStartKey", cursor);
-      options.applyFilters(params);
+      params.extend(filters);
       KeyValueStoreKeysPage page =
           ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class);
       buffer = page.getItems();
