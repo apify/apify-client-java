@@ -63,17 +63,7 @@ A complete, copy-pasteable first program (save as `HelloApify.java`). First scaf
 </project>
 ```
 
-Then populate a `lib/` directory with the client and its runtime dependencies, and compile and run
-against the JVM's `lib/*` classpath wildcard — quote it so the shell does not expand it:
-
-```bash
-# 1. Collect apify-client and its runtime dependencies (Jackson, brotli4j codecs, …) into lib/.
-mvn dependency:copy-dependencies -DoutputDirectory=lib -DincludeScope=runtime
-
-# 2. Compile and run. '.' is for the compiled HelloApify.class; lib/* is the JVM classpath wildcard.
-javac -cp 'lib/*' HelloApify.java
-java  -cp '.:lib/*' HelloApify   # Windows: java -cp ".;lib/*" HelloApify
-```
+Create `HelloApify.java`:
 
 ```java
 import com.apify.client.ApifyClient;
@@ -88,6 +78,18 @@ class HelloApify {
     System.out.println("Run " + run.getId() + " finished with status " + run.getStatus());
   }
 }
+```
+
+Then populate a `lib/` directory with the client and its runtime dependencies, and compile and run
+against the JVM's `lib/*` classpath wildcard — quote it so the shell does not expand it:
+
+```bash
+# 1. Collect apify-client and its runtime dependencies (Jackson, brotli4j codecs, …) into lib/.
+mvn dependency:copy-dependencies -DoutputDirectory=lib -DincludeScope=runtime
+
+# 2. Compile and run. '.' is for the compiled HelloApify.class; lib/* is the JVM classpath wildcard.
+javac -cp '.:lib/*' HelloApify.java   # Windows: javac -cp ".;lib/*" HelloApify.java
+java  -cp '.:lib/*' HelloApify        # Windows: java  -cp ".;lib/*" HelloApify
 ```
 
 The remaining snippets below are fragments that assume a configured `client` and these imports: all
@@ -108,6 +110,10 @@ PaginationList<JsonNode> items =
     client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
 System.out.println("Items in this page: " + items.getCount());
 ```
+
+The types used above — `PaginationList<T>`, `DatasetListItemsOptions`, and the per-resource clients —
+are documented on the [resource pages](docs/README.md); `ApifyApiException` is covered under
+[Error handling](#error-handling) below.
 
 `ApifyClient.create` takes the token as an explicit argument — it does **not** read `APIFY_TOKEN` (or
 any other environment variable) automatically. Read it yourself if you want that, e.g.
@@ -180,6 +186,9 @@ try {
 
 ## Versioning
 
+The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
+constants:
+
 - `Version.CLIENT_VERSION` — the semantic version of this client (`0.2.0`).
 - `Version.API_SPEC_VERSION` — the Apify OpenAPI specification version this client was verified
   against (`v2-2026-07-10T105921Z`).
@@ -221,7 +230,7 @@ Full documentation is in the [`docs/`](docs/README.md) directory, organized by r
 - [Schedules](docs/schedules.md)
 - [Webhooks & dispatches](docs/webhooks.md)
 - [Store, users & logs](docs/misc.md)
-- [Runnable examples](docs/examples.md)
+- [Examples](docs/examples.md)
 
 ## Resources
 

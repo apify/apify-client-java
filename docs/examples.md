@@ -1,5 +1,7 @@
 # Examples
 
+> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+
 Each example below is a code fragment (not a standalone `main`) that assumes a configured `client`
 and the imports listed in the [documentation index](README.md#imports-and-dependencies). The
 complete, standalone programs (with imports and a `main`) live under

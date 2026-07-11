@@ -129,4 +129,4 @@ can affect the result.
 - [Schedules](schedules.md)
 - [Webhooks & dispatches](webhooks.md)
 - [Store, users & logs](misc.md)
-- [Runnable examples](examples.md)
+- [Examples](examples.md)
