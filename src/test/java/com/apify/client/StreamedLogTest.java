@@ -4,9 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -117,6 +121,42 @@ class StreamedLogTest {
   }
 
   @Test
+  void deliversLastMessageWhenStoppingLiveStream() throws InterruptedException {
+    // Regression test for a live stream that never reaches end-of-stream on its own. The reader
+    // buffers three complete lines (a, b, c): a and b are emitted immediately while c is retained
+    // as the possibly-still-growing last message. Then the read blocks. stop() closes the stream,
+    // which unblocks the read with an IOException; the retained last message (c) must still be
+    // flushed and delivered. A finite ByteArrayInputStream cannot exercise this because read()
+    // returns -1 by itself, so we drive a purpose-built blocking stream instead.
+    String body =
+        "2999-01-01T00:00:00.000Z a\n"
+            + "2999-01-01T00:00:01.000Z b\n"
+            + "2999-01-01T00:00:02.000Z c\n";
+    BlockingStream stream = new BlockingStream(body);
+    MockBackend backend = MockBackend.ofConstant(200, "");
+    backend.scriptStream(200, stream);
+    List<String> collected = new CopyOnWriteArrayList<>();
+    StreamedLog streamedLog =
+        client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(collected::add));
+    streamedLog.start();
+    // Wait until a and b have been redirected, which proves the reader has consumed the body and is
+    // now blocked with c held back as the pending last message.
+    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+    while (collected.size() < 2 && System.nanoTime() < deadline) {
+      Thread.sleep(5);
+    }
+    assertEquals(2, collected.size(), "a and b should be redirected before stop()");
+    streamedLog.stop();
+    assertEquals(
+        List.of(
+            "2999-01-01T00:00:00.000Z a",
+            "2999-01-01T00:00:01.000Z b",
+            "2999-01-01T00:00:02.000Z c"),
+        collected,
+        "the retained last message must be delivered after stop()");
+  }
+
+  @Test
   void closeStopsActiveRedirection() throws InterruptedException {
     MockBackend backend = MockBackend.ofConstant(200, "");
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
@@ -130,5 +170,50 @@ class StreamedLogTest {
       Thread.sleep(Duration.ofMillis(50).toMillis());
     }
     assertTrue(collected.contains("2999-01-01T00:00:00.000Z x"));
+  }
+
+  /**
+   * An {@link InputStream} that serves a fixed payload once and then blocks on {@code read()} until
+   * it is closed, throwing an {@link IOException} when unblocked by the close. This models a live
+   * log stream that produces some bytes and then stays open with no further data until the client
+   * stops redirection - the case a finite {@link java.io.ByteArrayInputStream} cannot reproduce.
+   */
+  private static final class BlockingStream extends InputStream {
+    private final byte[] data;
+    private int pos;
+    private final CountDownLatch closed = new CountDownLatch(1);
+
+    BlockingStream(String data) {
+      this.data = data.getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public synchronized int read(byte[] b, int off, int len) throws IOException {
+      if (pos < data.length) {
+        int n = Math.min(len, data.length - pos);
+        System.arraycopy(data, pos, b, off, n);
+        pos += n;
+        return n;
+      }
+      // Payload exhausted: block like a live stream awaiting more bytes, until close() unblocks us.
+      try {
+        closed.await();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+      throw new IOException("stream closed");
+    }
+
+    @Override
+    public int read() throws IOException {
+      byte[] one = new byte[1];
+      int n = read(one, 0, 1);
+      return n == -1 ? -1 : one[0] & 0xff;
+    }
+
+    @Override
+    public void close() {
+      closed.countDown();
+    }
   }
 }

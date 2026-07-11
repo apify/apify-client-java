@@ -96,12 +96,33 @@ final class MockBackend implements HttpBackend {
   /** Scripts the next {@link #sendStreaming} call to return the given status and body. */
   void scriptStream(int status, String body) {
     this.streamResponse = new Scripted(status, body, null);
+    this.streamBody = null;
+  }
+
+  /** Optional custom stream body (e.g. a blocking stream that simulates a live, open log). */
+  private InputStream streamBody;
+
+  private int streamBodyStatus;
+
+  /**
+   * Scripts the next {@link #sendStreaming} call to return the given status and an arbitrary,
+   * possibly blocking, {@link InputStream}. Unlike {@link #scriptStream(int, String)}, the body is
+   * not a finite in-memory buffer, so {@code read()} does not naturally reach end-of-stream; this
+   * models a live log that only ends when the stream is closed.
+   */
+  void scriptStream(int status, InputStream body) {
+    this.streamBodyStatus = status;
+    this.streamBody = body;
+    this.streamResponse = null;
   }
 
   @Override
   public synchronized HttpResponse<InputStream> sendStreaming(HttpRequest request) {
     calls++;
     lastUrl = request.uri().toString();
+    if (streamBody != null) {
+      return new FakeStreamResponse(request.uri(), streamBodyStatus, streamBody);
+    }
     Scripted r = streamResponse != null ? streamResponse : responses.get(0);
     return new FakeStreamResponse(
         request.uri(), r.status, new java.io.ByteArrayInputStream(r.body));

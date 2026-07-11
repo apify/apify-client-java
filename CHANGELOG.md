@@ -26,6 +26,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `StreamedLog`: the last complete log message is no longer dropped when stopping a live stream.
+  The final flush now runs in a `finally` block, so a stop that unblocks a blocked read with an
+  `IOException` still delivers the retained message.
+- `StreamedLog`: `stop()`/`close()` can no longer hang. The log stream is now opened in `start()`
+  before the reader thread is launched, eliminating a startup race where `stop()` closed a
+  still-null stream and then waited forever on a read that never returned.
 - Documentation: added `java.util.ArrayList` and `java.util.function.Consumer` to the stated
   snippet import list in `docs/README.md` so the streamed-log example compiles as written.
 

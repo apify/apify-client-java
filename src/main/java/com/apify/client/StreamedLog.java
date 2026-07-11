@@ -82,6 +82,12 @@ public final class StreamedLog implements AutoCloseable {
     }
     stopLogging = false;
     pending.setLength(0);
+    // Open the live stream here, before launching the reader thread, so activeStream is guaranteed
+    // to be set once the thread exists. If it were opened inside the thread, a stop() that ran
+    // during the HTTP round-trip would close a still-null stream, leaving the reader blocked on a
+    // live read() that never returns and join() hanging forever. Opening it up front also lets a
+    // failed connection surface to the caller of start() instead of a background-thread warning.
+    activeStream = logClient.stream(new LogOptions().raw(true));
     Thread thread = new Thread(this::streamLog, "apify-streamed-log");
     thread.setDaemon(true);
     streamingThread = thread;
@@ -122,13 +128,14 @@ public final class StreamedLog implements AutoCloseable {
 
   /** Reads the live raw log stream and forwards complete messages to the destination. */
   private void streamLog() {
-    try (InputStream stream = logClient.stream(new LogOptions().raw(true))) {
-      activeStream = stream;
+    // Bytes after the last newline: an incomplete trailing line kept for the next read so a message
+    // split across chunk boundaries (including a partial UTF-8 sequence) is not corrupted. Declared
+    // outside the try so the final flush in finally can still emit it (see below).
+    byte[] lineRemainder = new byte[0];
+    // The stream was opened in start() and stored in activeStream; own its lifecycle here via
+    // try-with-resources so it is always closed exactly once when the reader exits.
+    try (InputStream stream = activeStream) {
       byte[] readBuffer = new byte[READ_BUFFER_BYTES];
-      // Bytes after the last newline: an incomplete trailing line kept for the next read so a
-      // message split across chunk boundaries (including a partial UTF-8 sequence) is not
-      // corrupted.
-      byte[] lineRemainder = new byte[0];
       int read;
       // Process each chunk before honouring a stop request, so a stop issued right after start
       // still redirects whatever the run has already produced (matching the reference client).
@@ -150,9 +157,6 @@ public final class StreamedLog implements AutoCloseable {
           break;
         }
       }
-      // Flush whatever is left when the stream ends (or redirection is stopped): the last message
-      // may have no trailing newline.
-      emitMessages(new String(lineRemainder, StandardCharsets.UTF_8), true);
     } catch (IOException e) {
       // A read error after an explicit stop is expected (the stream was closed under us). Surface
       // only genuine, unsolicited failures, and do so without throwing from the background thread.
@@ -161,7 +165,12 @@ public final class StreamedLog implements AutoCloseable {
             .log(Level.WARNING, "Log redirection stopped due to error", e);
       }
     } finally {
-      closeQuietly(activeStream);
+      // Flush whatever is left when the stream ends OR when a stop closes the stream mid-read: the
+      // last complete message is held back in `pending` by emitMessages(..., false), and a stop
+      // unblocks the read via an IOException that skips the loop body. Running the final flush in
+      // finally guarantees that retained message (and any unterminated trailing line) is still
+      // delivered on stop, matching the reference client.
+      emitMessages(new String(lineRemainder, StandardCharsets.UTF_8), true);
     }
   }
 
