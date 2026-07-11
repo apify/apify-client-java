@@ -74,7 +74,13 @@ public final class StreamedLog implements AutoCloseable {
   /**
    * Starts redirecting the log in a background daemon thread.
    *
+   * <p>The live log stream is opened synchronously before the thread is launched, so this call
+   * blocks briefly on the HTTP round-trip and surfaces a failure to open the stream to the caller
+   * rather than on the background thread.
+   *
    * @throws IllegalStateException if redirection is already running
+   * @throws ApifyApiException if the log stream cannot be opened (the API returns a non-2xx
+   *     status); other transport failures propagate as their own runtime exception
    */
   public synchronized void start() {
     if (streamingThread != null) {
@@ -133,7 +139,8 @@ public final class StreamedLog implements AutoCloseable {
     // outside the try so the final flush in finally can still emit it (see below).
     byte[] lineRemainder = new byte[0];
     // The stream was opened in start() and stored in activeStream; own its lifecycle here via
-    // try-with-resources so it is always closed exactly once when the reader exits.
+    // try-with-resources so the reader closes it when it exits (idempotent with stop()'s close,
+    // which may close it first to unblock a pending read).
     try (InputStream stream = activeStream) {
       byte[] readBuffer = new byte[READ_BUFFER_BYTES];
       int read;

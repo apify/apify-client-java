@@ -137,7 +137,9 @@ class StreamedLogTest {
     backend.scriptStream(200, stream);
     List<String> collected = new CopyOnWriteArrayList<>();
     StreamedLog streamedLog =
-        client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(collected::add));
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(collected::add));
     streamedLog.start();
     // Wait until a and b have been redirected, which proves the reader has consumed the body and is
     // now blocked with c held back as the pending last message.

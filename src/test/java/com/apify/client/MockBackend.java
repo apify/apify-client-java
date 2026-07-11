@@ -46,6 +46,17 @@ final class MockBackend implements HttpBackend {
   byte[] lastBodyBytes;
   final List<String> bodies = new ArrayList<>();
 
+  /**
+   * Optional scripted response for {@link #sendStreaming}; defaults to the first {@code send}
+   * entry.
+   */
+  private Scripted streamResponse;
+
+  /** Optional custom stream body (e.g. a blocking stream that simulates a live, open log). */
+  private InputStream streamBody;
+
+  private int streamBodyStatus;
+
   MockBackend(List<Scripted> responses) {
     this.responses = responses;
   }
@@ -87,22 +98,11 @@ final class MockBackend implements HttpBackend {
     return new FakeResponse(request.uri(), r.status, r.body);
   }
 
-  /**
-   * Optional scripted response for {@link #sendStreaming}; defaults to the first {@code send}
-   * entry.
-   */
-  private Scripted streamResponse;
-
   /** Scripts the next {@link #sendStreaming} call to return the given status and body. */
   void scriptStream(int status, String body) {
     this.streamResponse = new Scripted(status, body, null);
     this.streamBody = null;
   }
-
-  /** Optional custom stream body (e.g. a blocking stream that simulates a live, open log). */
-  private InputStream streamBody;
-
-  private int streamBodyStatus;
 
   /**
    * Scripts the next {@link #sendStreaming} call to return the given status and an arbitrary,
