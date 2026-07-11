@@ -112,6 +112,11 @@ while (shown < 5 && it.hasNext()) {
 
 ## Run an Actor with log redirection
 
+`getStreamedLog()` and `InputStream.transferTo(...)` throw a checked `IOException`, so run this where
+that exception is handled — the complete
+[`LogRedirection.java`](../src/test/java/com/apify/client/examples/LogRedirection.java) program declares
+`throws Exception`.
+
 ```java
 ActorRun run = client.actor("apify/hello-world").start(null, new ActorStartOptions());
 try (InputStream stream = client.run(run.getId()).getStreamedLog()) {

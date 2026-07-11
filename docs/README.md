@@ -108,7 +108,9 @@ their own page/head containers instead.
 Each paginated collection also offers a lazy `Iterator` that fetches pages on demand: `iterate(...)`
 on the collection clients, `DatasetClient.iterateItems(...)`, and `KeyValueStoreClient.iterateKeys(...)`
 (request-queue requests use `RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the
-**total** number of items yielded (`null`/unset = all). The per-request page size is an optional
+**total** number of items yielded; `null`/unset — or a non-positive value such as `0` — means no cap,
+so every item is yielded. (This differs from `list(...)`, which sends `limit=0` verbatim and returns
+zero items; during iteration a falsy `limit` means "unbounded", matching the reference JS client.) The per-request page size is an optional
 trailing `chunkSize` argument: the per-resource tables below show the `chunkSize` form, and each
 iterator also has an overload that omits it (using the server's default page size). The page size
 does not change which items a collection iterator yields; note the one exception in

@@ -16,7 +16,12 @@ public final class ListOptions {
     return this;
   }
 
-  /** Maximum number of items to return. */
+  /**
+   * Maximum number of items to return. In {@code list(...)} this is sent verbatim (so {@code 0}
+   * returns zero items); in {@code iterate(...)} a non-positive/zero {@code limit} means "no cap" —
+   * iteration yields every item (matching the reference client's falsy-limit-means-unbounded
+   * intent).
+   */
   public ListOptions limit(Long limit) {
     this.limit = limit;
     return this;
