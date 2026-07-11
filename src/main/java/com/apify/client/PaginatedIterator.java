@@ -95,18 +95,18 @@ final class PaginatedIterator<T> implements Iterator<T> {
   }
 
   /**
-   * The API treats {@code 0} as "unset" for a limit, so this returns the smaller of the two
-   * positive bounds, or {@code null} (server default) when neither is a positive value.
+   * Returns the smaller of the two per-page bounds, or {@code null} (server default) when neither
+   * is set. Both inputs are already positive-or-{@code null}: {@code chunkSize} is normalized in
+   * the constructor and {@code capRemaining} is only ever {@code > 0} here (the {@code exhausted}
+   * guard blocks fetching once the cap is reached).
    */
   private static Long minForLimit(Long a, Long b) {
-    Long x = a != null && a > 0 ? a : null;
-    Long y = b != null && b > 0 ? b : null;
-    if (x == null) {
-      return y;
+    if (a == null) {
+      return b;
     }
-    if (y == null) {
-      return x;
+    if (b == null) {
+      return a;
     }
-    return Math.min(x, y);
+    return Math.min(a, b);
   }
 }
