@@ -24,7 +24,7 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | Method | Description |
 |---|---|
 | `list(StorageListOptions)` | List datasets. Returns `PaginationList<Dataset>`. |
-| `iterate(StorageListOptions, Long chunkSize)` | Lazy `Iterator<Dataset>` over all datasets; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
+| `iterate(StorageListOptions, Long chunkSize)` | Lazy `Iterator<Dataset>` over all datasets; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `getOrCreate(String name)` | Get or create a named dataset (empty name → unnamed). Returns `Dataset`. |
 | `getOrCreate(String name, Object schema)` | As above, sending a creation-time dataset `schema` when a new dataset is created. Returns `Dataset`. |
 
@@ -37,7 +37,7 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listItems(DatasetListItemsOptions)` | List items as `PaginationList<JsonNode>`. |
 | `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. Returns `PaginationList<T>`. |
-| `iterateItems(DatasetListItemsOptions, Long chunkSize)` | Lazy `Iterator<JsonNode>` over all items; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
+| `iterateItems(DatasetListItemsOptions, Long chunkSize)` | Lazy `Iterator<JsonNode>` over all items; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Iterator<T>`. |
 | `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes (JSON/JSONL/CSV/XLSX/XML/RSS/HTML). |
 | `pushItems(Object)` | Push a single item or a list of items. No return value. |
@@ -97,7 +97,7 @@ datasets.
 |---|---|
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listKeys(ListKeysOptions)` | List keys. Returns `KeyValueStoreKeysPage`. |
-| `iterateKeys(ListKeysOptions)` / `iterateKeys(ListKeysOptions, Long chunkSize)` | Lazy `Iterator<KeyValueStoreKey>` over all keys, paging with the cursor (`exclusiveStartKey`). Note: here the options' `limit` caps the **total** number of keys yielded (`null` = all), whereas for `listKeys`/`createKeysPublicUrl` the same `ListKeysOptions.limit` is a single-request page size. `chunkSize` sets the per-request page size (`null` = server default). |
+| `iterateKeys(ListKeysOptions)` / `iterateKeys(ListKeysOptions, Long chunkSize)` | Lazy `Iterator<KeyValueStoreKey>` over all keys, paging with the cursor (`exclusiveStartKey`). Note: here the options' `limit` caps the **total** number of keys yielded (`null`/unset or non-positive = all), whereas for `listKeys`/`createKeysPublicUrl` the same `ListKeysOptions.limit` is a single-request page size. `chunkSize` sets the per-request page size (`null` = server default). |
 | `recordExists(String key)` | Whether a record exists. |
 | `getRecord(String key)` / `getRecord(String key, GetRecordOptions)` | Fetch a record. Returns `Optional<KeyValueStoreRecord>`. |
 | `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. No return value. |

@@ -19,8 +19,8 @@ public final class StoreCollectionClient {
 
   /**
    * Returns a lazy iterator over Store Actors matching the options, fetching pages on demand. The
-   * options' {@code limit} caps the total number of Actors yielded ({@code null} = all); {@code
-   * chunkSize} is the per-request page size ({@code null} = server default).
+   * options' {@code limit} caps the total number of Actors yielded ({@code null} or non-positive =
+   * all); {@code chunkSize} is the per-request page size ({@code null} = server default).
    */
   public Iterator<ActorStoreListItem> iterate(StoreListOptions options) {
     return iterate(options, null);

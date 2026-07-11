@@ -31,9 +31,9 @@ public final class RunCollectionClient {
 
   /**
    * Returns a lazy iterator over the runs, applying the standard pagination and run-specific
-   * filters. The options' {@code limit} caps the total number yielded ({@code null} = all); {@code
-   * chunkSize} is the per-request page size ({@code null} = server default). Both {@code options}
-   * and {@code filter} may be {@code null}.
+   * filters. The options' {@code limit} caps the total number yielded ({@code null} or non-positive
+   * = all); {@code chunkSize} is the per-request page size ({@code null} = server default). Both
+   * {@code options} and {@code filter} may be {@code null}.
    */
   public Iterator<ActorRun> iterate(ListOptions options, RunListOptions filter) {
     return iterate(options, filter, null);

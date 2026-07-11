@@ -24,8 +24,8 @@ abstract class AbstractWebhookCollectionClient {
 
   /**
    * Returns a lazy iterator over the webhooks. The options' {@code limit} caps the total number
-   * yielded ({@code null} = all); {@code chunkSize} is the per-request page size ({@code null} =
-   * server default).
+   * yielded ({@code null} or non-positive = all); {@code chunkSize} is the per-request page size
+   * ({@code null} = server default).
    */
   public Iterator<Webhook> iterate(ListOptions options) {
     return iterate(options, null);

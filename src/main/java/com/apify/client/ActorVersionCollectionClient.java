@@ -28,7 +28,8 @@ public final class ActorVersionCollectionClient {
    * limit paging engine would loop forever, since the server returns the same non-empty page at
    * every offset — this is why the sibling non-paginated {@code env-vars} collection is also a
    * single-fetch iterator.) The options' {@code limit} still caps the number yielded ({@code null}
-   * = all); there is no page size to tune.
+   * or non-positive = all); {@code offset} has no effect (the server ignores it) and there is no
+   * page size to tune.
    */
   public Iterator<ActorVersion> iterate(ListOptions options) {
     ListOptions opts = options != null ? options : new ListOptions();

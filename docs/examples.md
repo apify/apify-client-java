@@ -2,10 +2,11 @@
 
 Each example below is a code fragment that assumes a configured `client` and the imports listed in
 the [documentation index](README.md#imports-and-dependencies); it is not a standalone `main`. The
-complete, runnable programs live under
-[`src/test/java/com/apify/client/examples/`](../src/test/java/com/apify/client/examples) and are
-executed end-to-end against the live API by the `Test examples` CI step (see `ExamplesTest`), so
-they are guaranteed to stay runnable.
+complete, standalone programs (with imports and a `main`) live under
+[`src/test/java/com/apify/client/examples/`](https://github.com/apify/apify-client-java/tree/master/src/test/java/com/apify/client/examples)
+and are executed end-to-end against the live API by the `Test examples` CI step (see `ExamplesTest`),
+so they are guaranteed to stay runnable. The link points to the GitHub source so it resolves from the
+rendered docs as well as the repository.
 
 ## Run a store Actor and read its default dataset
 
@@ -112,10 +113,10 @@ while (shown < 5 && it.hasNext()) {
 
 ## Run an Actor with log redirection
 
-`getStreamedLog()` and `InputStream.transferTo(...)` throw a checked `IOException`, so run this where
-that exception is handled — the complete
-[`LogRedirection.java`](../src/test/java/com/apify/client/examples/LogRedirection.java) program declares
-`throws Exception`.
+`InputStream.transferTo(...)` throws a checked `IOException`, so run this where that exception is
+handled — the complete
+[`LogRedirection.java`](https://github.com/apify/apify-client-java/blob/master/src/test/java/com/apify/client/examples/LogRedirection.java)
+program declares `throws Exception`.
 
 ```java
 ActorRun run = client.actor("apify/hello-world").start(null, new ActorStartOptions());

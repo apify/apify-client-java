@@ -8,7 +8,7 @@ Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 | Method | Description |
 |---|---|
 | `list(ListOptions, RunListOptions)` | List runs. Returns `PaginationList<ActorRun>`. |
-| `iterate(ListOptions, RunListOptions, Long chunkSize)` | Lazy `Iterator<ActorRun>` over all matching runs; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
+| `iterate(ListOptions, RunListOptions, Long chunkSize)` | Lazy `Iterator<ActorRun>` over all matching runs; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 
 `RunListOptions` adds `status(List<String>)` (e.g. `SUCCEEDED`, `RUNNING`; sent comma-separated) and,
 for Actor/task-scoped collections, `startedAfter(String)` / `startedBefore(String)` (ISO-8601).

@@ -8,7 +8,7 @@ Tasks are pre-configured Actor runs with stored input. Access the task collectio
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List tasks. Returns `PaginationList<Task>`. |
-| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Task>` over all tasks; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Task>` over all tasks; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `create(Object)` | Create a task from a JSON-serializable definition. Returns `Task`. |
 
 ```java
@@ -23,9 +23,9 @@ Task task = client.tasks().create(Map.of(
 
 | Method | Description |
 |---|---|
-| `get()` / `update(Object)` / `delete()` | CRUD. |
-| `start(Object input, TaskStartOptions)` | Start a task run (input overrides stored input; `null` uses it). |
-| `call(Object input, TaskStartOptions, Long waitSecs)` | Start and poll until finished. |
+| `get()` / `update(Object)` / `delete()` | CRUD. Return `Optional<Task>` / `Task` / `void`. |
+| `start(Object input, TaskStartOptions)` | Start a task run (input overrides stored input; `null` uses it). Returns `ActorRun`. |
+| `call(Object input, TaskStartOptions, Long waitSecs)` | Start and poll until finished. Returns `ActorRun`. |
 | `getInput()` | The stored input. Returns `Optional<JsonNode>`. |
 | `updateInput(Object)` | Replace the stored input. Returns `JsonNode`. |
 | `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run (see [`LastRunOptions`](actors.md#actorclient)). |

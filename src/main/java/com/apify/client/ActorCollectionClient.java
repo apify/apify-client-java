@@ -20,7 +20,7 @@ public final class ActorCollectionClient {
   /**
    * Returns a lazy iterator over the account's Actors, fetching pages on demand at the server's
    * default page size. The options' {@code limit} caps the total number of Actors yielded ({@code
-   * null} = all).
+   * null} or non-positive = all).
    */
   public Iterator<Actor> iterate(ActorListOptions options) {
     return iterate(options, null);

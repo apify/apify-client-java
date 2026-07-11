@@ -12,7 +12,7 @@ The account-wide collection supports both listing and creation.
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List webhooks. Returns `PaginationList<Webhook>`. |
-| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Webhook>` over all webhooks; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). Also available on the read-only nested collections. |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Webhook>` over all webhooks; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). Also available on the read-only nested collections. |
 | `create(Object)` | Create a webhook. Returns `Webhook`. |
 
 ### Nested webhook collections (read-only)
@@ -57,7 +57,7 @@ System.out.println(dispatch.getId());
 | Method | Description |
 |---|---|
 | `webhookDispatches().list(ListOptions)` | List dispatches. Returns `PaginationList<WebhookDispatch>`. |
-| `webhookDispatches().iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<WebhookDispatch>` over all dispatches; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
+| `webhookDispatches().iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<WebhookDispatch>` over all dispatches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `webhookDispatch(id).get()` | Fetch a dispatch. Returns `Optional<WebhookDispatch>`. |
 
 `WebhookDispatch` fields: `getId()`, `getWebhookId()`.

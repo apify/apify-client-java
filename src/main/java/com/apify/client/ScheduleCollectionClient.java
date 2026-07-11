@@ -19,8 +19,8 @@ public final class ScheduleCollectionClient {
 
   /**
    * Returns a lazy iterator over the account's schedules. The options' {@code limit} caps the total
-   * number yielded ({@code null} = all); {@code chunkSize} is the per-request page size ({@code
-   * null} = server default).
+   * number yielded ({@code null} or non-positive = all); {@code chunkSize} is the per-request page
+   * size ({@code null} = server default).
    */
   public Iterator<Schedule> iterate(ListOptions options) {
     return iterate(options, null);

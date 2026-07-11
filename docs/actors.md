@@ -8,7 +8,7 @@ where `id` is an Actor ID or `username~name` (a `/` in the id is accepted and no
 | Method | Description |
 |---|---|
 | `list(ActorListOptions)` | List the account's Actors. Returns `PaginationList<Actor>`. |
-| `iterate(ActorListOptions, Long chunkSize)` | Lazy `Iterator<Actor>` over all matches; the options' `limit` caps the total yielded, `chunkSize` sets the page size (both `null` = all / server default). |
+| `iterate(ActorListOptions, Long chunkSize)` | Lazy `Iterator<Actor>` over all matches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the page size (`null` = server default). |
 | `create(Object)` | Create a new Actor from a JSON-serializable definition. Returns `Actor`. |
 
 `ActorListOptions` adds `my(Boolean)` (only Actors owned by the current user) and
@@ -91,7 +91,7 @@ and deletes a single version and exposes its environment variables.
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List the Actor's versions. Returns `PaginationList<ActorVersion>`. |
-| `iterate(ListOptions)` | Lazy `Iterator<ActorVersion>` over all versions; `limit` caps the total. The versions endpoint is not paginated (one fetch returns every version), so there is no page size to tune. |
+| `iterate(ListOptions)` | Lazy `Iterator<ActorVersion>` over all versions; `limit` caps the total (`null`/unset or non-positive = all). The versions endpoint is not paginated (one fetch returns every version), so `offset` has no effect and there is no page size to tune. |
 | `create(Object version)` | Create a version. Returns `ActorVersion`. |
 
 ### `ActorVersionClient` — `client.actor(id).version(v)`

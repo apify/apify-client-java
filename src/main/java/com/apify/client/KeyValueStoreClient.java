@@ -59,8 +59,9 @@ public final class KeyValueStoreClient {
   /**
    * Returns a lazy iterator over this store's keys, fetching pages on demand via the cursor-based
    * ({@code exclusiveStartKey}) listing endpoint. The options' {@code limit} caps the total number
-   * of keys yielded ({@code null} = all); any {@code exclusiveStartKey} sets the starting point.
-   * The page size is the server default; use {@link #iterateKeys(ListKeysOptions, Long)} to set it.
+   * of keys yielded ({@code null} or non-positive = all); any {@code exclusiveStartKey} sets the
+   * starting point. The page size is the server default; use {@link #iterateKeys(ListKeysOptions,
+   * Long)} to set it.
    */
   public Iterator<KeyValueStoreKey> iterateKeys(ListKeysOptions options) {
     return iterateKeys(options, null);

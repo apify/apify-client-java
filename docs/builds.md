@@ -8,7 +8,7 @@ builds) and a single build with `client.build(id)`.
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List builds. Returns `PaginationList<Build>`. |
-| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Build>` over all builds; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Build>` over all builds; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 
 ## `BuildClient`
 

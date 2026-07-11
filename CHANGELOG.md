@@ -26,13 +26,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nullability/optionality on some response fields — already tolerated because the models use
   nullable boxed field types (a JSON `null` deserializes to `null`) and an optional field simply
   stays unset.
-
-### Breaking
-
-- `StoreCollectionClient.iterate` now takes `iterate(StoreListOptions, Long chunkSize)`, where the
-  options' `limit` is the total-items cap and `chunkSize` is the page size. Previously `limit` was
-  the per-page size. This aligns Store iteration with the reference client and the new collection
-  iterators.
+- **Breaking:** `StoreCollectionClient.iterate` now takes `iterate(StoreListOptions, Long chunkSize)`,
+  where the options' `limit` is the total-items cap and `chunkSize` is the page size. Previously
+  `limit` was the per-page size. This aligns Store iteration with the reference client and the new
+  collection iterators.
 
 ## [0.1.3] - 2026-07-10
 

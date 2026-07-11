@@ -8,7 +8,7 @@ This directory documents the public API of the Apify Java client, organized by r
 lists the available methods with their parameters and short snippets. The snippets are code
 fragments that assume a configured `client` and the imports listed below, not standalone `main`
 programs; for complete, runnable programs see [examples.md](examples.md) and
-[`src/test/java/com/apify/client/examples/`](../src/test/java/com/apify/client/examples). For an
+[`src/test/java/com/apify/client/examples/`](https://github.com/apify/apify-client-java/tree/master/src/test/java/com/apify/client/examples). For an
 overview, configuration, error handling and the full resource table, see the
 [top-level README](../README.md).
 
@@ -84,8 +84,9 @@ PaginationList<Actor> page = client.actors().list(options);
 
 ## Common list options — `ListOptions`
 
-Most `list` methods (builds, runs, tasks, schedules, webhooks, Actor versions) take the shared
-`ListOptions`, which carries the standard pagination/ordering controls.
+Most `list` methods (builds, tasks, schedules, webhooks, Actor versions) take the shared
+`ListOptions`, which carries the standard pagination/ordering controls. Runs additionally take a
+`RunListOptions` status filter — `runs().list(ListOptions, RunListOptions)`; see [Runs](runs.md).
 
 | Method | Type | Meaning |
 |---|---|---|
@@ -109,8 +110,9 @@ Each paginated collection also offers a lazy `Iterator` that fetches pages on de
 on the collection clients, `DatasetClient.iterateItems(...)`, and `KeyValueStoreClient.iterateKeys(...)`
 (request-queue requests use `RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the
 **total** number of items yielded; `null`/unset — or a non-positive value such as `0` — means no cap,
-so every item is yielded. (This differs from `list(...)`, which sends `limit=0` verbatim and returns
-zero items; during iteration a falsy `limit` means "unbounded", matching the reference JS client.) The per-request page size is an optional
+so every item is yielded. (This differs from `list(...)`, which sends `limit=0` to the server
+verbatim rather than treating it as unbounded — the iteration behavior matches the reference JS
+client.) The per-request page size is an optional
 trailing `chunkSize` argument: the per-resource tables below show the `chunkSize` form, and each
 iterator also has an overload that omits it (using the server's default page size). The page size
 does not change which items a collection iterator yields; note the one exception in

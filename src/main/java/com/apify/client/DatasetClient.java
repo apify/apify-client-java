@@ -90,8 +90,8 @@ public final class DatasetClient {
   /**
    * Returns a lazy iterator over the dataset's items, decoding each into {@code itemClass},
    * fetching pages on demand. The options' {@code limit} caps the total number of items yielded
-   * ({@code null} = all); {@code chunkSize} is the per-request page size ({@code null} = server
-   * default).
+   * ({@code null} or non-positive = all); {@code chunkSize} is the per-request page size ({@code
+   * null} = server default).
    *
    * <p>Note: server-side item filters ({@code skipEmpty}, {@code skipHidden}, {@code clean}, {@code
    * simplified}) are applied after {@code offset}/{@code limit}, so a page can return fewer items
