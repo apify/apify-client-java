@@ -43,6 +43,14 @@ use `log()` for the full log text or for non-raw/download options.
 To set the current run's status message from inside an Actor, use the top-level
 `client.setStatusMessage(...)` (see [the docs index](README.md#setting-single-resource-status)).
 
+> **`lastRun()` clients are for reads.** A `RunClient` obtained via `actor(id).lastRun(...)` /
+> `task(id).lastRun(...)` targets the `runs/last` path and is intended for reading (`get`,
+> `dataset()`/`keyValueStore()`/`requestQueue()`, `log()`). The mutating methods (`abort`, `reboot`,
+> `resurrect`, `metamorph`, `charge`, `update`, `delete`) require a concrete run and have no
+> `runs/last` endpoint — resolve the id first (`lastRun(...).get()` then `client.run(id)`). The type
+> exposes them uniformly (matching the reference client's shared `RunClient`), but calling them on a
+> last-run client will fail server-side.
+
 `ActorRun` fields include `getId()`, `getActId()`, `getUserId()`, `getStatus()`,
 `getStatusMessage()`, `getStartedAt()`, `getFinishedAt()`, `getBuildId()`, `getDefaultDatasetId()`,
 `getDefaultKeyValueStoreId()`, `getDefaultRequestQueueId()`, `getContainerUrl()`, plus `isTerminal()`.

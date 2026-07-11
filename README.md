@@ -15,7 +15,9 @@ queues, tasks, schedules, webhooks, the store, users and logs).
 
 ## Installation
 
-Maven:
+The client is published to [Maven Central](https://central.sonatype.com/artifact/com.apify/apify-client).
+
+Maven (Maven Central is a default repository, so no extra configuration is needed):
 
 ```xml
 <dependency>
@@ -25,10 +27,16 @@ Maven:
 </dependency>
 ```
 
-Gradle:
+Gradle — ensure `mavenCentral()` is in your `repositories`, then add the dependency:
 
 ```groovy
-implementation 'com.apify:apify-client:0.2.0'
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation 'com.apify:apify-client:0.2.0'
+}
 ```
 
 ## Quick start
