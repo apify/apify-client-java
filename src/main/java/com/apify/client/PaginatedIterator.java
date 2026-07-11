@@ -6,8 +6,9 @@ import java.util.NoSuchElementException;
 
 /**
  * A lazy {@link Iterator} over an offset/limit-paginated list endpoint, fetching one page at a
- * time. Internal reusable engine shared by every collection client's {@code iterate} method, so the
- * paging arithmetic lives in one place (DRY).
+ * time. Internal reusable engine shared by every offset/limit-paginated collection's {@code
+ * iterate} method, so the paging arithmetic lives in one place (DRY). (The cursor-based {@code
+ * iterateKeys} and the single-fetch {@code versions}/{@code env-vars} iterators do not use it.)
  *
  * <p>Behaviour, mirroring the end-user contract of the reference JS client's iterable {@code
  * list()}:
