@@ -101,9 +101,18 @@ public final class StreamedLog implements AutoCloseable {
   }
 
   /**
-   * Stops log redirection and waits for the background thread to finish.
+   * Stops log redirection, waiting for the background reader thread to finish.
    *
-   * @throws IllegalStateException if redirection is not running
+   * <p>Called from any other thread (the normal case) this joins the reader before returning.
+   * Called from <em>inside</em> the destination consumer - which runs on the reader thread - it
+   * cannot join itself, so it only signals the stop and returns immediately; redirection then
+   * unwinds as the reader returns from the consumer. For stopping from inside the consumer prefer
+   * {@link #close()}: the reader's final flush can re-invoke the consumer for the last buffered
+   * message, and a second {@code stop()} on the by-then-stopped helper throws, whereas {@code
+   * close()} is idempotent.
+   *
+   * @throws IllegalStateException if redirection is not running - including a repeat call from
+   *     within the consumer after an initial self-stop has already cleared the running thread
    */
   public synchronized void stop() {
     if (streamingThread == null) {
