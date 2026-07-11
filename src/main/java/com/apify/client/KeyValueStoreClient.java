@@ -104,9 +104,8 @@ public final class KeyValueStoreClient {
 
     private void fetchPage() {
       QueryParams params = new QueryParams();
-      // The API caps the page size; requesting `remaining` keeps the last page from overshooting
-      // the
-      // caller's total cap. A null limit lets the server choose its default page size.
+      // Requesting `remaining` keeps the last page from overshooting the caller's total cap; a null
+      // limit lets the server choose its default page size.
       params.addLong("limit", remaining);
       params.addString("exclusiveStartKey", cursor);
       options.applyFilters(params);

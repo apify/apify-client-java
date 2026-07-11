@@ -39,6 +39,10 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. Returns `PaginationList<T>`. |
 | `iterateItems(DatasetListItemsOptions, Long chunkSize)` | Lazy `Iterator<JsonNode>` over all items; the options' `limit` caps the total yielded (`null` = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Iterator<T>`. |
+| `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes (JSON/JSONL/CSV/XLSX/XML/RSS/HTML). |
+| `pushItems(Object)` | Push a single item or a list of items. No return value. |
+| `getStatistics()` | Dataset statistics. Returns `Optional<JsonNode>`. |
+| `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL. |
 
 > **Server-side item filters and iteration.** The dataset-items endpoint applies `offset`/`limit` to
 > the raw items and then drops those removed by a server-side filter (`skipEmpty`, `skipHidden`,
@@ -46,10 +50,6 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 > advances the offset by the number of items actually returned, combining it with those filters over a
 > multi-page dataset can make page windows overlap and repeat items. Prefer paging without server-side
 > item filters when iterating, or de-duplicate on the client.
-| `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes (JSON/JSONL/CSV/XLSX/XML/RSS/HTML). |
-| `pushItems(Object)` | Push a single item or a list of items. No return value. |
-| `getStatistics()` | Dataset statistics. Returns `Optional<JsonNode>`. |
-| `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL. |
 
 ```java
 Dataset ds = client.datasets().getOrCreate("my-dataset");

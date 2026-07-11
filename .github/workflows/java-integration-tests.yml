@@ -68,8 +68,9 @@ jobs:
         env:
           # The integration-test token is stored as a repository secret.
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        # Run every test except the example/doc-snippet harnesses (exercised by the step below).
-        run: mvn -B test -Dtest='!ExamplesTest,!DocSnippetsTest' -DfailIfNoTests=true
+        # Run only the live integration suites; the hermetic tests already ran in the offline step
+        # above and the example/doc-snippet harnesses run in the step below.
+        run: mvn -B test -Dtest='*IntegrationTest' -DfailIfNoTests=true
 
       # Standalone CI step that verifies the documentation examples actually work end-to-end against
       # the live API (ExamplesTest runs each example's main), and that every in-documentation Java
