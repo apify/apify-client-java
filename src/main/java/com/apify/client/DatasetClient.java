@@ -88,14 +88,6 @@ public final class DatasetClient {
   }
 
   /**
-   * As {@link #iterateItems(DatasetListItemsOptions, Long, Class)} with the server-default page
-   * size.
-   */
-  public <T> Iterator<T> iterateItems(DatasetListItemsOptions options, Class<T> itemClass) {
-    return iterateItems(options, null, itemClass);
-  }
-
-  /**
    * Returns a lazy iterator over the dataset's items, decoding each into {@code itemClass},
    * fetching pages on demand. The options' {@code limit} caps the total number of items yielded
    * ({@code null} = all); {@code chunkSize} is the per-request page size ({@code null} = server

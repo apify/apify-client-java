@@ -303,6 +303,29 @@ class ReviewFixesTest {
   }
 
   @Test
+  void collectionIterateSingleArgDelegatesToServerDefaultPageSize() {
+    // The arg-less-chunkSize convenience overload must page correctly (delegates with null chunk).
+    MockBackend backend =
+        new MockBackend(
+            List.of(
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[{},{}],\"total\":2,\"offset\":0,\"limit\":2,\"count\":2}}"),
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[],\"total\":2,\"offset\":2,\"limit\":2,\"count\":0}}")));
+    java.util.Iterator<Actor> it = client(backend).actors().iterate(new ActorListOptions());
+    int count = 0;
+    while (it.hasNext()) {
+      it.next();
+      count++;
+    }
+    assertEquals(2, count, "single-arg iterate should yield every item");
+    assertFalse(
+        backend.lastUrl.contains("limit="), "no chunkSize => no limit param (server default)");
+  }
+
+  @Test
   void runCollectionListToleratesNullOptionsAndFilter() {
     MockBackend backend =
         MockBackend.ofConstant(
