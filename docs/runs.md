@@ -1,6 +1,8 @@
 # Runs
 
-> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
+> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
+> in production and report issues on the repository.
 
 Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 `client.task(id).runs()`) and a single run with `client.run(id)`.
@@ -37,10 +39,37 @@ PaginationList<ActorRun> runs = client.runs().list(
 | `waitForFinish(Long waitSecs)` | Poll until the run finishes (`null` waits indefinitely). Returns `ActorRun`. |
 | `dataset()` / `keyValueStore()` / `requestQueue()` | Clients for the run's default storages. |
 | `log()` | A `LogClient` for the run's log (see [Store, users & logs](misc.md#logs--clientlogid)). |
-| `getStreamedLog()` | A live raw log `InputStream` (for log redirection). |
+| `getStreamedLog()` | A `StreamedLog` that redirects the live log to a default per-run logger. |
+| `getStreamedLog(StreamedLogOptions)` | As above, with a custom destination / options. |
 
-`getStreamedLog()` is a convenience equivalent to `run(id).log().stream(new LogOptions().raw(true))`;
-use `log()` for the full log text or for non-raw/download options.
+### Streamed log redirection
+
+`getStreamedLog()` returns a `StreamedLog`: a helper that follows the run's live raw log in a
+background thread and redirects each complete, timestamped message to a destination. It is
+`AutoCloseable` — call `start()` to begin redirection and `stop()` (or `close()`, via
+try-with-resources) to end it.
+
+With no options, messages go to a `java.util.logging.Logger` at `INFO` level, prefixed with the
+Actor name and run id (looked up automatically). `StreamedLogOptions` customizes it:
+
+- `toLog(Consumer<String>)` — send each complete message to your own consumer instead of the
+  default logger.
+- `prefix(String)` — override the auto-built prefix used by the default logger.
+- `fromStart(boolean)` — when `false`, skip log lines produced before redirection started
+  (default `true`).
+
+```java
+RunClient runClient = client.run("run-id");
+List<String> collected = new ArrayList<>();
+try (StreamedLog streamedLog =
+    runClient.getStreamedLog(new StreamedLogOptions().toLog(collected::add).fromStart(true))) {
+  streamedLog.start();
+  runClient.waitForFinish(120L);
+}
+```
+
+For raw stream access without redirection, use `log().stream(new LogOptions().raw(true))`; use
+`log()` for the full log text or for non-raw/download options.
 
 To set the current run's status message from inside an Actor, use the top-level
 `client.setStatusMessage(...)` (see [the docs index](README.md#setting-single-resource-status)).

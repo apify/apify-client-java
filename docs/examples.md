@@ -1,6 +1,8 @@
 # Examples
 
-> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
+> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
+> in production and report issues on the repository.
 
 Each example below is a code fragment (not a standalone `main`) that assumes a configured `client`
 and the imports listed in the [documentation index](README.md#imports-and-dependencies). The
@@ -115,14 +117,17 @@ while (shown < 5 && it.hasNext()) {
 
 ## Run an Actor with log redirection
 
-`InputStream.transferTo(...)` throws a checked `IOException`, so run this where that exception is
-handled — the complete
-[`LogRedirection.java`](https://github.com/apify/apify-client-java/blob/master/src/test/java/com/apify/client/examples/LogRedirection.java)
-program declares `throws Exception`.
+`getStreamedLog()` returns a [`StreamedLog`](runs.md#streamed-log-redirection) that follows the
+run's live log and redirects each message to a destination (by default a per-run prefixed logger).
+It is `AutoCloseable`, so a try-with-resources block stops redirection when the run finishes. The
+complete program lives in
+[`LogRedirection.java`](https://github.com/apify/apify-client-java/blob/master/src/test/java/com/apify/client/examples/LogRedirection.java).
 
 ```java
 ActorRun run = client.actor("apify/hello-world").start(null, new ActorStartOptions());
-try (InputStream stream = client.run(run.getId()).getStreamedLog()) {
-  stream.transferTo(System.out);
+RunClient runClient = client.run(run.getId());
+try (StreamedLog streamedLog = runClient.getStreamedLog()) {
+  streamedLog.start();
+  runClient.waitForFinish(120L);
 }
 ```

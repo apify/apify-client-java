@@ -1,10 +1,11 @@
 package com.apify.client;
 
-import java.io.InputStream;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 /**
  * A client for a specific Actor run.
@@ -182,15 +183,66 @@ public final class RunClient {
     return LogClient.nested(ctx.http, ctx.subUrl(""), ctx.baseParams);
   }
 
+  /** Logger name used by the default log-redirection destination. */
+  private static final String REDIRECT_LOGGER_NAME = "com.apify.client.ActorRunLog";
+
   /**
-   * Opens a live stream of this run's raw log, for convenient log redirection. The caller must
-   * close the returned stream.
+   * Returns a {@link StreamedLog} that redirects this run's live log to a default per-run logger.
    *
-   * <p>This is a shorthand for the common raw-log case. For full control over the streamed log
-   * (e.g. non-raw content or a download disposition), use {@link #log()}{@code .stream(options)}
-   * directly with a {@link LogOptions}.
+   * <p>The default destination is a {@link java.util.logging.Logger} that receives each message at
+   * {@code INFO} level, prefixed with the Actor name and run id (built by fetching the run and its
+   * Actor). Call {@link StreamedLog#start()} to begin redirection and {@link StreamedLog#stop()}
+   * (or {@link StreamedLog#close()}) to end it.
+   *
+   * <p>For a custom destination or to skip historical log lines, use {@link
+   * #getStreamedLog(StreamedLogOptions)}. For raw stream access without redirection, use {@link
+   * #log()}{@code .stream(...)}.
    */
-  public InputStream getStreamedLog() {
-    return log().stream(new LogOptions().raw(true));
+  public StreamedLog getStreamedLog() {
+    return getStreamedLog(new StreamedLogOptions());
+  }
+
+  /**
+   * Returns a {@link StreamedLog} that redirects this run's live log according to {@code options}.
+   *
+   * <p>If {@link StreamedLogOptions#toLog(Consumer)} is set, each complete log message is passed to
+   * that consumer; otherwise a default {@link java.util.logging.Logger} destination is used with a
+   * per-run prefix (an explicit {@link StreamedLogOptions#prefix(String)} overrides the auto-built
+   * one). {@link StreamedLogOptions#fromStart(boolean)} controls whether log lines produced before
+   * redirection started are included.
+   */
+  public StreamedLog getStreamedLog(StreamedLogOptions options) {
+    Consumer<String> destination = options.destination();
+    if (destination == null) {
+      String prefix =
+          options.prefixValue() != null ? options.prefixValue() : buildDefaultLogPrefix();
+      destination = defaultLogDestination(prefix);
+    }
+    return new StreamedLog(log(), destination, options.fromStartValue());
+  }
+
+  /**
+   * Builds the per-run prefix used by the default redirection destination, mirroring the reference
+   * client: the Actor name (looked up from the run) and {@code runId:{id}}, joined with a space and
+   * followed by {@code " -> "}. Falls back to just the run id when the Actor name is unavailable.
+   */
+  private String buildDefaultLogPrefix() {
+    String actorName = "";
+    Optional<ActorRun> run = get();
+    if (run.isPresent() && run.get().getActId() != null && !run.get().getActId().isEmpty()) {
+      Optional<Actor> actor = root.actor(run.get().getActId()).get();
+      if (actor.isPresent() && actor.get().getName() != null) {
+        actorName = actor.get().getName();
+      }
+    }
+    String runPart = "runId:" + id;
+    String name = actorName.isEmpty() ? runPart : actorName + " " + runPart;
+    return name + " -> ";
+  }
+
+  /** A destination that logs each message at {@code INFO} level, prefixed with {@code prefix}. */
+  private static Consumer<String> defaultLogDestination(String prefix) {
+    Logger logger = Logger.getLogger(REDIRECT_LOGGER_NAME);
+    return message -> logger.info(prefix + message);
   }
 }

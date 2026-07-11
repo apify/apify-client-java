@@ -5,6 +5,25 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-11
+
+### Added
+
+- `StreamedLog` log-redirection helper (matching the reference client's `getStreamedLog`):
+  `RunClient.getStreamedLog()` / `getStreamedLog(StreamedLogOptions)` return a `StreamedLog` that
+  follows the run's live log in a background thread and redirects each complete, timestamped message
+  to a destination. `StreamedLog` is `AutoCloseable` with `start()`/`stop()` lifecycle. Options:
+  `toLog(Consumer<String>)` (custom destination; default is a per-run prefixed `java.util.logging`
+  logger), `prefix(String)`, and `fromStart(boolean)` (skip pre-redirection log lines when false).
+
+### Changed
+
+- **Breaking:** `RunClient.getStreamedLog()` now returns a `StreamedLog` redirection helper instead
+  of a raw `InputStream`, aligning its public interface with the reference client. For raw stream
+  access use `run(id).log().stream(new LogOptions().raw(true))`.
+- Standardized the "official, but experimental" disclaimer wording across the README and all
+  documentation pages.
+
 ## [0.2.0] - 2026-07-10
 
 ### Added

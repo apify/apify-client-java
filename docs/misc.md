@@ -1,6 +1,8 @@
 # Store, users & logs
 
-> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
+> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
+> in production and report issues on the repository.
 
 ## Apify Store — `client.store()`
 
