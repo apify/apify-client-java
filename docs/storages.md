@@ -48,8 +48,11 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 > the raw items and then drops those removed by a server-side filter (`skipEmpty`, `skipHidden`,
 > `clean`, `simplified`), so a page can contain fewer items than requested. Because `iterateItems`
 > advances the offset by the number of items actually returned, combining it with those filters over a
-> multi-page dataset can make page windows overlap and repeat items. Prefer paging without server-side
-> item filters when iterating, or de-duplicate on the client.
+> multi-page dataset has two failure modes: page windows can overlap and **repeat items**, and — more
+> severely — if an entire offset window is filtered out the endpoint returns an empty page, which the
+> iterator treats as the end, so iteration **stops early and silently skips the remaining data** (an
+> all-filtered first page yields nothing at all). Prefer paging without server-side item filters when
+> iterating, or fetch pages explicitly with `listItems` and filter client-side.
 
 ```java
 Dataset ds = client.datasets().getOrCreate("my-dataset");

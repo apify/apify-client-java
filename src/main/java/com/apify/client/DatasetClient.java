@@ -90,8 +90,10 @@ public final class DatasetClient {
    *
    * <p>Note: server-side item filters ({@code skipEmpty}, {@code skipHidden}, {@code clean}, {@code
    * simplified}) are applied after {@code offset}/{@code limit}, so a page can return fewer items
-   * than requested and paging windows may overlap — combining those filters with iteration can
-   * repeat items. Iterate without server-side item filters, or de-duplicate on the client.
+   * than requested. Combining those filters with iteration can repeat items (overlapping windows)
+   * and, if a whole offset window is filtered out, the endpoint returns an empty page which ends
+   * iteration early — silently skipping the remaining items. Iterate without server-side item
+   * filters, or page explicitly with {@link #listItems} and filter client-side.
    */
   public <T> Iterator<T> iterateItems(
       DatasetListItemsOptions options, Long chunkSize, Class<T> itemClass) {
