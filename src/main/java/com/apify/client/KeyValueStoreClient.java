@@ -60,9 +60,19 @@ public final class KeyValueStoreClient {
    * Returns a lazy iterator over this store's keys, fetching pages on demand via the cursor-based
    * ({@code exclusiveStartKey}) listing endpoint. The options' {@code limit} caps the total number
    * of keys yielded ({@code null} = all); any {@code exclusiveStartKey} sets the starting point.
+   * The page size is the server default; use {@link #iterateKeys(ListKeysOptions, Long)} to set it.
    */
   public Iterator<KeyValueStoreKey> iterateKeys(ListKeysOptions options) {
-    return new KeysIterator(options != null ? options : new ListKeysOptions());
+    return iterateKeys(options, null);
+  }
+
+  /**
+   * As {@link #iterateKeys(ListKeysOptions)}, but {@code chunkSize} sets the per-request page size
+   * ({@code null} = server default). Provided for consistency with the collection {@code iterate}
+   * helpers; key listing is cursor-based, so the options' {@code limit} remains a total-items cap.
+   */
+  public Iterator<KeyValueStoreKey> iterateKeys(ListKeysOptions options, Long chunkSize) {
+    return new KeysIterator(options != null ? options : new ListKeysOptions(), chunkSize);
   }
 
   /**
@@ -70,14 +80,16 @@ public final class KeyValueStoreClient {
    */
   private final class KeysIterator implements Iterator<KeyValueStoreKey> {
     private final ListKeysOptions options;
+    private final Long chunkSize;
     private List<KeyValueStoreKey> buffer = List.of();
     private int pos;
     private String cursor;
     private Long remaining;
     private boolean exhausted;
 
-    KeysIterator(ListKeysOptions options) {
+    KeysIterator(ListKeysOptions options, Long chunkSize) {
       this.options = options;
+      this.chunkSize = chunkSize != null && chunkSize > 0 ? chunkSize : null;
       this.cursor = options.exclusiveStartKeyValue();
       Long limit = options.limitValue();
       this.remaining = limit != null && limit > 0 ? limit : null;
@@ -104,9 +116,13 @@ public final class KeyValueStoreClient {
 
     private void fetchPage() {
       QueryParams params = new QueryParams();
-      // Requesting `remaining` keeps the last page from overshooting the caller's total cap; a null
-      // limit lets the server choose its default page size.
-      params.addLong("limit", remaining);
+      // Request the smaller of the remaining cap and the page size, so the last page never
+      // overshoots the caller's total cap; a null limit lets the server choose its default page.
+      Long pageLimit = remaining;
+      if (chunkSize != null && (pageLimit == null || chunkSize < pageLimit)) {
+        pageLimit = chunkSize;
+      }
+      params.addLong("limit", pageLimit);
       params.addString("exclusiveStartKey", cursor);
       options.applyFilters(params);
       KeyValueStoreKeysPage page =

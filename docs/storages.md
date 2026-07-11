@@ -97,7 +97,7 @@ datasets.
 |---|---|
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listKeys(ListKeysOptions)` | List keys. Returns `KeyValueStoreKeysPage`. |
-| `iterateKeys(ListKeysOptions)` | Lazy `Iterator<KeyValueStoreKey>` over all keys, paging with the cursor (`exclusiveStartKey`). Note: here the options' `limit` caps the **total** number of keys yielded (`null` = all), whereas for `listKeys`/`createKeysPublicUrl` the same `ListKeysOptions.limit` is a single-request page size. Key iteration is cursor-based, so it has no separate `chunkSize`. |
+| `iterateKeys(ListKeysOptions)` / `iterateKeys(ListKeysOptions, Long chunkSize)` | Lazy `Iterator<KeyValueStoreKey>` over all keys, paging with the cursor (`exclusiveStartKey`). Note: here the options' `limit` caps the **total** number of keys yielded (`null` = all), whereas for `listKeys`/`createKeysPublicUrl` the same `ListKeysOptions.limit` is a single-request page size. `chunkSize` sets the per-request page size (`null` = server default). |
 | `recordExists(String key)` | Whether a record exists. |
 | `getRecord(String key)` / `getRecord(String key, GetRecordOptions)` | Fetch a record. Returns `Optional<KeyValueStoreRecord>`. |
 | `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. No return value. |

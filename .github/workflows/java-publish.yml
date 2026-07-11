@@ -62,8 +62,11 @@ jobs:
       - name: Static analysis (SpotBugs)
         run: mvn -B -DskipTests compile spotbugs:check
 
+      # Same pattern-based selection as the integration workflow's offline gate: run every hermetic
+      # test and exclude the token-gated integration/example/doc-snippet suites, so new hermetic
+      # tests are gated on release automatically without editing this list.
       - name: Unit tests
-        run: mvn -B test -Dtest='UnitHttpTest,ReviewFixesTest,ClientMetaTest,SignatureTest,ConfigTest' -DfailIfNoTests=true
+        run: mvn -B test -Dtest='!*IntegrationTest,!ExamplesTest,!DocSnippetsTest' -DfailIfNoTests=true
 
       - name: Resolve version from pom.xml
         id: version

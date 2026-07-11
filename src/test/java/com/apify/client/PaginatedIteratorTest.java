@@ -121,6 +121,22 @@ class PaginatedIteratorTest {
   }
 
   @Test
+  void trimsOverReturnedPageToCap() {
+    // A misbehaving server that returns more items than requested must not make the iterator
+    // overshoot the caller's total cap.
+    PaginatedIterator.PageFetcher<Integer> overReturning =
+        (offset, limit) -> {
+          PaginationList<Integer> page = new PaginationList<>();
+          page.setItems(List.of(1, 2, 3, 4, 5)); // ignores the requested limit
+          page.setTotal(5);
+          page.setCount(5);
+          return page;
+        };
+    List<Integer> got = drain(new PaginatedIterator<>(3L, 2L, null, overReturning));
+    assertEquals(List.of(1, 2, 3), got, "the last page is trimmed to the cap");
+  }
+
+  @Test
   void emptyCollectionYieldsNothing() {
     StubFetcher f = new StubFetcher(0);
     java.util.Iterator<Integer> it = new PaginatedIterator<>(null, 5L, null, f);

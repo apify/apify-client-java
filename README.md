@@ -74,7 +74,8 @@ import com.apify.client.ActorStartOptions;
 
 class HelloApify {
   public static void main(String[] args) {
-    ApifyClient client = ApifyClient.create("my-api-token");
+    // Your API token from https://console.apify.com/settings/integrations
+    ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
     ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
     System.out.println("Run " + run.getId() + " finished with status " + run.getStatus());
   }
