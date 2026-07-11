@@ -82,6 +82,19 @@ public final class DatasetClient {
     return iterateItems(options, chunkSize, JsonNode.class);
   }
 
+  /** As {@link #iterateItems(DatasetListItemsOptions, Long)} with the server-default page size. */
+  public Iterator<JsonNode> iterateItems(DatasetListItemsOptions options) {
+    return iterateItems(options, null, JsonNode.class);
+  }
+
+  /**
+   * As {@link #iterateItems(DatasetListItemsOptions, Long, Class)} with the server-default page
+   * size.
+   */
+  public <T> Iterator<T> iterateItems(DatasetListItemsOptions options, Class<T> itemClass) {
+    return iterateItems(options, null, itemClass);
+  }
+
   /**
    * Returns a lazy iterator over the dataset's items, decoding each into {@code itemClass},
    * fetching pages on demand. The options' {@code limit} caps the total number of items yielded

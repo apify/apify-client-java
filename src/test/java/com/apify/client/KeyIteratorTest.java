@@ -68,6 +68,52 @@ class KeyIteratorTest {
   }
 
   @Test
+  void chunkSizeSetsPerRequestPageSize() {
+    MockBackend backend =
+        new MockBackend(
+            List.of(
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[{\"key\":\"a\",\"size\":1},{\"key\":\"b\",\"size\":1}],"
+                        + "\"nextExclusiveStartKey\":\"b\",\"isTruncated\":true}}"),
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[{\"key\":\"c\",\"size\":1},{\"key\":\"d\",\"size\":1}],"
+                        + "\"nextExclusiveStartKey\":\"d\",\"isTruncated\":true}}"),
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[{\"key\":\"e\",\"size\":1}],"
+                        + "\"nextExclusiveStartKey\":null,\"isTruncated\":false}}")));
+    List<String> got =
+        keys(client(backend).keyValueStore("s").iterateKeys(new ListKeysOptions(), 2L));
+    assertEquals(List.of("a", "b", "c", "d", "e"), got, "chunkSize pages the full collection");
+    assertEquals(3, backend.calls);
+    assertTrue(backend.lastUrl.contains("limit=2"), "chunkSize is sent as the page limit");
+  }
+
+  @Test
+  void chunkSizeAndLimitCombine() {
+    // limit=3 (total cap) with chunkSize=2: first page requests 2, second requests min(1,2)=1.
+    MockBackend backend =
+        new MockBackend(
+            List.of(
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[{\"key\":\"a\",\"size\":1},{\"key\":\"b\",\"size\":1}],"
+                        + "\"nextExclusiveStartKey\":\"b\",\"isTruncated\":true}}"),
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[{\"key\":\"c\",\"size\":1},{\"key\":\"d\",\"size\":1}],"
+                        + "\"nextExclusiveStartKey\":\"d\",\"isTruncated\":true}}")));
+    List<String> got =
+        keys(client(backend).keyValueStore("s").iterateKeys(new ListKeysOptions().limit(3L), 2L));
+    assertEquals(List.of("a", "b", "c"), got, "the total cap trims across chunked pages");
+    assertEquals(2, backend.calls);
+    assertTrue(
+        backend.lastUrl.contains("limit=1"), "the last page requests only the remaining cap");
+  }
+
+  @Test
   void stopsOnEmptyPage() {
     MockBackend backend =
         MockBackend.ofConstant(

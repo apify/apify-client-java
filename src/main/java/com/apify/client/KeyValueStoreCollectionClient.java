@@ -22,6 +22,13 @@ public final class KeyValueStoreCollectionClient {
    * number yielded ({@code null} = all); {@code chunkSize} is the per-request page size ({@code
    * null} = server default).
    */
+  public Iterator<KeyValueStore> iterate(StorageListOptions options) {
+    return iterate(options, null);
+  }
+
+  /**
+   * As {@link #iterate(StorageListOptions)}, but {@code chunkSize} sets the per-request page size.
+   */
   public Iterator<KeyValueStore> iterate(StorageListOptions options, Long chunkSize) {
     StorageListOptions opts = options != null ? options : new StorageListOptions();
     return ctx.iterateResource(

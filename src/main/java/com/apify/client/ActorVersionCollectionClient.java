@@ -22,6 +22,11 @@ public final class ActorVersionCollectionClient {
    * number yielded ({@code null} = all); {@code chunkSize} is the per-request page size ({@code
    * null} = server default).
    */
+  public Iterator<ActorVersion> iterate(ListOptions options) {
+    return iterate(options, null);
+  }
+
+  /** As {@link #iterate(ListOptions)}, but {@code chunkSize} sets the per-request page size. */
   public Iterator<ActorVersion> iterate(ListOptions options, Long chunkSize) {
     ListOptions opts = options != null ? options : new ListOptions();
     return ctx.iterateResource(

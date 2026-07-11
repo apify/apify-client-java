@@ -35,6 +35,14 @@ public final class RunCollectionClient {
    * chunkSize} is the per-request page size ({@code null} = server default). Both {@code options}
    * and {@code filter} may be {@code null}.
    */
+  public Iterator<ActorRun> iterate(ListOptions options, RunListOptions filter) {
+    return iterate(options, filter, null);
+  }
+
+  /**
+   * As {@link #iterate(ListOptions, RunListOptions)}, but {@code chunkSize} sets the per-request
+   * page size.
+   */
   public Iterator<ActorRun> iterate(ListOptions options, RunListOptions filter, Long chunkSize) {
     ListOptions opts = options != null ? options : new ListOptions();
     return ctx.iterateResource(

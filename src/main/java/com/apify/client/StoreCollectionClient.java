@@ -22,6 +22,13 @@ public final class StoreCollectionClient {
    * options' {@code limit} caps the total number of Actors yielded ({@code null} = all); {@code
    * chunkSize} is the per-request page size ({@code null} = server default).
    */
+  public Iterator<ActorStoreListItem> iterate(StoreListOptions options) {
+    return iterate(options, null);
+  }
+
+  /**
+   * As {@link #iterate(StoreListOptions)}, but {@code chunkSize} sets the per-request page size.
+   */
   public Iterator<ActorStoreListItem> iterate(StoreListOptions options, Long chunkSize) {
     StoreListOptions opts = options != null ? options : new StoreListOptions();
     return ctx.iterateResource(

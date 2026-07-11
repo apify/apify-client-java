@@ -103,6 +103,15 @@ PaginationList<Build> builds = client.builds().list(new ListOptions().limit(50L)
 `getCount()`, `isDesc()` and `getItems()`. Within-storage listers (`listKeys`, `listHead`) return
 their own page/head containers instead.
 
+## Iteration — `iterate` / `iterateItems` / `iterateKeys`
+
+Each paginated collection also offers a lazy `Iterator` that fetches pages on demand: `iterate(...)`
+on the collection clients, `DatasetClient.iterateItems(...)`, and `KeyValueStoreClient.iterateKeys(...)`
+(request-queue requests use `RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the
+**total** number of items yielded (`null`/unset = all). The per-request page size is an optional
+trailing `chunkSize` argument, so every iterator has two forms — e.g. `iterate(options)` (server
+default page size) and `iterate(options, chunkSize)`. Per-page tuning aside, both yield the same items.
+
 ## Resource pages
 
 - [Actors, versions & environment variables](actors.md)
