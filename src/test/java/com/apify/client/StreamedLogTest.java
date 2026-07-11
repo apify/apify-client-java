@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -191,8 +192,7 @@ class StreamedLogTest {
       streamedLog.start();
 
       CountDownLatch go = new CountDownLatch(1);
-      java.util.concurrent.atomic.AtomicReference<Throwable> closeError =
-          new java.util.concurrent.atomic.AtomicReference<>();
+      AtomicReference<Throwable> closeError = new AtomicReference<>();
       Thread stopper =
           new Thread(
               () -> {
