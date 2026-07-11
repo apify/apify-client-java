@@ -8,7 +8,10 @@ public final class ListKeysOptions {
   private String collection;
   private String signature;
 
-  /** Maximum number of keys to return. */
+  /**
+   * Maximum number of keys to return. Sent verbatim by {@code listKeys(...)} (so {@code 0} returns
+   * zero keys); in {@code iterateKeys(...)} a non-positive/zero {@code limit} means "no cap" (all).
+   */
   public ListKeysOptions limit(Long limit) {
     this.limit = limit;
     return this;

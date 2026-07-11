@@ -19,7 +19,10 @@ public final class StoreListOptions {
     return this;
   }
 
-  /** Maximum number of Actors to return. */
+  /**
+   * Maximum number of Actors to return. Sent verbatim by {@code list(...)} (so {@code 0} returns
+   * zero Actors); in {@code iterate(...)} a non-positive/zero {@code limit} means "no cap" (all).
+   */
   public StoreListOptions limit(Long limit) {
     this.limit = limit;
     return this;

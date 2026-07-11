@@ -29,7 +29,11 @@ public final class DatasetListItemsOptions {
     return this;
   }
 
-  /** Maximum number of items to return. */
+  /**
+   * Maximum number of items to return. Sent verbatim by {@code listItems(...)} (so {@code 0}
+   * returns zero items); in {@code iterateItems(...)} a non-positive/zero {@code limit} means "no
+   * cap" (all).
+   */
   public DatasetListItemsOptions limit(Long limit) {
     this.limit = limit;
     return this;

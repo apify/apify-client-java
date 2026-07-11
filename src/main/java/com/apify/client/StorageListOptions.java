@@ -18,7 +18,11 @@ public final class StorageListOptions {
     return this;
   }
 
-  /** Maximum number of items to return. */
+  /**
+   * Maximum number of items to return. Sent verbatim by {@code list(...)} (so {@code 0} returns
+   * zero items); in {@code iterate(...)} a non-positive/zero {@code limit} means "no cap" (all
+   * items).
+   */
   public StorageListOptions limit(Long limit) {
     this.limit = limit;
     return this;
