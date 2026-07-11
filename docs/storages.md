@@ -65,12 +65,18 @@ PaginationList<JsonNode> page = client.dataset(ds.getId()).listItems(new Dataset
 byte[] csv = client.dataset(ds.getId()).downloadItems(DownloadItemsFormat.CSV, new DatasetDownloadOptions().bom(true));
 ```
 
-`DatasetListItemsOptions` fields: `offset`, `limit`, `desc`, `fields`, `outputFields`, `omit`,
-`skipEmpty`, `skipHidden`, `clean`, `unwind`, `flatten`, `view`, `simplified`, `skipFailedPages`,
-`signature`. `fields` selects which source fields to include; `outputFields` positionally *renames*
-the fields chosen by `fields` in the output (the i-th name renames the i-th `fields` entry), so it
-only makes sense together with `fields`. `downloadItems(...)` returns `byte[]` (the serialized
-export). `DatasetDownloadOptions` wraps a `DatasetListItemsOptions` (`items(...)`) and adds
+`DatasetListItemsOptions` fields: `offset` (number of items to skip), `limit` (maximum number of
+items to return), `desc` (return items newest-first), `fields` (restrict the output to these source
+fields), `outputFields` (positionally *renames* the fields chosen by `fields` in the output — the
+i-th name renames the i-th `fields` entry, so it only makes sense together with `fields`), `omit`
+(exclude these fields from the output), `skipEmpty` (skip empty items), `skipHidden` (skip hidden
+fields, i.e. those starting with `#`), `clean` (return only clean — non-empty, non-hidden — items),
+`unwind` (expand these fields so each array element becomes a separate item), `flatten` (flatten
+these nested fields into dot-notation keys), `view` (select a predefined dataset view for field
+selection), `simplified` (return simplified — flattened and cleaned — items), `skipFailedPages`
+(skip items that come from failed pages), `signature` (a pre-shared URL signature granting access
+without an API token). `downloadItems(...)` returns `byte[]` (the serialized export).
+`DatasetDownloadOptions` wraps a `DatasetListItemsOptions` (`items(...)`) and adds
 `attachment`, `bom`, `delimiter`, `skipHeaderRow`, `xmlRoot`, `xmlRow`, `feedTitle`,
 `feedDescription`.
 
