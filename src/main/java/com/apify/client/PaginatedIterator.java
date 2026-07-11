@@ -48,7 +48,7 @@ final class PaginatedIterator<T> implements Iterator<T> {
 
   PaginatedIterator(Long totalLimit, Long chunkSize, Long startOffset, PageFetcher<T> fetcher) {
     this.totalLimit = totalLimit != null && totalLimit > 0 ? totalLimit : null;
-    this.chunkSize = chunkSize;
+    this.chunkSize = chunkSize != null && chunkSize > 0 ? chunkSize : null;
     this.offset = startOffset != null && startOffset > 0 ? startOffset : 0;
     this.fetcher = fetcher;
   }

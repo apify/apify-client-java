@@ -130,6 +130,7 @@ public final class KeyValueStoreClient {
       buffer = page.getItems();
       pos = 0;
       cursor = page.getNextExclusiveStartKey();
+      boolean truncated = page.isTruncated();
       if (remaining != null) {
         // Defensively trim the last page to the cap in case the server returned more than
         // requested.
@@ -138,10 +139,12 @@ public final class KeyValueStoreClient {
         }
         remaining -= buffer.size();
       }
-      // Stop when the page is empty, there is no next cursor, or the total cap is reached.
-      if (buffer.isEmpty()
+      // Stop when the API reports the listing is not truncated (no more keys), there is no next
+      // cursor, the page is empty, or the total cap is reached.
+      if (!truncated
           || cursor == null
           || cursor.isEmpty()
+          || buffer.isEmpty()
           || (remaining != null && remaining <= 0)) {
         exhausted = true;
       }

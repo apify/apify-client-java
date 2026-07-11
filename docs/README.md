@@ -109,8 +109,9 @@ Each paginated collection also offers a lazy `Iterator` that fetches pages on de
 on the collection clients, `DatasetClient.iterateItems(...)`, and `KeyValueStoreClient.iterateKeys(...)`
 (request-queue requests use `RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the
 **total** number of items yielded (`null`/unset = all). The per-request page size is an optional
-trailing `chunkSize` argument, so every iterator has two forms — e.g. `iterate(options)` (server
-default page size) and `iterate(options, chunkSize)`. Per-page tuning aside, both yield the same items.
+trailing `chunkSize` argument: the per-resource tables below show the `chunkSize` form, and each
+iterator also has an overload that omits it (using the server's default page size). Per-page tuning
+aside, both forms yield the same items.
 
 ## Resource pages
 
