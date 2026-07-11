@@ -48,19 +48,20 @@ class DatasetItemsIteratorTest {
   }
 
   @Test
-  void typedIterateItemsDefaultPageSizeOverload() {
-    // iterateItems(options, Class<T>) — typed iteration at the server-default page size, without
-    // having to pass an explicit null chunkSize. Decodes each item into the requested type.
+  void typedIterateItemsAtDefaultPageSize() {
+    // Typed iteration at the server-default page size uses the 3-arg form with a null chunkSize.
+    // (No (options, Class<T>) overload exists: it would make iterateItems(opts, null) ambiguous
+    // with (options, Long) — see commit 02c977e.) Decodes each item into the requested type.
     MockBackend backend =
         new MockBackend(
             List.of(MockBackend.ok(200, "[{\"n\":1},{\"n\":2}]"), MockBackend.ok(200, "[]")));
     List<Integer> seen = new ArrayList<>();
     Iterator<Row> it =
-        client(backend).dataset("d1").iterateItems(new DatasetListItemsOptions(), Row.class);
+        client(backend).dataset("d1").iterateItems(new DatasetListItemsOptions(), null, Row.class);
     while (it.hasNext()) {
       seen.add(it.next().n);
     }
-    assertEquals(List.of(1, 2), seen, "typed default-page-size overload yields decoded items");
+    assertEquals(List.of(1, 2), seen, "typed iteration at default page size yields decoded items");
     assertTrue(backend.lastUrl.contains("datasets/d1/items"), backend.lastUrl);
   }
 

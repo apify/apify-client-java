@@ -21,7 +21,7 @@ The account-wide collection supports both listing and creation.
 
 `client.actor(id).webhooks()` and `client.task(id).webhooks()` return a
 `NestedWebhookCollectionClient`. The Apify API only supports **reading** webhooks on those nested
-paths (`GET /v2/acts/{id}/webhooks`, `GET /v2/actor-tasks/{id}/webhooks`), so this read-only type
+paths (`GET /v2/actors/{id}/webhooks`, `GET /v2/actor-tasks/{id}/webhooks`), so this read-only type
 exposes `list(ListOptions)` and `iterate(ListOptions, Long chunkSize)` — it has no `create(...)`. To
 create a webhook targeting a specific Actor or task, use `client.webhooks().create(...)` and set the
 Actor/task in the webhook's `condition`.
