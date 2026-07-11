@@ -1,5 +1,7 @@
 # Builds
 
+> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+
 Access the build collection with `client.builds()` (or `client.actor(id).builds()` for an Actor's
 builds) and a single build with `client.build(id)`.
 

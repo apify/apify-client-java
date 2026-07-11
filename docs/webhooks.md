@@ -1,5 +1,7 @@
 # Webhooks & dispatches
 
+> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+
 Webhooks notify an external service when specific events occur. Access the collection with
 `client.webhooks()` and a single webhook with `client.webhook(id)`. Dispatches (individual
 invocations) are available account-wide via `client.webhookDispatches()` /

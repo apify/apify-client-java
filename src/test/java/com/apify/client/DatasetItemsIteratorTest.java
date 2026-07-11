@@ -48,6 +48,28 @@ class DatasetItemsIteratorTest {
   }
 
   @Test
+  void typedIterateItemsDefaultPageSizeOverload() {
+    // iterateItems(options, Class<T>) — typed iteration at the server-default page size, without
+    // having to pass an explicit null chunkSize. Decodes each item into the requested type.
+    MockBackend backend =
+        new MockBackend(
+            List.of(MockBackend.ok(200, "[{\"n\":1},{\"n\":2}]"), MockBackend.ok(200, "[]")));
+    List<Integer> seen = new ArrayList<>();
+    Iterator<Row> it =
+        client(backend).dataset("d1").iterateItems(new DatasetListItemsOptions(), Row.class);
+    while (it.hasNext()) {
+      seen.add(it.next().n);
+    }
+    assertEquals(List.of(1, 2), seen, "typed default-page-size overload yields decoded items");
+    assertTrue(backend.lastUrl.contains("datasets/d1/items"), backend.lastUrl);
+  }
+
+  /** Minimal typed row for the typed-iteration overload test. */
+  static final class Row {
+    public int n;
+  }
+
+  @Test
   void totalCapTrimsDatasetItems() {
     // The cap wins even though the server would return more; only the first page is requested.
     MockBackend backend = MockBackend.ofConstant(200, "[{\"n\":1},{\"n\":2},{\"n\":3}]");

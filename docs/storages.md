@@ -1,5 +1,7 @@
 # Storages: datasets, key-value stores, request queues
 
+> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+
 The three storage types share a consistent shape: a collection client (`list`, `getOrCreate`) and a
 single-resource client (`get`, `update`, `delete`, plus storage-specific operations). Run-nested
 default storages are reachable via `client.run(id).dataset()` / `.keyValueStore()` /
@@ -37,8 +39,8 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listItems(DatasetListItemsOptions)` | List items as `PaginationList<JsonNode>`. |
 | `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. Returns `PaginationList<T>`. |
-| `iterateItems(DatasetListItemsOptions, Long chunkSize)` | Lazy `Iterator<JsonNode>` over all items; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
-| `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Iterator<T>`. |
+| `iterateItems(DatasetListItemsOptions)` / `iterateItems(DatasetListItemsOptions, Long chunkSize)` | Lazy `Iterator<JsonNode>` over all items; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), the optional `chunkSize` sets the per-request page size (omitted/`null` = server default). |
+| `iterateItems(DatasetListItemsOptions, Class<T>)` / `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Iterator<T>`. |
 | `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes (JSON/JSONL/CSV/XLSX/XML/RSS/HTML). |
 | `pushItems(Object)` | Push a single item or a list of items. No return value. |
 | `getStatistics()` | Dataset statistics. Returns `Optional<JsonNode>`. |

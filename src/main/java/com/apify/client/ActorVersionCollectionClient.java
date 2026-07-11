@@ -19,7 +19,8 @@ public final class ActorVersionCollectionClient {
   }
 
   /**
-   * Returns a lazy iterator over the Actor's versions.
+   * Returns an iterator over the Actor's versions. Unlike the paginated collection iterators, this
+   * fetches eagerly — the single request runs when {@code iterate} is called (see below).
    *
    * <p>{@code GET /v2/actors/{actorId}/versions} is <em>not</em> offset/limit paginated: it takes
    * no pagination parameters and returns the full version list in a single {@code {total, items}}

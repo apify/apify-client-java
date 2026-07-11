@@ -1,5 +1,7 @@
 # Schedules
 
+> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+
 Schedules automatically start Actor or task runs at specified times. Access the collection with
 `client.schedules()` and a single schedule with `client.schedule(id)`.
 

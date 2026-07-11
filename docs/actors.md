@@ -1,5 +1,7 @@
 # Actors, versions & environment variables
 
+> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+
 Access the Actor collection with `client.actors()` and a single Actor with `client.actor(id)`,
 where `id` is an Actor ID or `username~name` (a `/` in the id is accepted and normalized).
 

@@ -1,5 +1,7 @@
 # Runs
 
+> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+
 Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 `client.task(id).runs()`) and a single run with `client.run(id)`.
 

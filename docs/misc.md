@@ -1,5 +1,7 @@
 # Store, users & logs
 
+> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+
 ## Apify Store — `client.store()`
 
 Browse public Actors in the Apify Store.

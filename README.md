@@ -90,8 +90,11 @@ class HelloApify {
 }
 ```
 
-The remaining snippets below are fragments that assume a configured `client` (see the imports note
-after the next block):
+The remaining snippets below are fragments that assume a configured `client` and these imports: all
+public client types live in the `com.apify.client` package (e.g. `import com.apify.client.*;`); the
+snippets also use `com.fasterxml.jackson.databind.JsonNode` (from the Jackson dependency) for untyped
+data, `java.time.Duration` in the configuration examples, and standard JDK types such as
+`java.util.Optional` and `java.util.Map` (`import java.util.*;`).
 
 ```java
 ApifyClient client = ApifyClient.create("my-api-token");
@@ -105,11 +108,6 @@ PaginationList<JsonNode> items =
     client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
 System.out.println("Items in this page: " + items.getCount());
 ```
-
-All public client types live in the `com.apify.client` package (e.g. `import com.apify.client.*;`).
-The snippets also use `com.fasterxml.jackson.databind.JsonNode` (from the Jackson dependency) for
-untyped data, `java.time.Duration` in the configuration examples, and standard JDK types such as
-`java.util.Optional` and `java.util.Map` (`import java.util.*;`).
 
 `ApifyClient.create` takes the token as an explicit argument — it does **not** read `APIFY_TOKEN` (or
 any other environment variable) automatically. Read it yourself if you want that, e.g.

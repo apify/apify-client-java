@@ -1,7 +1,7 @@
-# Runnable examples
+# Examples
 
-Each example below is a code fragment that assumes a configured `client` and the imports listed in
-the [documentation index](README.md#imports-and-dependencies); it is not a standalone `main`. The
+Each example below is a code fragment (not a standalone `main`) that assumes a configured `client`
+and the imports listed in the [documentation index](README.md#imports-and-dependencies). The
 complete, standalone programs (with imports and a `main`) live under
 [`src/test/java/com/apify/client/examples/`](https://github.com/apify/apify-client-java/tree/master/src/test/java/com/apify/client/examples)
 and are executed end-to-end against the live API by the `Test examples` CI step (see `ExamplesTest`),

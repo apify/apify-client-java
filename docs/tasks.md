@@ -1,5 +1,7 @@
 # Tasks
 
+> **Official but experimental — AI-generated and AI-maintained.** Review the code before relying on it in production.
+
 Tasks are pre-configured Actor runs with stored input. Access the task collection with
 `client.tasks()` and a single task with `client.task(id)`.
 
