@@ -91,7 +91,7 @@ and deletes a single version and exposes its environment variables.
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List the Actor's versions. Returns `PaginationList<ActorVersion>`. |
-| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<ActorVersion>` over all versions; `limit` caps the total, `chunkSize` sets the page size. |
+| `iterate(ListOptions)` | Lazy `Iterator<ActorVersion>` over all versions; `limit` caps the total. The versions endpoint is not paginated (one fetch returns every version), so there is no page size to tune. |
 | `create(Object version)` | Create a version. Returns `ActorVersion`. |
 
 ### `ActorVersionClient` — `client.actor(id).version(v)`

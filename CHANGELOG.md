@@ -10,12 +10,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Lazy iteration helpers over every paginated collection, matching the reference JS client's
-  iterable `list()`: `iterate(options, chunkSize)` on the Actor, Actor-version, build, run, dataset,
+  iterable `list()`: `iterate(options, chunkSize)` on the Actor, build, run, dataset,
   key-value-store, request-queue, task, schedule, webhook, and webhook-dispatch collection clients;
-  `ActorEnvVarCollectionClient.iterate()` (the non-paginated env-var collection); and
-  `DatasetClient.iterateItems(...)` for dataset items and `KeyValueStoreClient.iterateKeys(...)` for
-  store keys. The options' `limit` caps the total number of items yielded and `chunkSize` sets the
-  per-request page size.
+  and `DatasetClient.iterateItems(...)` for dataset items and `KeyValueStoreClient.iterateKeys(...)`
+  for store keys. The options' `limit` caps the total number of items yielded and `chunkSize` sets
+  the per-request page size. The non-paginated collections — `ActorVersionCollectionClient.iterate(options)`
+  and `ActorEnvVarCollectionClient.iterate()` — return the full list in a single fetch (no page size
+  to tune).
 
 ### Changed
 

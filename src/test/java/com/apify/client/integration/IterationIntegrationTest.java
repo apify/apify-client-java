@@ -261,10 +261,21 @@ class IterationIntegrationTest extends IntegrationBase {
     Actor actor = client.actors().create(ActorIntegrationTest.minimalActor(uniqueName("it-ver")));
     try {
       var actorClient = client.actor(actor.getId());
-      // The minimal Actor ships with version 0.0, so iteration must yield at least one version.
+      // The versions endpoint is not paginated (one fetch returns every version); fully draining
+      // the iterator must terminate and must not re-yield a version. The minimal Actor ships with
+      // version 0.0, so iteration yields at least one version, each exactly once.
+      Set<String> versionNumbers = new HashSet<>();
+      int versionCount = 0;
       Iterator<com.apify.client.ActorVersion> versions =
-          actorClient.versions().iterate(new ListOptions(), 1L);
-      assertTrue(versions.hasNext(), "expected at least the initial version");
+          actorClient.versions().iterate(new ListOptions());
+      while (versions.hasNext()) {
+        versionCount++;
+        versionNumbers.add(versions.next().getVersionNumber());
+      }
+      assertTrue(versionCount >= 1, "expected at least the initial version");
+      assertEquals(versionCount, versionNumbers.size(), "versions iterator re-yielded a version");
+      assertTrue(
+          versionNumbers.contains("0.0"), "expected initial version 0.0, saw " + versionNumbers);
 
       var envVars = actorClient.version("0.0").envVars();
       envVars.create(new ActorEnvVar("IT_VAR_A", "a"));

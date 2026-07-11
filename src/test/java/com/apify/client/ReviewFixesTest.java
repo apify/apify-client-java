@@ -449,4 +449,50 @@ class ReviewFixesTest {
         assertThrows(ApifyApiException.class, () -> client(backend).log("run1").stream());
     assertEquals(403, ex.getStatusCode());
   }
+
+  @Test
+  void versionsIterateSingleFetchTerminatesAndDoesNotDuplicate() {
+    // GET /v2/actors/{actorId}/versions is NOT offset/limit paginated: the server ignores `offset`
+    // and returns the full {total, items} list on every request. `ofConstant` reproduces exactly
+    // that (same non-empty page for every call). Draining the iterator must terminate and yield
+    // each version once. Routing this endpoint through the offset/limit paging engine looped
+    // forever (empty-page termination never triggers), so this pins the single-fetch behaviour.
+    MockBackend backend =
+        MockBackend.ofConstant(
+            200,
+            "{\"data\":{\"total\":3,\"items\":["
+                + "{\"versionNumber\":\"0.1\"},"
+                + "{\"versionNumber\":\"0.2\"},"
+                + "{\"versionNumber\":\"0.3\"}]}}");
+    java.util.Iterator<ActorVersion> it =
+        client(backend).actor("me/actor").versions().iterate(new ListOptions());
+    List<String> yielded = new ArrayList<>();
+    int guard = 0;
+    while (it.hasNext()) {
+      // Guard converts a termination regression (infinite loop) into a clean failure, not a hang.
+      assertTrue(
+          ++guard <= 100, "versions iterator did not terminate (paged a non-paginated endpoint)");
+      yielded.add(it.next().getVersionNumber());
+    }
+    assertEquals(List.of("0.1", "0.2", "0.3"), yielded, "each version yielded once, in order");
+    assertEquals(1, backend.calls, "non-paginated versions endpoint must be fetched exactly once");
+  }
+
+  @Test
+  void versionsIterateHonorsTotalLimitCap() {
+    MockBackend backend =
+        MockBackend.ofConstant(
+            200,
+            "{\"data\":{\"total\":3,\"items\":["
+                + "{\"versionNumber\":\"0.1\"},"
+                + "{\"versionNumber\":\"0.2\"},"
+                + "{\"versionNumber\":\"0.3\"}]}}");
+    java.util.Iterator<ActorVersion> it =
+        client(backend).actor("me/actor").versions().iterate(new ListOptions().limit(2L));
+    List<String> yielded = new ArrayList<>();
+    while (it.hasNext()) {
+      yielded.add(it.next().getVersionNumber());
+    }
+    assertEquals(List.of("0.1", "0.2"), yielded, "limit caps the number yielded");
+  }
 }
