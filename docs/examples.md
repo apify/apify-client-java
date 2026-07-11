@@ -65,7 +65,8 @@ user.ifPresent(u -> System.out.println("Account " + u.getId() + " / " + u.getUse
 
 ```java
 Actor created = client.actors().create(Map.of(
-    "name", "my-example-actor",
+    // A unique name avoids collisions across parallel runs.
+    "name", "my-example-actor-" + System.currentTimeMillis(),
     "isPublic", false,
     "versions", List.of(Map.of(
         "versionNumber", "0.0",

@@ -110,8 +110,10 @@ on the collection clients, `DatasetClient.iterateItems(...)`, and `KeyValueStore
 (request-queue requests use `RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the
 **total** number of items yielded (`null`/unset = all). The per-request page size is an optional
 trailing `chunkSize` argument: the per-resource tables below show the `chunkSize` form, and each
-iterator also has an overload that omits it (using the server's default page size). Per-page tuning
-aside, both forms yield the same items.
+iterator also has an overload that omits it (using the server's default page size). The page size
+does not change which items a collection iterator yields; note the one exception in
+[Storages](storages.md) — `iterateItems` combined with server-side item filters, where the page size
+can affect the result.
 
 ## Resource pages
 
