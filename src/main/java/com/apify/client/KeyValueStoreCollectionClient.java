@@ -1,5 +1,7 @@
 package com.apify.client;
 
+import java.util.Iterator;
+
 /** A client for the key-value store collection ({@code GET/POST /v2/key-value-stores}). */
 public final class KeyValueStoreCollectionClient {
   private final ResourceContext ctx;
@@ -13,6 +15,29 @@ public final class KeyValueStoreCollectionClient {
     QueryParams params = new QueryParams();
     options.apply(params);
     return ctx.listResource("", params, KeyValueStore.class);
+  }
+
+  /**
+   * Returns a lazy iterator over the key-value stores. The options' {@code limit} caps the total
+   * number yielded ({@code null} or non-positive = all); {@code chunkSize} is the per-request page
+   * size ({@code null} = server default).
+   */
+  public Iterator<KeyValueStore> iterate(StorageListOptions options) {
+    return iterate(options, null);
+  }
+
+  /**
+   * As {@link #iterate(StorageListOptions)}, but {@code chunkSize} sets the per-request page size.
+   */
+  public Iterator<KeyValueStore> iterate(StorageListOptions options, Long chunkSize) {
+    StorageListOptions opts = options != null ? options : new StorageListOptions();
+    return ctx.iterateResource(
+        "",
+        opts.limitValue(),
+        chunkSize,
+        opts.offsetValue(),
+        opts::applyFilters,
+        KeyValueStore.class);
   }
 
   /**

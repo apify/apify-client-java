@@ -1,5 +1,9 @@
 # Builds
 
+> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
+> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
+> in production and report issues on the repository.
+
 Access the build collection with `client.builds()` (or `client.actor(id).builds()` for an Actor's
 builds) and a single build with `client.build(id)`.
 
@@ -8,6 +12,7 @@ builds) and a single build with `client.build(id)`.
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List builds. Returns `PaginationList<Build>`. |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Build>` over all builds; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 
 ## `BuildClient`
 

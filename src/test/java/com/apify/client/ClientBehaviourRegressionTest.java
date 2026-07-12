@@ -11,8 +11,12 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/** Offline tests pinning correctness behaviours surfaced in review (idempotency, chunking, ...). */
-class ReviewFixesTest {
+/**
+ * Offline regression tests pinning client behaviours: idempotency-key derivation, filter
+ * propagation through nested clients, retry/timeout policy, request chunking, pagination/iteration
+ * termination, and wait/poll semantics.
+ */
+class ClientBehaviourRegressionTest {
 
   private static ApifyClient client(MockBackend backend) {
     return client(backend, 0);
@@ -267,7 +271,7 @@ class ReviewFixesTest {
         MockBackend.ofConstant(
             200, "{\"data\":{\"items\":[],\"total\":0,\"offset\":0,\"limit\":0,\"count\":0}}");
     StoreListOptions options = new StoreListOptions().offset(100L).limit(50L);
-    client(backend).store().iterate(options).hasNext();
+    client(backend).store().iterate(options, null).hasNext();
     // The caller's initial offset must be honored for paging and left untouched afterwards.
     assertTrue(backend.lastUrl.contains("offset=100"), backend.lastUrl);
     assertEquals(100L, options.offsetValue(), "iteration must not mutate the caller's options");
@@ -283,16 +287,61 @@ class ReviewFixesTest {
                     "{\"data\":{\"items\":[{},{}],\"total\":3,\"offset\":0,\"limit\":2,\"count\":2}}"),
                 MockBackend.ok(
                     200,
-                    "{\"data\":{\"items\":[{}],\"total\":3,\"offset\":2,\"limit\":2,\"count\":1}}")));
+                    "{\"data\":{\"items\":[{}],\"total\":3,\"offset\":2,\"limit\":2,\"count\":1}}"),
+                // Trailing empty page: the iterator stops on an empty page (it does not trust the
+                // reported total, which some endpoints under-report), so a final empty page is
+                // required to terminate an uncapped walk.
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[],\"total\":3,\"offset\":3,\"limit\":2,\"count\":0}}")));
+    // No total cap; page size 2 drives paging until the empty page.
     java.util.Iterator<ActorStoreListItem> it =
-        client(backend).store().iterate(new StoreListOptions().limit(2L));
+        client(backend).store().iterate(new StoreListOptions(), 2L);
     int count = 0;
     while (it.hasNext()) {
       it.next();
       count++;
     }
-    assertEquals(3, count, "iteration should walk across both pages");
-    assertEquals(2, backend.calls, "one API call per page");
+    assertEquals(3, count, "iteration should walk across both non-empty pages");
+    assertEquals(3, backend.calls, "two data pages plus the terminating empty page");
+  }
+
+  @Test
+  void collectionIterateSingleArgDelegatesToServerDefaultPageSize() {
+    // The arg-less-chunkSize convenience overload must page correctly (delegates with null chunk).
+    MockBackend backend =
+        new MockBackend(
+            List.of(
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[{},{}],\"total\":2,\"offset\":0,\"limit\":2,\"count\":2}}"),
+                MockBackend.ok(
+                    200,
+                    "{\"data\":{\"items\":[],\"total\":2,\"offset\":2,\"limit\":2,\"count\":0}}")));
+    java.util.Iterator<Actor> it = client(backend).actors().iterate(new ActorListOptions());
+    int count = 0;
+    while (it.hasNext()) {
+      it.next();
+      count++;
+    }
+    assertEquals(2, count, "single-arg iterate should yield every item");
+    assertFalse(
+        backend.lastUrl.contains("limit="), "no chunkSize => no limit param (server default)");
+  }
+
+  @Test
+  void iterateSnapshotsOptionsSoLaterMutationsDoNotLeak() {
+    // The iterator must capture the options (offset/limit AND filters) at call time; mutating the
+    // caller's options object afterwards must not change subsequent page requests.
+    MockBackend backend =
+        MockBackend.ofConstant(
+            200, "{\"data\":{\"items\":[{}],\"total\":1,\"offset\":0,\"limit\":0,\"count\":1}}");
+    ActorListOptions options = new ActorListOptions().sortBy("createdAt");
+    java.util.Iterator<Actor> it = client(backend).actors().iterate(options);
+    options.sortBy("modifiedAt"); // mutate after obtaining the iterator
+    it.hasNext(); // triggers the first page fetch
+    assertTrue(backend.lastUrl.contains("sortBy=createdAt"), backend.lastUrl);
+    assertFalse(backend.lastUrl.contains("modifiedAt"), backend.lastUrl);
   }
 
   @Test
@@ -403,5 +452,51 @@ class ReviewFixesTest {
     ApifyApiException ex =
         assertThrows(ApifyApiException.class, () -> client(backend).log("run1").stream());
     assertEquals(403, ex.getStatusCode());
+  }
+
+  @Test
+  void versionsIterateSingleFetchTerminatesAndDoesNotDuplicate() {
+    // GET /v2/actors/{actorId}/versions is NOT offset/limit paginated: the server ignores `offset`
+    // and returns the full {total, items} list on every request. `ofConstant` reproduces exactly
+    // that (same non-empty page for every call). Draining the iterator must terminate and yield
+    // each version once. Routing this endpoint through the offset/limit paging engine looped
+    // forever (empty-page termination never triggers), so this pins the single-fetch behaviour.
+    MockBackend backend =
+        MockBackend.ofConstant(
+            200,
+            "{\"data\":{\"total\":3,\"items\":["
+                + "{\"versionNumber\":\"0.1\"},"
+                + "{\"versionNumber\":\"0.2\"},"
+                + "{\"versionNumber\":\"0.3\"}]}}");
+    java.util.Iterator<ActorVersion> it =
+        client(backend).actor("me/actor").versions().iterate(new ListOptions());
+    List<String> yielded = new ArrayList<>();
+    int guard = 0;
+    while (it.hasNext()) {
+      // Guard converts a termination regression (infinite loop) into a clean failure, not a hang.
+      assertTrue(
+          ++guard <= 100, "versions iterator did not terminate (paged a non-paginated endpoint)");
+      yielded.add(it.next().getVersionNumber());
+    }
+    assertEquals(List.of("0.1", "0.2", "0.3"), yielded, "each version yielded once, in order");
+    assertEquals(1, backend.calls, "non-paginated versions endpoint must be fetched exactly once");
+  }
+
+  @Test
+  void versionsIterateHonorsTotalLimitCap() {
+    MockBackend backend =
+        MockBackend.ofConstant(
+            200,
+            "{\"data\":{\"total\":3,\"items\":["
+                + "{\"versionNumber\":\"0.1\"},"
+                + "{\"versionNumber\":\"0.2\"},"
+                + "{\"versionNumber\":\"0.3\"}]}}");
+    java.util.Iterator<ActorVersion> it =
+        client(backend).actor("me/actor").versions().iterate(new ListOptions().limit(2L));
+    List<String> yielded = new ArrayList<>();
+    while (it.hasNext()) {
+      yielded.add(it.next().getVersionNumber());
+    }
+    assertEquals(List.of("0.1", "0.2"), yielded, "limit caps the number yielded");
   }
 }

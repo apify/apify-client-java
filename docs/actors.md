@@ -1,5 +1,9 @@
 # Actors, versions & environment variables
 
+> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
+> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
+> in production and report issues on the repository.
+
 Access the Actor collection with `client.actors()` and a single Actor with `client.actor(id)`,
 where `id` is an Actor ID or `username~name` (a `/` in the id is accepted and normalized).
 
@@ -8,6 +12,7 @@ where `id` is an Actor ID or `username~name` (a `/` in the id is accepted and no
 | Method | Description |
 |---|---|
 | `list(ActorListOptions)` | List the account's Actors. Returns `PaginationList<Actor>`. |
+| `iterate(ActorListOptions, Long chunkSize)` | Lazy `Iterator<Actor>` over all matches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the page size (`null` = server default). |
 | `create(Object)` | Create a new Actor from a JSON-serializable definition. Returns `Actor`. |
 
 `ActorListOptions` adds `my(Boolean)` (only Actors owned by the current user) and
@@ -52,12 +57,17 @@ Actor created = client.actors().create(Map.of(
 | `defaultBuild(Long waitForFinish)` | Resolve the default build. Returns `BuildClient`. |
 | `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run. |
 | `builds()` / `runs()` / `versions()` | Nested collection clients. |
-| `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, list only). |
+| `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, `list` + `iterate`, no `create`). |
 | `version(String)` | An `ActorVersionClient`. |
 
-`ActorStartOptions` fields (all optional): `build`, `memoryMbytes`, `timeoutSecs`, `waitForFinish`,
-`maxItems`, `maxTotalChargeUsd`, `contentType`, `restartOnError`, `forcePermissionLevel`
-(`LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), and `webhooks(List<Object>)` — ad-hoc webhook definitions
+`ActorStartOptions` fields (all optional): `build` (the tag or number of the build to run, e.g.
+`latest`, `0.1.2`), `memoryMbytes` (memory in megabytes allocated for the run), `timeoutSecs` (run
+timeout in seconds; `0` means no timeout), `waitForFinish` (maximum seconds to wait server-side for
+the run to finish, max 60), `maxItems` (maximum dataset items to charge, pay-per-result Actors),
+`maxTotalChargeUsd` (maximum total charge in USD, pay-per-event Actors), `contentType` (content type
+of the input body, defaults to `application/json`), `restartOnError` (restart the run if it fails),
+`forcePermissionLevel` (override the Actor's permission level for this run:
+`LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), and `webhooks(List<Object>)` — ad-hoc webhook definitions
 (each a JSON-serializable `Map`, as in [Webhooks](webhooks.md)) that the client base64-encodes on the
 wire.
 
@@ -90,6 +100,7 @@ and deletes a single version and exposes its environment variables.
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List the Actor's versions. Returns `PaginationList<ActorVersion>`. |
+| `iterate(ListOptions)` | Lazy `Iterator<ActorVersion>` over all versions; `limit` caps the total (`null`/unset or non-positive = all). The versions endpoint is not paginated (one fetch returns every version), so `offset` has no effect and there is no page size to tune. |
 | `create(Object version)` | Create a version. Returns `ActorVersion`. |
 
 ### `ActorVersionClient` — `client.actor(id).version(v)`
@@ -121,6 +132,7 @@ encrypted), and matching getters `getName()`, `getValue()`, `getIsSecret()`.
 | Method | Description |
 |---|---|
 | `list()` | List the version's environment variables. Returns `PaginationList<ActorEnvVar>`. |
+| `iterate()` | `Iterator<ActorEnvVar>` over the variables. The env-var collection is not paginated (all variables are returned at once), so this iterates a single fetched page; provided for API consistency. |
 | `create(ActorEnvVar)` | Create an environment variable. Returns `ActorEnvVar`. |
 
 ### `ActorEnvVarClient` — `client.actor(id).version(v).envVar(name)`

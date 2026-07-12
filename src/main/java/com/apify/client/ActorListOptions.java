@@ -14,7 +14,10 @@ public final class ActorListOptions {
     return this;
   }
 
-  /** Maximum number of Actors to return. */
+  /**
+   * Maximum number of Actors to return. Sent verbatim by {@code list(...)} (so {@code 0} returns
+   * zero Actors); in {@code iterate(...)} a non-positive/zero {@code limit} means "no cap" (all).
+   */
   public ActorListOptions limit(Long limit) {
     this.limit = limit;
     return this;
@@ -38,11 +41,23 @@ public final class ActorListOptions {
     return this;
   }
 
+  Long offsetValue() {
+    return offset;
+  }
+
+  Long limitValue() {
+    return limit;
+  }
+
   void apply(QueryParams q) {
-    q.addLong("offset", offset)
-        .addLong("limit", limit)
-        .addBool("desc", desc)
-        .addBool("my", my)
-        .addString("sortBy", sortBy);
+    q.addLong("offset", offset).addLong("limit", limit);
+    applyFilters(q);
+  }
+
+  /**
+   * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
+   */
+  void applyFilters(QueryParams q) {
+    q.addBool("desc", desc).addBool("my", my).addString("sortBy", sortBy);
   }
 }

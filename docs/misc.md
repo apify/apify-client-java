@@ -1,20 +1,28 @@
 # Store, users & logs
 
+> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
+> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
+> in production and report issues on the repository.
+
 ## Apify Store — `client.store()`
 
-Browse public Actors in the Apify Store.
+Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollectionClient`.
 
 | Method | Description |
 |---|---|
 | `list(StoreListOptions)` | A page of Store Actors. Returns `PaginationList<ActorStoreListItem>`. |
-| `iterate(StoreListOptions)` | A lazy `Iterator<ActorStoreListItem>` fetching pages on demand. |
+| `iterate(StoreListOptions, Long chunkSize)` | A lazy `Iterator<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of Actors yielded (`null`/unset or non-positive = all); `chunkSize` is the per-request page size (`null` = server default). |
 
-`StoreListOptions` fields: `offset`, `limit`, `search`, `sortBy`, `category`, `username`,
-`pricingModel` (`FREE`, `FLAT_PRICE_PER_MONTH`, `PRICE_PER_DATASET_ITEM`, `PAY_PER_EVENT`),
-`includeUnrunnableActors`, `allowsAgenticUsers`, `responseFormat` (`full`, `agent`).
+`StoreListOptions` fields: `offset` (number of Actors to skip), `limit` (maximum number of Actors to
+return), `search` (full-text search query), `sortBy` (the sort field, e.g. `popularity`, `newest`),
+`category` (filter Actors by category), `username` (filter Actors by owner username), `pricingModel`
+(filter by pricing model: `FREE`, `FLAT_PRICE_PER_MONTH`, `PRICE_PER_DATASET_ITEM`, `PAY_PER_EVENT`),
+`includeUnrunnableActors` (include Actors the current user cannot run), `allowsAgenticUsers` (only
+Actors that allow agentic users), `responseFormat` (the response shape: `full` or `agent`).
 
 ```java
-Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().search("crawler").limit(20L));
+Iterator<ActorStoreListItem> it =
+    client.store().iterate(new StoreListOptions().search("crawler").limit(20L), 10L);
 int shown = 0;
 while (shown < 5 && it.hasNext()) {
   ActorStoreListItem item = it.next();
@@ -39,11 +47,18 @@ The usage/limits methods are only available for `me()`; calling them on `user(id
 
 ```java
 Optional<User> me = client.me().get();
-me.ifPresent(u -> System.out.println("Account: " + u.getId()));
+me.ifPresent(
+    u -> {
+      System.out.println("Account: " + u.getId());
+      // Fields not modelled on User (email, plan, proxy, ...) are exposed through the untyped
+      // extras map, which getExtra() returns as a Map<String, Object>.
+      System.out.println("Email: " + u.getExtra().get("email"));
+    });
 JsonNode usage = client.me().monthlyUsage();
 ```
 
-`User` fields: `getId()`, `getUsername()`, plus `getExtra()`.
+`User` fields: `getId()`, `getUsername()`, plus `getExtra()` — a `Map<String, Object>` carrying any
+account fields not modelled directly (for `me()`, private details such as `email` and `plan`).
 
 ## Logs — `client.log(id)`
 

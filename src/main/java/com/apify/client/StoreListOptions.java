@@ -19,7 +19,10 @@ public final class StoreListOptions {
     return this;
   }
 
-  /** Maximum number of Actors to return. */
+  /**
+   * Maximum number of Actors to return. Sent verbatim by {@code list(...)} (so {@code 0} returns
+   * zero Actors); in {@code iterate(...)} a non-positive/zero {@code limit} means "no cap" (all).
+   */
   public StoreListOptions limit(Long limit) {
     this.limit = limit;
     return this;
@@ -84,31 +87,16 @@ public final class StoreListOptions {
     return offset;
   }
 
-  StoreListOptions offsetInternal(long offset) {
-    this.offset = offset;
-    return this;
-  }
-
-  /** Returns an independent copy, so iteration paging cannot mutate a caller-owned instance. */
-  StoreListOptions copy() {
-    StoreListOptions c = new StoreListOptions();
-    c.offset = offset;
-    c.limit = limit;
-    c.search = search;
-    c.sortBy = sortBy;
-    c.category = category;
-    c.username = username;
-    c.pricingModel = pricingModel;
-    c.includeUnrunnableActors = includeUnrunnableActors;
-    c.allowsAgenticUsers = allowsAgenticUsers;
-    c.responseFormat = responseFormat;
-    return c;
-  }
-
   void apply(QueryParams q) {
-    q.addLong("offset", offset)
-        .addLong("limit", limit)
-        .addString("search", search)
+    q.addLong("offset", offset).addLong("limit", limit);
+    applyFilters(q);
+  }
+
+  /**
+   * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
+   */
+  void applyFilters(QueryParams q) {
+    q.addString("search", search)
         .addString("sortBy", sortBy)
         .addString("category", category)
         .addString("username", username)

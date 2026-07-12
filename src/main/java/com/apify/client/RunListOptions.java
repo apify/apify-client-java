@@ -4,8 +4,9 @@ import java.util.List;
 
 /**
  * Run-specific filters for {@link RunCollectionClient#list(ListOptions, RunListOptions)}. The
- * {@code startedAfter}/{@code startedBefore} filters are only honoured by the Actor-scoped and
- * task-scoped run collections.
+ * {@code startedAfter}/{@code startedBefore} filters are honoured by the top-level ({@code
+ * /v2/actor-runs}) and Actor-scoped ({@code /v2/actors/{actorId}/runs}) run collections; the
+ * task-scoped run collection accepts only {@code status}.
  */
 public final class RunListOptions {
   private List<String> status;

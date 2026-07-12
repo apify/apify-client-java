@@ -1,8 +1,6 @@
 package com.apify.client;
 
 import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
 
 /** A client for browsing the Apify Store ({@code GET /v2/store}). */
 public final class StoreCollectionClient {
@@ -20,63 +18,25 @@ public final class StoreCollectionClient {
   }
 
   /**
-   * Returns a lazy iterator over all Store Actors matching the options, fetching pages on demand.
-   * The options' {@code limit} (if set) is used as the per-page size.
+   * Returns a lazy iterator over Store Actors matching the options, fetching pages on demand. The
+   * options' {@code limit} caps the total number of Actors yielded ({@code null} or non-positive =
+   * all); {@code chunkSize} is the per-request page size ({@code null} = server default).
    */
   public Iterator<ActorStoreListItem> iterate(StoreListOptions options) {
-    return new StoreIterator(options);
+    return iterate(options, null);
   }
 
-  /** Lazily iterates over Apify Store Actors, fetching one page at a time. */
-  private final class StoreIterator implements Iterator<ActorStoreListItem> {
-    private final StoreListOptions options;
-    private List<ActorStoreListItem> buffer = List.of();
-    private int pos;
-    private long offset;
-    private boolean exhausted;
-
-    StoreIterator(StoreListOptions options) {
-      // Copy so paging state stays internal: the caller's instance is never mutated (safe to reuse
-      // or iterate twice), and its initial offset is honored as the starting page.
-      this.options = options.copy();
-      Long initialOffset = this.options.offsetValue();
-      this.offset = initialOffset != null ? initialOffset : 0;
-    }
-
-    @Override
-    public boolean hasNext() {
-      while (pos >= buffer.size()) {
-        if (exhausted) {
-          return false;
-        }
-        fetchPage();
-      }
-      return true;
-    }
-
-    @Override
-    public ActorStoreListItem next() {
-      if (!hasNext()) {
-        throw new NoSuchElementException();
-      }
-      return buffer.get(pos++);
-    }
-
-    private void fetchPage() {
-      options.offsetInternal(offset);
-      PaginationList<ActorStoreListItem> page = list(options);
-      buffer = page.getItems();
-      pos = 0;
-      offset += page.getItems().size();
-      // Terminate on an empty page, or on a short page when a page size (limit) is known — a page
-      // returning fewer items than requested is the last one. We deliberately do NOT stop on
-      // `offset >= total`: a momentarily stale (under-reported) `total`, e.g. from read-replica
-      // lag right after a write, could otherwise cut iteration short while items remain.
-      Long limit = options.limitValue();
-      boolean shortPage = limit != null && limit > 0 && page.getItems().size() < limit;
-      if (page.getItems().isEmpty() || shortPage) {
-        exhausted = true;
-      }
-    }
+  /**
+   * As {@link #iterate(StoreListOptions)}, but {@code chunkSize} sets the per-request page size.
+   */
+  public Iterator<ActorStoreListItem> iterate(StoreListOptions options, Long chunkSize) {
+    StoreListOptions opts = options != null ? options : new StoreListOptions();
+    return ctx.iterateResource(
+        "",
+        opts.limitValue(),
+        chunkSize,
+        opts.offsetValue(),
+        opts::applyFilters,
+        ActorStoreListItem.class);
   }
 }

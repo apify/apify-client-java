@@ -15,37 +15,55 @@ queues, tasks, schedules, webhooks, the store, users and logs).
 
 ## Installation
 
-Maven:
+The client is published to [Maven Central](https://central.sonatype.com/artifact/com.apify/apify-client).
+
+Maven (Maven Central is a default repository, so no extra configuration is needed):
 
 ```xml
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.1.3</version>
+  <version>0.3.0</version>
 </dependency>
 ```
 
-Gradle:
+Gradle — ensure `mavenCentral()` is in your `repositories`, then add the dependency:
 
 ```groovy
-implementation 'com.apify:apify-client:0.1.3'
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation 'com.apify:apify-client:0.3.0'
+}
 ```
 
 ## Quick start
 
-A complete, copy-pasteable first program (save as `HelloApify.java`). Populate a `lib/` directory
-with the client and its runtime dependencies (from a directory whose `pom.xml` declares the
-dependency shown in [Installation](#installation) above), then compile and run against the JVM's
-`lib/*` classpath wildcard — quote it so the shell does not expand it:
+A complete, copy-pasteable first program (save as `HelloApify.java`). First scaffold a minimal
+`pom.xml` next to it so Maven can resolve the client and its runtime dependencies:
 
-```bash
-# 1. Collect apify-client and its runtime dependencies (Jackson, brotli4j codecs, …) into lib/.
-mvn dependency:copy-dependencies -DoutputDirectory=lib -DincludeScope=runtime
-
-# 2. Compile and run. '.' is for the compiled HelloApify.class; lib/* is the JVM classpath wildcard.
-javac -cp 'lib/*' HelloApify.java
-java  -cp '.:lib/*' HelloApify   # Windows: java -cp ".;lib/*" HelloApify
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>hello-apify</artifactId>
+  <version>1.0.0</version>
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>com.apify</groupId>
+      <artifactId>apify-client</artifactId>
+      <version>0.3.0</version>
+    </dependency>
+  </dependencies>
+</project>
 ```
+
+Create `HelloApify.java`:
 
 ```java
 import com.apify.client.ApifyClient;
@@ -54,15 +72,31 @@ import com.apify.client.ActorStartOptions;
 
 class HelloApify {
   public static void main(String[] args) {
-    ApifyClient client = ApifyClient.create("my-api-token");
+    // Your API token from https://console.apify.com/settings/integrations
+    ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
     ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
     System.out.println("Run " + run.getId() + " finished with status " + run.getStatus());
   }
 }
 ```
 
-The remaining snippets below are fragments that assume a configured `client` (see the imports note
-after the next block):
+Then populate a `lib/` directory with the client and its runtime dependencies, and compile and run
+against the JVM's `lib/*` classpath wildcard — quote it so the shell does not expand it:
+
+```bash
+# 1. Collect apify-client and its runtime dependencies (Jackson, brotli4j codecs, …) into lib/.
+mvn dependency:copy-dependencies -DoutputDirectory=lib -DincludeScope=runtime
+
+# 2. Compile and run. '.' is for the compiled HelloApify.class; lib/* is the JVM classpath wildcard.
+javac -cp '.:lib/*' HelloApify.java   # Windows: javac -cp ".;lib/*" HelloApify.java
+java  -cp '.:lib/*' HelloApify        # Windows: java  -cp ".;lib/*" HelloApify
+```
+
+The remaining snippets below are fragments that assume a configured `client` and these imports: all
+public client types live in the `com.apify.client` package (e.g. `import com.apify.client.*;`); the
+snippets also use `com.fasterxml.jackson.databind.JsonNode` (from the Jackson dependency) for untyped
+data, `java.time.Duration` in the configuration examples, and standard JDK types such as
+`java.util.Optional` and `java.util.Map` (`import java.util.*;`).
 
 ```java
 ApifyClient client = ApifyClient.create("my-api-token");
@@ -77,10 +111,9 @@ PaginationList<JsonNode> items =
 System.out.println("Items in this page: " + items.getCount());
 ```
 
-All public client types live in the `com.apify.client` package (e.g. `import com.apify.client.*;`).
-The snippets also use `com.fasterxml.jackson.databind.JsonNode` (from the Jackson dependency) for
-untyped data, `java.time.Duration` in the configuration examples, and standard JDK types such as
-`java.util.Optional` and `java.util.Map` (`import java.util.*;`).
+The types used above — `PaginationList<T>`, `DatasetListItemsOptions`, and the per-resource clients —
+are documented on the [resource pages](docs/README.md); `ApifyApiException` is covered under
+[Error handling](#error-handling) below.
 
 `ApifyClient.create` takes the token as an explicit argument — it does **not** read `APIFY_TOKEN` (or
 any other environment variable) automatically. Read it yourself if you want that, e.g.
@@ -153,9 +186,12 @@ try {
 
 ## Versioning
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.1.3`).
+The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
+constants:
+
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.3.0`).
 - `Version.API_SPEC_VERSION` — the Apify OpenAPI specification version this client was verified
-  against (`v2-2026-07-08T143931Z`).
+  against (`v2-2026-07-10T105921Z`).
 
 Changes to the public interface other than additive ones are considered breaking changes and follow
 [Semantic Versioning](https://semver.org/).
@@ -194,7 +230,7 @@ Full documentation is in the [`docs/`](docs/README.md) directory, organized by r
 - [Schedules](docs/schedules.md)
 - [Webhooks & dispatches](docs/webhooks.md)
 - [Store, users & logs](docs/misc.md)
-- [Runnable examples](docs/examples.md)
+- [Examples](docs/examples.md)
 
 ## Resources
 

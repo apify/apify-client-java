@@ -53,4 +53,19 @@ class ActorRunIntegrationTest extends IntegrationBase {
     assertTrue(byOrigin.isPresent());
     assertEquals("SUCCEEDED", byOrigin.get().getStatus());
   }
+
+  @Test
+  void streamedLogRedirection() {
+    ApifyClient client = requireClient();
+    ActorRun run = client.actor("apify/hello-world").start(null, new ActorStartOptions());
+    com.apify.client.RunClient runClient = client.run(run.getId());
+
+    java.util.List<String> collected = new java.util.concurrent.CopyOnWriteArrayList<>();
+    try (com.apify.client.StreamedLog streamedLog =
+        runClient.getStreamedLog(new com.apify.client.StreamedLogOptions().toLog(collected::add))) {
+      streamedLog.start();
+      runClient.waitForFinish(120L);
+    }
+    assertTrue(!collected.isEmpty(), "expected redirected log messages");
+  }
 }

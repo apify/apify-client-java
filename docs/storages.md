@@ -1,5 +1,9 @@
 # Storages: datasets, key-value stores, request queues
 
+> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
+> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
+> in production and report issues on the repository.
+
 The three storage types share a consistent shape: a collection client (`list`, `getOrCreate`) and a
 single-resource client (`get`, `update`, `delete`, plus storage-specific operations). Run-nested
 default storages are reachable via `client.run(id).dataset()` / `.keyValueStore()` /
@@ -24,6 +28,7 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | Method | Description |
 |---|---|
 | `list(StorageListOptions)` | List datasets. Returns `PaginationList<Dataset>`. |
+| `iterate(StorageListOptions, Long chunkSize)` | Lazy `Iterator<Dataset>` over all datasets; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `getOrCreate(String name)` | Get or create a named dataset (empty name → unnamed). Returns `Dataset`. |
 | `getOrCreate(String name, Object schema)` | As above, sending a creation-time dataset `schema` when a new dataset is created. Returns `Dataset`. |
 
@@ -36,10 +41,22 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listItems(DatasetListItemsOptions)` | List items as `PaginationList<JsonNode>`. |
 | `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. Returns `PaginationList<T>`. |
-| `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes (JSON/JSONL/CSV/XLSX/XML/RSS/HTML). |
-| `pushItems(Object)` | Push a single item or a list of items. |
+| `iterateItems(DatasetListItemsOptions)` / `iterateItems(DatasetListItemsOptions, Long chunkSize)` | Lazy `Iterator<JsonNode>` over all items; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), the optional `chunkSize` sets the per-request page size (omitted/`null` = server default). |
+| `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Iterator<T>`. For typed iteration at the server-default page size, pass a `null` chunk size: `iterateItems(opts, null, T.class)`. |
+| `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes. `DownloadItemsFormat` is one of `JSON`, `JSONL`, `CSV`, `XLSX`, `XML`, `RSS`, `HTML`. |
+| `pushItems(Object)` | Push a single item or a list of items. No return value. |
 | `getStatistics()` | Dataset statistics. Returns `Optional<JsonNode>`. |
 | `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL. |
+
+> **Server-side item filters and iteration.** The dataset-items endpoint applies `offset`/`limit` to
+> the raw items and then drops those removed by a server-side filter (`skipEmpty`, `skipHidden`,
+> `clean`, `simplified`), so a page can contain fewer items than requested. Because `iterateItems`
+> advances the offset by the number of items actually returned, combining it with those filters over a
+> multi-page dataset has two failure modes: page windows can overlap and **repeat items**, and — more
+> severely — if an entire offset window is filtered out the endpoint returns an empty page, which the
+> iterator treats as the end, so iteration **stops early and silently skips the remaining data** (an
+> all-filtered first page yields nothing at all). Prefer paging without server-side item filters when
+> iterating, or fetch pages explicitly with `listItems` and filter client-side.
 
 ```java
 Dataset ds = client.datasets().getOrCreate("my-dataset");
@@ -48,12 +65,18 @@ PaginationList<JsonNode> page = client.dataset(ds.getId()).listItems(new Dataset
 byte[] csv = client.dataset(ds.getId()).downloadItems(DownloadItemsFormat.CSV, new DatasetDownloadOptions().bom(true));
 ```
 
-`DatasetListItemsOptions` fields: `offset`, `limit`, `desc`, `fields`, `outputFields`, `omit`,
-`skipEmpty`, `skipHidden`, `clean`, `unwind`, `flatten`, `view`, `simplified`, `skipFailedPages`,
-`signature`. `fields` selects which source fields to include; `outputFields` positionally *renames*
-the fields chosen by `fields` in the output (the i-th name renames the i-th `fields` entry), so it
-only makes sense together with `fields`. `downloadItems(...)` returns `byte[]` (the serialized
-export). `DatasetDownloadOptions` wraps a `DatasetListItemsOptions` (`items(...)`) and adds
+`DatasetListItemsOptions` fields: `offset` (number of items to skip), `limit` (maximum number of
+items to return), `desc` (return items newest-first), `fields` (restrict the output to these source
+fields), `outputFields` (positionally *renames* the fields chosen by `fields` in the output — the
+i-th name renames the i-th `fields` entry, so it only makes sense together with `fields`), `omit`
+(exclude these fields from the output), `skipEmpty` (skip empty items), `skipHidden` (skip hidden
+fields, i.e. those starting with `#`), `clean` (return only clean — non-empty, non-hidden — items),
+`unwind` (expand these fields so each array element becomes a separate item), `flatten` (flatten
+these nested fields into dot-notation keys), `view` (select a predefined dataset view for field
+selection), `simplified` (return simplified — flattened and cleaned — items), `skipFailedPages`
+(skip items that come from failed pages), `signature` (a pre-shared URL signature granting access
+without an API token). `downloadItems(...)` returns `byte[]` (the serialized export).
+`DatasetDownloadOptions` wraps a `DatasetListItemsOptions` (`items(...)`) and adds
 `attachment`, `bom`, `delimiter`, `skipHeaderRow`, `xmlRoot`, `xmlRow`, `feedTitle`,
 `feedDescription`.
 
@@ -74,8 +97,9 @@ unsigned.
 
 ### `KeyValueStoreCollectionClient` — `client.keyValueStores()`
 
-`list(StorageListOptions)`, `getOrCreate(String)`, and `getOrCreate(String, Object schema)` (the
-latter sends a creation-time store `schema`), as for datasets.
+`list(StorageListOptions)`, `iterate(StorageListOptions, Long chunkSize)`, `getOrCreate(String)`, and
+`getOrCreate(String, Object schema)` (the latter sends a creation-time store `schema`), as for
+datasets.
 
 ### `KeyValueStoreClient` — `client.keyValueStore(id)`
 
@@ -83,12 +107,13 @@ latter sends a creation-time store `schema`), as for datasets.
 |---|---|
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
 | `listKeys(ListKeysOptions)` | List keys. Returns `KeyValueStoreKeysPage`. |
+| `iterateKeys(ListKeysOptions)` / `iterateKeys(ListKeysOptions, Long chunkSize)` | Lazy `Iterator<KeyValueStoreKey>` over all keys, paging with the cursor (`exclusiveStartKey`). Note: here the options' `limit` caps the **total** number of keys yielded (`null`/unset or non-positive = all), whereas for `listKeys`/`createKeysPublicUrl` the same `ListKeysOptions.limit` is a single-request page size. `chunkSize` sets the per-request page size (`null` = server default). |
 | `recordExists(String key)` | Whether a record exists. |
 | `getRecord(String key)` / `getRecord(String key, GetRecordOptions)` | Fetch a record. Returns `Optional<KeyValueStoreRecord>`. |
-| `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. |
-| `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`timeoutSecs`, `doNotRetryTimeouts`). |
-| `setRecordJson(String key, Object value)` | Store JSON. |
-| `deleteRecord(String key)` | Delete a record. |
+| `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. No return value. |
+| `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`timeoutSecs`, `doNotRetryTimeouts`). No return value. |
+| `setRecordJson(String key, Object value)` | Store JSON. No return value. |
+| `deleteRecord(String key)` | Delete a record. No return value. |
 | `getRecordPublicUrl(String key)` | A public (optionally signed) record URL. |
 | `createKeysPublicUrl(Long expiresInSecs)` | A public (optionally signed) key-list URL. |
 | `createKeysPublicUrl(ListKeysOptions, Long expiresInSecs)` | As above, forwarding key-listing filters (`limit`, `prefix`, `collection`, `exclusiveStartKey`). |
@@ -117,7 +142,8 @@ expiry-aware storage-content signature — hence only `createKeysPublicUrl` take
 
 ### `RequestQueueCollectionClient` — `client.requestQueues()`
 
-`list(StorageListOptions)` and `getOrCreate(String)`, as for datasets.
+`list(StorageListOptions)`, `iterate(StorageListOptions, Long chunkSize)`, and `getOrCreate(String)`,
+as for datasets.
 
 ### `RequestQueueClient` — `client.requestQueue(id)`
 
@@ -138,7 +164,12 @@ expiry-aware storage-content signature — hence only `createKeysPublicUrl` take
 | `prolongRequestLock(String id, long lockSecs, boolean forefront)` | Extend a lock. Returns `JsonNode`. |
 | `deleteRequestLock(String id, boolean forefront)` | Release a lock. No return value. |
 | `unlockRequests()` | Release all the client's locks. Returns `JsonNode`. |
-| `paginateRequests(Long pageLimit)` | A lazy `Iterator<RequestQueueRequest>` over all requests. |
+| `paginateRequests(Long pageLimit)` | A lazy `Iterator<RequestQueueRequest>` over all requests, paging with the queue's forward cursor. |
+
+> **Naming exception.** Request-queue *requests* are iterated with `paginateRequests(Long pageLimit)`
+> — not an `iterate(...)` method — because the request-queue listing is cursor-based rather than
+> offset/limit. Its single argument is the per-request page size; there is no total-items cap. Every
+> other resource uses the `iterate`/`iterateItems`/`iterateKeys` family.
 
 ```java
 RequestQueue rq = client.requestQueues().getOrCreate("my-queue");

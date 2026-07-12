@@ -1,5 +1,9 @@
 # Webhooks & dispatches
 
+> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
+> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
+> in production and report issues on the repository.
+
 Webhooks notify an external service when specific events occur. Access the collection with
 `client.webhooks()` and a single webhook with `client.webhook(id)`. Dispatches (individual
 invocations) are available account-wide via `client.webhookDispatches()` /
@@ -12,16 +16,17 @@ The account-wide collection supports both listing and creation.
 | Method | Description |
 |---|---|
 | `list(ListOptions)` | List webhooks. Returns `PaginationList<Webhook>`. |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Webhook>` over all webhooks; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). Also available on the read-only nested collections. |
 | `create(Object)` | Create a webhook. Returns `Webhook`. |
 
 ### Nested webhook collections (read-only)
 
 `client.actor(id).webhooks()` and `client.task(id).webhooks()` return a
-`NestedWebhookCollectionClient`. The Apify API only supports **listing** webhooks on those nested
-paths (`GET /v2/acts/{id}/webhooks`, `GET /v2/actor-tasks/{id}/webhooks`), so this read-only type
-exposes `list(ListOptions)` only — it has no `create(...)`. To create a webhook targeting a specific
-Actor or task, use `client.webhooks().create(...)` and set the Actor/task in the webhook's
-`condition`.
+`NestedWebhookCollectionClient`. The Apify API only supports **reading** webhooks on those nested
+paths (`GET /v2/actors/{id}/webhooks`, `GET /v2/actor-tasks/{id}/webhooks`), so this read-only type
+exposes `list(ListOptions)` and `iterate(ListOptions, Long chunkSize)` — it has no `create(...)`. To
+create a webhook targeting a specific Actor or task, use `client.webhooks().create(...)` and set the
+Actor/task in the webhook's `condition`.
 
 A webhook definition supplies `eventTypes` (a list of event-type strings such as
 `ACTOR.RUN.SUCCEEDED`, `ACTOR.RUN.FAILED`, `ACTOR.RUN.ABORTED`, `ACTOR.RUN.TIMED_OUT`,
@@ -56,6 +61,7 @@ System.out.println(dispatch.getId());
 | Method | Description |
 |---|---|
 | `webhookDispatches().list(ListOptions)` | List dispatches. Returns `PaginationList<WebhookDispatch>`. |
+| `webhookDispatches().iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<WebhookDispatch>` over all dispatches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `webhookDispatch(id).get()` | Fetch a dispatch. Returns `Optional<WebhookDispatch>`. |
 
 `WebhookDispatch` fields: `getId()`, `getWebhookId()`.

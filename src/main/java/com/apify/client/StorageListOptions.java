@@ -18,7 +18,11 @@ public final class StorageListOptions {
     return this;
   }
 
-  /** Maximum number of items to return. */
+  /**
+   * Maximum number of items to return. Sent verbatim by {@code list(...)} (so {@code 0} returns
+   * zero items); in {@code iterate(...)} a non-positive/zero {@code limit} means "no cap" (all
+   * items).
+   */
   public StorageListOptions limit(Long limit) {
     this.limit = limit;
     return this;
@@ -42,11 +46,23 @@ public final class StorageListOptions {
     return this;
   }
 
+  Long offsetValue() {
+    return offset;
+  }
+
+  Long limitValue() {
+    return limit;
+  }
+
   void apply(QueryParams q) {
-    q.addLong("offset", offset)
-        .addLong("limit", limit)
-        .addBool("desc", desc)
-        .addBool("unnamed", unnamed)
-        .addString("ownership", ownership);
+    q.addLong("offset", offset).addLong("limit", limit);
+    applyFilters(q);
+  }
+
+  /**
+   * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
+   */
+  void applyFilters(QueryParams q) {
+    q.addBool("desc", desc).addBool("unnamed", unnamed).addString("ownership", ownership);
   }
 }

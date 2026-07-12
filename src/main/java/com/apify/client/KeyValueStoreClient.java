@@ -1,5 +1,8 @@
 package com.apify.client;
 
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 /** A client for a specific key-value store (and run-nested variants). */
@@ -51,6 +54,105 @@ public final class KeyValueStoreClient {
     QueryParams params = new QueryParams();
     options.apply(params);
     return ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class);
+  }
+
+  /**
+   * Returns a lazy iterator over this store's keys, fetching pages on demand via the cursor-based
+   * ({@code exclusiveStartKey}) listing endpoint. The options' {@code limit} caps the total number
+   * of keys yielded ({@code null} or non-positive = all); any {@code exclusiveStartKey} sets the
+   * starting point. The per-request page size is left to the server (bounded by any {@code limit}
+   * cap); use {@link #iterateKeys(ListKeysOptions, Long)} to set it explicitly.
+   */
+  public Iterator<KeyValueStoreKey> iterateKeys(ListKeysOptions options) {
+    return iterateKeys(options, null);
+  }
+
+  /**
+   * As {@link #iterateKeys(ListKeysOptions)}, but {@code chunkSize} sets the per-request page size
+   * ({@code null} = server default). Provided for consistency with the collection {@code iterate}
+   * helpers; key listing is cursor-based, so the options' {@code limit} remains a total-items cap.
+   */
+  public Iterator<KeyValueStoreKey> iterateKeys(ListKeysOptions options, Long chunkSize) {
+    return new KeysIterator(options != null ? options : new ListKeysOptions(), chunkSize);
+  }
+
+  /**
+   * Lazily iterates over a store's keys via the cursor-based ({@code exclusiveStartKey}) listing.
+   */
+  private final class KeysIterator implements Iterator<KeyValueStoreKey> {
+    private final Long chunkSize;
+    private final QueryParams filters;
+    private List<KeyValueStoreKey> buffer = List.of();
+    private int pos;
+    private String cursor;
+    private Long remaining;
+    private boolean exhausted;
+
+    KeysIterator(ListKeysOptions options, Long chunkSize) {
+      this.chunkSize = chunkSize != null && chunkSize > 0 ? chunkSize : null;
+      this.cursor = options.exclusiveStartKeyValue();
+      Long limit = options.limitValue();
+      this.remaining = limit != null && limit > 0 ? limit : null;
+      // Snapshot the filters once so mutating the options mid-iteration cannot leak into later
+      // pages.
+      this.filters = new QueryParams();
+      options.applyFilters(this.filters);
+    }
+
+    @Override
+    public boolean hasNext() {
+      while (pos >= buffer.size()) {
+        if (exhausted) {
+          return false;
+        }
+        fetchPage();
+      }
+      return true;
+    }
+
+    @Override
+    public KeyValueStoreKey next() {
+      if (!hasNext()) {
+        throw new NoSuchElementException();
+      }
+      return buffer.get(pos++);
+    }
+
+    private void fetchPage() {
+      QueryParams params = new QueryParams();
+      // Request the smaller of the remaining cap and the page size, so the last page never
+      // overshoots the caller's total cap; a null limit lets the server choose its default page.
+      Long pageLimit = remaining;
+      if (chunkSize != null && (pageLimit == null || chunkSize < pageLimit)) {
+        pageLimit = chunkSize;
+      }
+      params.addLong("limit", pageLimit);
+      params.addString("exclusiveStartKey", cursor);
+      params.extend(filters);
+      KeyValueStoreKeysPage page =
+          ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class);
+      buffer = page.getItems();
+      pos = 0;
+      cursor = page.getNextExclusiveStartKey();
+      boolean truncated = page.isTruncated();
+      if (remaining != null) {
+        // Defensively trim the last page to the cap in case the server returned more than
+        // requested.
+        if (buffer.size() > remaining) {
+          buffer = buffer.subList(0, remaining.intValue());
+        }
+        remaining -= buffer.size();
+      }
+      // Stop when the API reports the listing is not truncated (no more keys), there is no next
+      // cursor, the page is empty, or the total cap is reached.
+      if (!truncated
+          || cursor == null
+          || cursor.isEmpty()
+          || buffer.isEmpty()
+          || (remaining != null && remaining <= 0)) {
+        exhausted = true;
+      }
+    }
   }
 
   /** Reports whether a record with the given key exists. */

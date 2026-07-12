@@ -8,7 +8,7 @@ This directory documents the public API of the Apify Java client, organized by r
 lists the available methods with their parameters and short snippets. The snippets are code
 fragments that assume a configured `client` and the imports listed below, not standalone `main`
 programs; for complete, runnable programs see [examples.md](examples.md) and
-[`src/test/java/com/apify/client/examples/`](../src/test/java/com/apify/client/examples). For an
+[`src/test/java/com/apify/client/examples/`](https://github.com/apify/apify-client-java/tree/master/src/test/java/com/apify/client/examples). For an
 overview, configuration, error handling and the full resource table, see the
 [top-level README](../README.md).
 
@@ -32,8 +32,9 @@ empty `Optional` rather than an exception. API failures are thrown as `ApifyApiE
 ## Imports and dependencies
 
 Snippets in these docs assume the client types are imported from `com.apify.client` (e.g.
-`import com.apify.client.*;`) plus standard-library types (`java.util.List`, `java.util.Map`,
-`java.util.Optional`, `java.util.Iterator`, `java.time.Duration`, `java.io.InputStream`).
+`import com.apify.client.*;`) plus standard-library types (`java.util.List`, `java.util.ArrayList`,
+`java.util.Map`, `java.util.Optional`, `java.util.Iterator`, `java.util.function.Consumer`,
+`java.time.Duration`, `java.io.InputStream`).
 
 Raw-JSON return values use Jackson's `com.fasterxml.jackson.databind.JsonNode`. Jackson is a
 transitive dependency of this client, so it is already on your classpath.
@@ -44,9 +45,9 @@ A few methods return data whose shape is not modelled by this client and is inst
 Jackson `JsonNode` (or accept an arbitrary `Object` serialized to JSON):
 
 - Read: `me().monthlyUsage(...)`, `me().limits()`, `task(id).getInput()`,
-  `build(id).getOpenApiDefinition()`, `dataset(id).getStatistics()`, and the raw request-queue
-  operations (`listRequests`, `listAndLockHead`, `prolongRequestLock`, `unlockRequests`,
-  `batchDeleteRequests`).
+  `build(id).getOpenApiDefinition()`, `dataset(id).getStatistics()` (returned as
+  `Optional<JsonNode>`), and the raw request-queue operations (`listRequests`, `listAndLockHead`,
+  `prolongRequestLock`, `unlockRequests`, `batchDeleteRequests`).
 - Write: `task(id).updateInput(...)` and `me().updateLimits(...)` accept an arbitrary
   JSON-serializable value, as do definition/`update`/`create` arguments generally — a `Map`, a
   `JsonNode`, or your own POJO.
@@ -84,8 +85,9 @@ PaginationList<Actor> page = client.actors().list(options);
 
 ## Common list options — `ListOptions`
 
-Most `list` methods (builds, runs, tasks, schedules, webhooks, Actor versions) take the shared
-`ListOptions`, which carries the standard pagination/ordering controls.
+Most `list` methods (builds, tasks, schedules, webhooks, Actor versions) take the shared
+`ListOptions`, which carries the standard pagination/ordering controls. Runs additionally take a
+`RunListOptions` status filter — `runs().list(ListOptions, RunListOptions)`; see [Runs](runs.md).
 
 | Method | Type | Meaning |
 |---|---|---|
@@ -103,6 +105,21 @@ PaginationList<Build> builds = client.builds().list(new ListOptions().limit(50L)
 `getCount()`, `isDesc()` and `getItems()`. Within-storage listers (`listKeys`, `listHead`) return
 their own page/head containers instead.
 
+## Iteration — `iterate` / `iterateItems` / `iterateKeys`
+
+Each paginated collection also offers a lazy `Iterator` that fetches pages on demand: `iterate(...)`
+on the collection clients, `DatasetClient.iterateItems(...)`, and `KeyValueStoreClient.iterateKeys(...)`
+(request-queue requests use `RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the
+**total** number of items yielded; `null`/unset — or a non-positive value such as `0` — means no cap,
+so every item is yielded. (This differs from `list(...)`, which sends `limit=0` to the server
+verbatim rather than treating it as unbounded — the iteration behavior matches the reference JS
+client.) The per-request page size is an optional
+trailing `chunkSize` argument: the per-resource tables below show the `chunkSize` form, and each
+iterator also has an overload that omits it (using the server's default page size). The page size
+does not change which items a collection iterator yields; note the one exception in
+[Storages](storages.md) — `iterateItems` combined with server-side item filters, where the page size
+can affect the result.
+
 ## Resource pages
 
 - [Actors, versions & environment variables](actors.md)
@@ -113,4 +130,4 @@ their own page/head containers instead.
 - [Schedules](schedules.md)
 - [Webhooks & dispatches](webhooks.md)
 - [Store, users & logs](misc.md)
-- [Runnable examples](examples.md)
+- [Examples](examples.md)

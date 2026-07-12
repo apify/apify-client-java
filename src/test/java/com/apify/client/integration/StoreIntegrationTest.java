@@ -20,7 +20,7 @@ class StoreIntegrationTest extends IntegrationBase {
   @Test
   void iterateStore() {
     ApifyClient client = requireClient();
-    Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().limit(5L));
+    Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().limit(20L), 5L);
     int count = 0;
     while (count < 12 && it.hasNext()) {
       ActorStoreListItem item = it.next();
