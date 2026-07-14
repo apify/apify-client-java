@@ -189,9 +189,9 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.3.0`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.3.1`).
 - `Version.API_SPEC_VERSION` — the Apify OpenAPI specification version this client was verified
-  against (`v2-2026-07-10T105921Z`).
+  against (`v2-2026-07-13T092445Z`).
 
 Changes to the public interface other than additive ones are considered breaking changes and follow
 [Semantic Versioning](https://semver.org/).

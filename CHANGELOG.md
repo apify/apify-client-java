@@ -5,6 +5,17 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-07-14
+
+### Changed
+
+- Verified the client against OpenAPI specification version `v2-2026-07-13T092445Z` and bumped
+  `Version.API_SPEC_VERSION`. The spec change only added already-handled error responses (`402`
+  Payment Required on actor and run-resurrect run-sync endpoints, `408` Request Timeout on the
+  task run-sync endpoint) and relaxed `required` constraints on run/build/key-value-store/webhook
+  stats counters; both are already covered by the client's generic status-code error handling and
+  its forward-compatible model deserialization, so no interface or behavior change was needed.
+
 ## [0.3.0] - 2026-07-11
 
 ### Added
