@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.3.0</version>
+  <version>0.3.1</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.3.0'
+  implementation 'com.apify:apify-client:0.3.1'
 }
 ```
 
@@ -57,7 +57,7 @@ A complete, copy-pasteable first program (save as `HelloApify.java`). First scaf
     <dependency>
       <groupId>com.apify</groupId>
       <artifactId>apify-client</artifactId>
-      <version>0.3.0</version>
+      <version>0.3.1</version>
     </dependency>
   </dependencies>
 </project>
