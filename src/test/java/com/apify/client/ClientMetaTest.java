@@ -2,8 +2,12 @@ package com.apify.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 import org.junit.jupiter.api.Test;
 
 /** Offline tests for version constants, User-Agent formatting, and base-URL resolution. */
@@ -14,6 +18,33 @@ class ClientMetaTest {
     assertTrue(Character.isDigit(Version.CLIENT_VERSION.charAt(0)), Version.CLIENT_VERSION);
     assertTrue(Version.API_SPEC_VERSION.startsWith("v2-"), Version.API_SPEC_VERSION);
     assertTrue(Version.API_SPEC_VERSION.endsWith("Z"), Version.API_SPEC_VERSION);
+  }
+
+  @Test
+  void clientVersionMatchesBuildVersion() throws IOException {
+    // The Maven <version> in pom.xml and Version.CLIENT_VERSION must be bumped in lockstep on every
+    // release. Nothing else fails the build if they diverge, and version-bump PRs are exactly where
+    // that slips through, so this test compares Version.CLIENT_VERSION against the built
+    // project.version (substituted into a filtered resource during the build). Hermetic: reads a
+    // classpath resource, no network.
+    Properties props = new Properties();
+    try (InputStream in =
+        ClientMetaTest.class.getResourceAsStream("/apify-client-build.properties")) {
+      assertNotNull(
+          in,
+          "apify-client-build.properties missing from the test classpath; check the pom's filtered"
+              + " testResource");
+      props.load(in);
+    }
+    String buildVersion = props.getProperty("project.version");
+    assertNotNull(buildVersion, "project.version not present in apify-client-build.properties");
+    assertFalse(
+        buildVersion.contains("${"),
+        "project.version was not filtered (still a Maven placeholder): " + buildVersion);
+    assertEquals(
+        buildVersion,
+        Version.CLIENT_VERSION,
+        "pom.xml <version> and Version.CLIENT_VERSION must match; bump them together");
   }
 
   @Test

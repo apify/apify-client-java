@@ -105,6 +105,20 @@
     </dependencies>
 
     <build>
+        <!-- Filter apify-client-build.properties so ${project.version} is substituted at build
+             time. The version-drift test reads the filtered value and asserts it equals
+             Version.CLIENT_VERSION, guarding against pom.xml and the constant drifting apart on a
+             release bump. Kept in a dedicated directory so filtering never touches other resources. -->
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+            </testResource>
+            <testResource>
+                <directory>src/test/resources-filtered</directory>
+                <filtering>true</filtering>
+            </testResource>
+        </testResources>
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
