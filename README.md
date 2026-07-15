@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.3.0</version>
+  <version>0.3.1</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.3.0'
+  implementation 'com.apify:apify-client:0.3.1'
 }
 ```
 
@@ -57,7 +57,7 @@ A complete, copy-pasteable first program (save as `HelloApify.java`). First scaf
     <dependency>
       <groupId>com.apify</groupId>
       <artifactId>apify-client</artifactId>
-      <version>0.3.0</version>
+      <version>0.3.1</version>
     </dependency>
   </dependencies>
 </project>
@@ -189,9 +189,9 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.3.0`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.3.1`).
 - `Version.API_SPEC_VERSION` — the Apify OpenAPI specification version this client was verified
-  against (`v2-2026-07-10T105921Z`).
+  against (`v2-2026-07-13T092445Z`).
 
 Changes to the public interface other than additive ones are considered breaking changes and follow
 [Semantic Versioning](https://semver.org/).

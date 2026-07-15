@@ -26,10 +26,10 @@ System.out.println("Items in this page: " + items.getCount());
 ```java
 // Named storages persist on your account; each block deletes its storage in a finally so the
 // example does not leak them. A unique suffix keeps the names from colliding across parallel runs.
-String suffix = "-" + System.currentTimeMillis();
+String suffix = Long.toString(System.currentTimeMillis());
 
 // Dataset: create, push items, read them back.
-Dataset dataset = client.datasets().getOrCreate("example-ds" + suffix);
+Dataset dataset = client.datasets().getOrCreate("java-example-ds-" + suffix);
 try {
   client.dataset(dataset.getId()).pushItems(List.of(Map.of("hello", "world")));
   PaginationList<JsonNode> items = client.dataset(dataset.getId()).listItems(new DatasetListItemsOptions());
@@ -39,7 +39,7 @@ try {
 }
 
 // Key-value store: create, set a record, read it back.
-KeyValueStore store = client.keyValueStores().getOrCreate("example-kvs" + suffix);
+KeyValueStore store = client.keyValueStores().getOrCreate("java-example-kvs-" + suffix);
 try {
   client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42));
   Optional<KeyValueStoreRecord> record = client.keyValueStore(store.getId()).getRecord("OUTPUT");
@@ -49,7 +49,7 @@ try {
 }
 
 // Request queue: create, add a request, read the head.
-RequestQueue queue = client.requestQueues().getOrCreate("example-rq" + suffix);
+RequestQueue queue = client.requestQueues().getOrCreate("java-example-rq-" + suffix);
 try {
   client.requestQueue(queue.getId()).addRequest(new RequestQueueRequest("https://example.com", "example"), false);
   RequestQueueHead head = client.requestQueue(queue.getId()).listHead(10L);
@@ -63,7 +63,12 @@ try {
 
 ```java
 Optional<User> user = client.me().get();
-user.ifPresent(u -> System.out.println("Account " + u.getId() + " / " + u.getUsername()));
+user.ifPresent(u -> {
+  System.out.println("Account ID: " + u.getId());
+  System.out.println("Username:   " + u.getUsername());
+  // Fields not modelled on User (email, plan, ...) live in the untyped extras map.
+  System.out.println("Email:      " + u.getExtra().get("email"));
+});
 ```
 
 ## Create a new Actor, build it, run it, wait, and print the finished run log
@@ -108,10 +113,11 @@ if (last.isPresent()) {
 
 ```java
 Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().limit(10L), 10L);
-int shown = 0;
-while (shown < 5 && it.hasNext()) {
-  System.out.println(it.next().getName());
-  shown++;
+int count = 0;
+while (count < 5 && it.hasNext()) {
+  ActorStoreListItem item = it.next();
+  System.out.println((count + 1) + ". " + item.getUsername() + "/" + item.getName());
+  count++;
 }
 ```
 
