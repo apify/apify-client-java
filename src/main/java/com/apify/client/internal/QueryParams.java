@@ -11,14 +11,17 @@ import java.util.List;
  */
 public final class QueryParams {
 
-  private final List<String[]> pairs = new ArrayList<>();
+  private final List<Pair> pairs = new ArrayList<>();
 
   public QueryParams() {}
+
+  /** A single already-encoded (not yet URL-escaped) query parameter key/value pair. */
+  private record Pair(String key, String value) {}
 
   /** Adds a string parameter if the value is non-null. */
   public QueryParams addString(String key, String value) {
     if (value != null) {
-      pairs.add(new String[] {key, value});
+      pairs.add(new Pair(key, value));
     }
     return this;
   }
@@ -26,7 +29,7 @@ public final class QueryParams {
   /** Adds an integer parameter if the value is non-null. */
   public QueryParams addLong(String key, Long value) {
     if (value != null) {
-      pairs.add(new String[] {key, Long.toString(value)});
+      pairs.add(new Pair(key, Long.toString(value)));
     }
     return this;
   }
@@ -34,7 +37,7 @@ public final class QueryParams {
   /** Adds a floating-point parameter if the value is non-null. */
   public QueryParams addDouble(String key, Double value) {
     if (value != null) {
-      pairs.add(new String[] {key, Double.toString(value)});
+      pairs.add(new Pair(key, Double.toString(value)));
     }
     return this;
   }
@@ -42,7 +45,7 @@ public final class QueryParams {
   /** Adds a boolean parameter, encoded as {@code 1}/{@code 0}, if the value is non-null. */
   public QueryParams addBool(String key, Boolean value) {
     if (value != null) {
-      pairs.add(new String[] {key, value ? "1" : "0"});
+      pairs.add(new Pair(key, value ? "1" : "0"));
     }
     return this;
   }
@@ -50,14 +53,14 @@ public final class QueryParams {
   /** Adds a comma-joined list parameter if the list is non-null and non-empty. */
   public QueryParams addCsv(String key, List<String> values) {
     if (values != null && !values.isEmpty()) {
-      pairs.add(new String[] {key, String.join(",", values)});
+      pairs.add(new Pair(key, String.join(",", values)));
     }
     return this;
   }
 
   /** Appends an already-stringified key/value pair unconditionally. */
   public QueryParams addRaw(String key, String value) {
-    pairs.add(new String[] {key, value});
+    pairs.add(new Pair(key, value));
     return this;
   }
 
@@ -90,8 +93,8 @@ public final class QueryParams {
       if (i > 0) {
         b.append('&');
       }
-      String[] p = pairs.get(i);
-      b.append(encode(p[0])).append('=').append(encode(p[1]));
+      Pair p = pairs.get(i);
+      b.append(encode(p.key())).append('=').append(encode(p.value()));
     }
     String sep = rawUrl.contains("?") ? "&" : "?";
     return rawUrl + sep + b;

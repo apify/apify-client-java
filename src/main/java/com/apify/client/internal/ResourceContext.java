@@ -46,6 +46,16 @@ public final class ResourceContext {
 
   private static final int NOT_FOUND = 404;
 
+  /** API error type for a resource that does not exist. */
+  private static final String ERROR_TYPE_RECORD_NOT_FOUND = "record-not-found";
+
+  /**
+   * API error type for a resource that does not exist, or exists but the caller's token cannot see
+   * it (the API deliberately does not distinguish the two, to avoid leaking existence to an
+   * unauthorized caller).
+   */
+  private static final String ERROR_TYPE_RECORD_OR_TOKEN_NOT_FOUND = "record-or-token-not-found";
+
   public final HttpClientCore http;
 
   /** Fully-qualified base URL of the resource, e.g. {@code https://api.apify.com/v2/actors/ID}. */
@@ -455,8 +465,8 @@ public final class ResourceContext {
       return false;
     }
     String type = e.getType();
-    return "record-not-found".equals(type)
-        || "record-or-token-not-found".equals(type)
+    return ERROR_TYPE_RECORD_NOT_FOUND.equals(type)
+        || ERROR_TYPE_RECORD_OR_TOKEN_NOT_FOUND.equals(type)
         || "HEAD".equals(e.getHttpMethod());
   }
 

@@ -4,6 +4,7 @@ import com.apify.client.http.ApiResponse;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.Extras;
 import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.HttpHeaders;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
@@ -191,7 +192,7 @@ public final class KeyValueStoreClient {
     if (resp == null) {
       return Optional.empty();
     }
-    String contentType = resp.headers.firstValue("Content-Type").orElse(null);
+    String contentType = resp.headers.firstValue(HttpHeaders.CONTENT_TYPE).orElse(null);
     return Optional.of(new KeyValueStoreRecord(key, resp.body, contentType));
   }
 

@@ -1,9 +1,8 @@
 package com.apify.client.run;
 
-/**
- * Configures {@code com.apify.client.ApifyClient#setStatusMessage(String,
- * SetStatusMessageOptions)}.
- */
+import com.apify.client.ApifyClient;
+
+/** Configures {@link ApifyClient#setStatusMessage(String, SetStatusMessageOptions)}. */
 public final class SetStatusMessageOptions {
 
   private Boolean statusMessageTerminal;

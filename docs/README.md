@@ -36,15 +36,15 @@ option types, so import each resource you use from its own package:
 |---|---|
 | `com.apify.client` (root) | `ApifyClient`, `ApifyClientBuilder`, `Version`, `PaginationList<T>`, `ListOptions`, `StorageListOptions`, `ApifyResource` |
 | `com.apify.client.http` | `ApifyClientException`, `ApifyApiException`, `ApifyTransportException`, `HttpTransport`, `DefaultHttpTransport`, `HttpTimeoutException` |
-| `com.apify.client.actor` | `Actor`, `ActorClient`, `ActorListOptions`, `ActorStartOptions`, `ActorBuildOptions`, `ActorVersion`, `ActorEnvVar`, ... |
+| `com.apify.client.actor` | `Actor`, `ActorClient`, `ActorCollectionClient`, `ActorListOptions`, `ActorStartOptions`, `ActorCallOptions`, `ActorBuildOptions`, `ActorStandby`, `ActorVersion`, `ActorVersionClient`, `ActorVersionCollectionClient`, `ActorEnvVar`, `ActorEnvVarClient`, `ActorEnvVarCollectionClient` |
 | `com.apify.client.build` | `Build`, `BuildClient`, `BuildCollectionClient` |
-| `com.apify.client.run` | `ActorRun`, `RunClient`, `RunListOptions`, `LastRunOptions`, `MetamorphOptions`, `RunChargeOptions`, `RunResurrectOptions`, `SetStatusMessageOptions` |
-| `com.apify.client.dataset` | `Dataset`, `DatasetClient`, `DatasetListItemsOptions`, `DatasetDownloadOptions` |
-| `com.apify.client.keyvalue` | `KeyValueStore`, `KeyValueStoreClient`, `KeyValueStoreRecord`, `GetRecordOptions`, `SetRecordOptions`, `ListKeysOptions` |
-| `com.apify.client.requestqueue` | `RequestQueue`, `RequestQueueClient`, `RequestQueueRequest`, `ListRequestsOptions`, `BatchAddRequestsOptions` |
-| `com.apify.client.task` | `Task`, `TaskClient`, `TaskStartOptions`, `ValidateInputOptions` |
-| `com.apify.client.schedule` | `Schedule`, `ScheduleClient` |
-| `com.apify.client.webhook` | `Webhook`, `WebhookClient`, `WebhookDispatch`, `WebhookDispatchClient` |
+| `com.apify.client.run` | `ActorRun`, `ActorRunStats`, `ActorRunOptions`, `ActorRunMeta`, `ActorRunUsage`, `RunClient`, `RunCollectionClient`, `RunListOptions`, `LastRunOptions`, `MetamorphOptions`, `RunChargeOptions`, `RunResurrectOptions`, `SetStatusMessageOptions` |
+| `com.apify.client.dataset` | `Dataset`, `DatasetClient`, `DatasetCollectionClient`, `DatasetListItemsOptions`, `DatasetDownloadOptions` |
+| `com.apify.client.keyvalue` | `KeyValueStore`, `KeyValueStoreClient`, `KeyValueStoreCollectionClient`, `KeyValueStoreRecord`, `KeyValueStoreKeysPage`, `KeyValueStoreKey`, `GetRecordOptions`, `SetRecordOptions`, `ListKeysOptions` |
+| `com.apify.client.requestqueue` | `RequestQueue`, `RequestQueueClient`, `RequestQueueCollectionClient`, `RequestQueueRequest`, `RequestQueueHead`, `LockedRequestQueueHead`, `RequestQueueOperationInfo`, `RequestLockInfo`, `UnlockRequestsResult`, `RequestsList`, `BatchAddResult`, `BatchDeleteResult`, `DeletedRequestInfo`, `ListRequestsOptions`, `BatchAddRequestsOptions` |
+| `com.apify.client.task` | `Task`, `TaskStats`, `TaskOptions`, `TaskClient`, `TaskCollectionClient`, `TaskStartOptions`, `TaskCallOptions`, `ValidateInputOptions` |
+| `com.apify.client.schedule` | `Schedule`, `ScheduleNotifications`, `ScheduleClient`, `ScheduleCollectionClient` |
+| `com.apify.client.webhook` | `Webhook`, `WebhookStats`, `WebhookClient`, `WebhookCollectionClient`, `WebhookDispatchCollectionClient`, `NestedWebhookCollectionClient`, `WebhookDispatch`, `WebhookDispatchClient` |
 | `com.apify.client.user` | `User`, `UserClient` |
 | `com.apify.client.store` | `ActorStoreListItem`, `StoreCollectionClient`, `StoreListOptions` |
 | `com.apify.client.log` | `LogClient`, `LogOptions`, `StreamedLog`, `StreamedLogOptions` |
@@ -53,7 +53,7 @@ For example, the [top-level README's dataset snippet](../README.md#quick-start) 
 `com.apify.client.ApifyClient`, `com.apify.client.PaginationList`,
 `com.apify.client.dataset.DatasetListItemsOptions`, `com.apify.client.run.ActorRun`,
 `com.apify.client.actor.ActorStartOptions` and `com.fasterxml.jackson.databind.JsonNode` — five
-different packages for one six-line snippet.
+different packages for one four-line snippet.
 
 Snippets in these docs also assume the standard-library types they use are imported
 (`java.util.List`, `java.util.ArrayList`, `java.util.Map`, `java.util.Optional`,
@@ -68,36 +68,43 @@ transitive dependency of this client, so it is already on your classpath.
 A few methods return data whose shape is not modelled by this client and is instead exposed as a
 Jackson `JsonNode` (or accept an arbitrary `Object` serialized to JSON):
 
-- Read, returning a required `JsonNode` (never absent): `me().monthlyUsage(...)`, `me().limits()`,
-  and the raw request-queue operations `listRequests`, `listAndLockHead`, `prolongRequestLock`,
-  `unlockRequests`, `batchDeleteRequests`.
+- Read, returning a required `JsonNode` (never absent): `me().monthlyUsage(...)`, `me().limits()`.
 - Read, returning `Optional<JsonNode>` (empty when the underlying resource has none): `dataset(id).getStatistics()`,
   `task(id).getInput()`, `build(id).getOpenApiDefinition()`.
 - Write: `task(id).updateInput(...)` (itself returning a required `JsonNode`, the updated input)
   and `me().updateLimits(...)` accept an arbitrary JSON-serializable value, as do
   definition/`update`/`create` arguments generally — a `Map`, a `JsonNode`, or your own POJO.
+- A few typed models still carry one raw-JSON field where the shape is a discriminated union not
+  worth fully modelling: `RequestQueueRequest.getUserData()`, `Webhook.getCondition()`,
+  `ActorRun.getPricingInfo()`, `Schedule.getActions()` (a `List<JsonNode>`).
 
 Navigate a `JsonNode` with `node.get("field")`, `node.path("a").asText()`, etc.
+
+The request-queue lock/list operations (`listRequests`, `listAndLockHead`, `prolongRequestLock`,
+`unlockRequests`, `batchDeleteRequests`) return typed models (`RequestsList`,
+`LockedRequestQueueHead`, `RequestLockInfo`, `UnlockRequestsResult`, `BatchDeleteResult`) rather
+than raw `JsonNode` — see [Storages](storages.md#request-queues).
+
+## What `ApifyResource` is
+
+`ApifyResource` (root package) is the base class every response model extends (`Actor`, `Dataset`,
+`Schedule`, `ActorRun`, and so on). It has no fields of its own beyond the `extra` map described
+below; it exists purely so every model shares one place to capture unmodelled API fields, and so
+code that only needs the common capability (rare — most call sites use a concrete model type
+directly) can accept `ApifyResource` rather than a specific model.
 
 ## Model fields and unmodeled data (`getExtra`)
 
 Response models expose the commonly-used fields as typed getters. The API returns more fields than
-are modelled; every model also carries a `getExtra()` map (`Map<String, Object>`) holding any field
-not mapped to a typed getter, so nothing the API returns is lost. For example a `Schedule`'s
-`actions`/`isExclusive`, or a `me()` `User`'s private account details (email, plan, proxy settings,
-…), are available via `getExtra()`.
+are modelled; every model also carries a `getExtra()` map (`Map<String, Object>`, inherited from
+`ApifyResource` above) holding any field not mapped to a typed getter, so nothing the API returns is
+lost. For example a `me()` `User`'s private account details (email, plan, proxy settings, …) are
+available via `getExtra()`, since `User` models only its most commonly used fields.
 
 ```java
-Schedule schedule = client.schedule("SCHEDULE_ID").get().orElseThrow();
-Object actions = schedule.getExtra().get("actions");
+User me = client.me().get().orElseThrow();
+Object plan = me.getExtra().get("plan");
 ```
-
-Some models expose only their most commonly used fields as typed getters and leave more of the
-API response in `getExtra()` than others — `Schedule`, `Webhook`, `Task` and `ActorRun` in
-particular currently model a subset of what the API returns (e.g. a `Schedule`'s `title`,
-`timezone`, `notifications`; a `Webhook`'s `condition`, `payloadTemplate`, `stats`; an `ActorRun`'s
-`usage`, `options`, `pricingInfo`). Read those fields via `getExtra()` until a typed getter is
-added; the raw JSON key is unchanged either way.
 
 ## Setting the current run's status message
 

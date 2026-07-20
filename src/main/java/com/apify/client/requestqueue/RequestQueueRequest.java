@@ -25,6 +25,7 @@ public final class RequestQueueRequest extends ApifyResource {
   private Integer retryCount;
   private String loadedUrl;
   private List<String> errorMessages;
+  private Instant lockExpiresAt;
 
   public RequestQueueRequest() {}
 
@@ -155,5 +156,13 @@ public final class RequestQueueRequest extends ApifyResource {
   public RequestQueueRequest setErrorMessages(List<String> errorMessages) {
     this.errorMessages = errorMessages == null ? null : List.copyOf(errorMessages);
     return this;
+  }
+
+  /**
+   * When this request's lock (if any) expires. Only populated on items returned from {@link
+   * RequestQueueClient#listAndLockHead}; {@code null} everywhere else, including on write.
+   */
+  public Instant getLockExpiresAt() {
+    return lockExpiresAt;
   }
 }

@@ -69,6 +69,15 @@ class ScheduleIntegrationTest extends IntegrationBase {
       Schedule updated = schedule.update(Map.of("cronExpression", "0 12 * * *"));
       assertEquals("0 12 * * *", updated.getCronExpression());
       schedule.getLog();
+
+      // Typed getters (previously only reachable via getExtra()): verify the API's response
+      // actually deserializes into them, not just that the code compiles.
+      assertTrue(sch.isExclusive());
+      assertTrue(sch.getTimezone() != null && !sch.getTimezone().isEmpty());
+      assertTrue(sch.getCreatedAt() != null);
+      assertTrue(sch.getModifiedAt() != null);
+      assertTrue(sch.getNotifications() != null);
+      assertTrue(sch.getActions() != null && sch.getActions().isEmpty());
     } finally {
       client.schedule(sch.getId()).delete();
     }

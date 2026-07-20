@@ -1,9 +1,10 @@
 package com.apify.client.actor;
 
+import com.apify.client.internal.ListOptionsLike;
 import com.apify.client.internal.QueryParams;
 
 /** Options for {@link ActorCollectionClient#list(ActorListOptions)}. */
-public final class ActorListOptions {
+public final class ActorListOptions implements ListOptionsLike {
   private Long offset;
   private Long limit;
   private Boolean desc;
@@ -43,15 +44,18 @@ public final class ActorListOptions {
     return this;
   }
 
-  Long offsetValue() {
+  @Override
+  public Long offsetValue() {
     return offset;
   }
 
-  Long limitValue() {
+  @Override
+  public Long limitValue() {
     return limit;
   }
 
-  void apply(QueryParams q) {
+  @Override
+  public void apply(QueryParams q) {
     q.addLong("offset", offset).addLong("limit", limit);
     applyFilters(q);
   }
@@ -59,7 +63,8 @@ public final class ActorListOptions {
   /**
    * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
    */
-  void applyFilters(QueryParams q) {
+  @Override
+  public void applyFilters(QueryParams q) {
     q.addBool("desc", desc).addBool("my", my).addString("sortBy", sortBy);
   }
 }

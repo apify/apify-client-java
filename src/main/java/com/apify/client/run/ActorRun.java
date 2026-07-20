@@ -2,7 +2,10 @@ package com.apify.client.run;
 
 import com.apify.client.ApifyResource;
 import com.apify.client.internal.Statuses;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.Map;
 
 /** A single execution of an Actor. */
 public final class ActorRun extends ApifyResource {
@@ -19,6 +22,14 @@ public final class ActorRun extends ApifyResource {
   private String defaultKeyValueStoreId;
   private String defaultRequestQueueId;
   private String containerUrl;
+  private String generalAccess;
+  private Map<String, Long> chargedEventCounts;
+  private JsonNode pricingInfo;
+  private ActorRunUsage usage;
+  private ActorRunUsage usageUsd;
+  private ActorRunStats stats;
+  private ActorRunOptions options;
+  private ActorRunMeta meta;
 
   /** The unique run ID. */
   public String getId() {
@@ -87,6 +98,55 @@ public final class ActorRun extends ApifyResource {
   /** The URL of the run's container (for live access). */
   public String getContainerUrl() {
     return containerUrl;
+  }
+
+  /**
+   * Who can access this run without owning it (e.g. {@code "ANYONE_WITH_ID_CAN_READ"}, {@code
+   * "RESTRICTED"}), or {@code null} to follow the account/Actor default.
+   */
+  public String getGeneralAccess() {
+    return generalAccess;
+  }
+
+  /**
+   * For a pay-per-event Actor, how many times each event type was charged during this run (event
+   * type -> count); {@code null} for Actors that are not pay-per-event.
+   */
+  public Map<String, Long> getChargedEventCounts() {
+    return chargedEventCounts == null ? null : Collections.unmodifiableMap(chargedEventCounts);
+  }
+
+  /**
+   * Pricing information for the Actor this run belongs to, as raw JSON (its shape depends on the
+   * Actor's pricing model: pay-per-event, pay-per-result, flat monthly, or free).
+   */
+  public JsonNode getPricingInfo() {
+    return pricingInfo;
+  }
+
+  /** Resource usage consumed by the run so far, broken down by billable unit. */
+  public ActorRunUsage getUsage() {
+    return usage;
+  }
+
+  /** As {@link #getUsage()}, converted to USD; only present where {@link #getUsage()} is. */
+  public ActorRunUsage getUsageUsd() {
+    return usageUsd;
+  }
+
+  /** Runtime resource-consumption and performance statistics for the run. */
+  public ActorRunStats getStats() {
+    return stats;
+  }
+
+  /** The run configuration actually applied (may differ from what the caller requested). */
+  public ActorRunOptions getOptions() {
+    return options;
+  }
+
+  /** Metadata about how the run was initiated. */
+  public ActorRunMeta getMeta() {
+    return meta;
   }
 
   /** Whether the run has reached a terminal (finished) status. */

@@ -2,6 +2,7 @@ package com.apify.client.run;
 
 import com.apify.client.ListOptions;
 import com.apify.client.PaginationList;
+import com.apify.client.internal.AbstractCollectionClient;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
@@ -11,12 +12,17 @@ import java.util.Iterator;
  * A client for a run collection: the account-wide collection ({@code GET /v2/actor-runs}), an
  * Actor's runs ({@code GET /v2/actors/{id}/runs}), or a task's runs ({@code GET
  * /v2/actor-tasks/{id}/runs}).
+ *
+ * <p>Extends {@link AbstractCollectionClient} for the shared {@code ctx}/item-class plumbing, but
+ * its {@code list}/{@code iterate} take an extra run-specific {@link RunListOptions} filter that
+ * the shared {@code list(ListOptions)}/{@code iterate(ListOptions, Long)} (still inherited, and
+ * usable when no run filter is needed) cannot express.
  */
-public final class RunCollectionClient {
-  private final ResourceContext ctx;
+public final class RunCollectionClient extends AbstractCollectionClient<ActorRun, ListOptions> {
 
   public RunCollectionClient(HttpClientCore http, String baseUrl, String resourcePath) {
-    this.ctx = ResourceContext.collection(http, baseUrl, resourcePath);
+    super(
+        ResourceContext.collection(http, baseUrl, resourcePath), ActorRun.class, ListOptions::new);
   }
 
   /**
@@ -31,7 +37,7 @@ public final class RunCollectionClient {
     if (filter != null) {
       filter.apply(params);
     }
-    return ctx.listResource("", params, ActorRun.class);
+    return listWithParams(params);
   }
 
   /**
@@ -50,8 +56,7 @@ public final class RunCollectionClient {
    */
   public Iterator<ActorRun> iterate(ListOptions options, RunListOptions filter, Long chunkSize) {
     ListOptions opts = options != null ? options : new ListOptions();
-    return ctx.iterateResource(
-        "",
+    return iterateWithFilters(
         opts.limitValue(),
         chunkSize,
         opts.offsetValue(),
@@ -60,7 +65,6 @@ public final class RunCollectionClient {
           if (filter != null) {
             filter.apply(p);
           }
-        },
-        ActorRun.class);
+        });
   }
 }

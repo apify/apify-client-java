@@ -36,4 +36,9 @@ Optional<Schedule> s = client.schedule("SCHEDULE_ID").get();
 s.ifPresent(sched -> System.out.println(sched.getCronExpression()));
 ```
 
-`Schedule` fields: `getId()`, `getUserId()`, `getName()`, `getCronExpression()`, `isEnabled()`.
+`Schedule` fields: `getId()`, `getUserId()`, `getName()`, `getTitle()`, `getDescription()`,
+`getCronExpression()`, `getTimezone()` (IANA name, e.g. `UTC`), `isEnabled()`, `isExclusive()`
+(skip a new run while a previous one is still active), `getCreatedAt()` / `getModifiedAt()`
+(`Instant`), `getNextRunAt()` / `getLastRunAt()` (`Instant`, may be `null`), `getActions()`
+(`List<JsonNode>`, each entry's shape depends on its `type`), and `getNotifications()`
+(`ScheduleNotifications`, exposing `isEmail()`).

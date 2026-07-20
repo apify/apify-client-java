@@ -21,9 +21,9 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * The orchestrating HTTP client shared by every resource client. It owns the backend, the optional
- * API token, the {@code User-Agent}, and the retry/timeout policy, and applies them to every
- * request. Internal to the client; safe for concurrent use.
+ * The orchestrating HTTP client shared by every resource client. It owns the transport, the
+ * optional API token, the {@code User-Agent}, and the retry/timeout policy, and applies them to
+ * every request. Internal to the client; safe for concurrent use.
  */
 public final class HttpClientCore {
 
@@ -55,6 +55,9 @@ public final class HttpClientCore {
   /** {@code Content-Encoding} value for gzip-compressed bodies (the fallback coding). */
   private static final String ENCODING_GZIP = "gzip";
 
+  /** Prefix required before the token value in the {@code Authorization} header. */
+  private static final String AUTH_BEARER_PREFIX = "Bearer ";
+
   /**
    * Whether a brotli native codec loaded for the running platform. Resolved once at class load:
    * brotli4j needs a platform-specific native library, so on platforms without one (or if loading
@@ -84,13 +87,14 @@ public final class HttpClientCore {
     return BROTLI_AVAILABLE;
   }
 
-  private final HttpTransport backend;
+  private final HttpTransport transport;
   private final String token;
   private final String userAgent;
   private final RetryConfig retry;
 
-  public HttpClientCore(HttpTransport backend, String token, String userAgent, RetryConfig retry) {
-    this.backend = backend;
+  public HttpClientCore(
+      HttpTransport transport, String token, String userAgent, RetryConfig retry) {
+    this.transport = transport;
     this.token = token;
     this.userAgent = userAgent;
     this.retry = retry;
@@ -224,12 +228,12 @@ public final class HttpClientCore {
             : HttpRequest.BodyPublishers.noBody();
     HttpRequest.Builder b =
         HttpRequest.newBuilder(URI.create(url)).method(method, publisher).timeout(timeout);
-    b.header("User-Agent", userAgent);
+    b.header(HttpHeaders.USER_AGENT, userAgent);
     if (token != null && !token.isEmpty()) {
-      b.header("Authorization", "Bearer " + token);
+      b.header(HttpHeaders.AUTHORIZATION, AUTH_BEARER_PREFIX + token);
     }
     if (contentType != null && !contentType.isEmpty()) {
-      b.header("Content-Type", contentType);
+      b.header(HttpHeaders.CONTENT_TYPE, contentType);
     }
     if (extraHeaders != null) {
       extraHeaders.forEach(b::header);
@@ -246,7 +250,7 @@ public final class HttpClientCore {
       Duration timeout) {
     HttpRequest request = buildRequest(method, url, body, contentType, extraHeaders, timeout);
     try {
-      HttpResponse<byte[]> resp = backend.send(request);
+      HttpResponse<byte[]> resp = transport.send(request);
       return new ApiResponse(resp.statusCode(), resp.headers(), resp.body());
     } catch (IOException e) {
       throw new ApifyTransportException(e);
@@ -430,7 +434,7 @@ public final class HttpClientCore {
   public HttpResponse<InputStream> stream(String url) {
     HttpRequest request = buildRequest("GET", url, null, null, null, retry.timeout);
     try {
-      return backend.sendStreamingResponse(request);
+      return transport.sendStreamingResponse(request);
     } catch (IOException e) {
       throw new ApifyTransportException(e);
     } catch (InterruptedException e) {

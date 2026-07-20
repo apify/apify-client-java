@@ -152,16 +152,30 @@ as for datasets.
 | `getRequest(String id)` | Fetch a request. Returns `Optional<RequestQueueRequest>`. |
 | `updateRequest(RequestQueueRequest, boolean forefront)` | Update a request. Returns `RequestQueueOperationInfo`. |
 | `deleteRequest(String id)` | Delete a request. No return value. |
-| `batchAddRequests(List<RequestQueueRequest>, boolean forefront)` | Add many (auto-chunked at 25, unprocessed requests retried). Returns `BatchAddResult`. |
+| `batchAddRequests(List<RequestQueueRequest>, boolean forefront)` | Add many (auto-chunked at 25 requests *and* by the API's ~9 MiB payload-size limit; unprocessed requests retried). Returns `BatchAddResult`. |
 | `batchAddRequests(List<RequestQueueRequest>, boolean forefront, BatchAddRequestsOptions)` | As above, tuning `maxUnprocessedRequestsRetries`, `maxParallel` and `minDelayBetweenUnprocessedRequestsRetriesMillis`. |
-| `batchDeleteRequests(Object)` | Delete many. Returns `JsonNode`. |
-| `listAndLockHead(long lockSecs, Long limit)` | Atomically lock the head. Returns `JsonNode`. |
-| `listRequests(ListRequestsOptions)` | List requests. Returns `JsonNode`. |
-| `prolongRequestLock(String id, long lockSecs, boolean forefront)` | Extend a lock. Returns `JsonNode`. |
+| `batchDeleteRequests(Object)` | Delete many. Returns `BatchDeleteResult`. |
+| `listAndLockHead(long lockSecs, Long limit)` | Atomically lock the head. Returns `LockedRequestQueueHead`. |
+| `listRequests(ListRequestsOptions)` | List requests. Returns `RequestsList`. |
+| `prolongRequestLock(String id, long lockSecs, boolean forefront)` | Extend a lock. Returns `RequestLockInfo`. |
 | `deleteRequestLock(String id, boolean forefront)` | Release a lock. No return value. |
-| `unlockRequests()` | Release all the client's locks. Returns `JsonNode`. |
+| `unlockRequests()` | Release all the client's locks. Returns `UnlockRequestsResult`. |
 | `paginateRequests(Long pageLimit)` | A lazy `Iterator<RequestQueueRequest>` over all requests, paging with the queue's forward cursor. Equivalent to `paginateRequests(null, pageLimit, null)`. |
 | `paginateRequests(Long totalLimit, Long chunkSize, List<String> filter)` | As above, with a cap on the total number yielded (`null`/non-positive = unbounded) and an optional state `filter` (`ListRequestsOptions.FILTER_LOCKED`/`FILTER_PENDING`), matching `listRequests`'s filter. |
+
+> **The `forefront` parameter.** `addRequest`, `updateRequest`, `batchAddRequests`,
+> `prolongRequestLock` and `deleteRequestLock` all take a `boolean forefront`. It controls queue
+> priority: `false` (the common case) processes the request in normal FIFO order; `true` inserts
+> or moves the request to the *front* of the queue, so it is returned before anything already
+> queued — use it for urgent/priority work that should jump the line, e.g. re-queuing a failed
+> request for immediate retry or seeding a crawl's very first URLs.
+
+```java
+// Retry a failed request ahead of everything else already queued.
+RequestQueueClient queue = client.requestQueue("QUEUE_ID");
+RequestQueueRequest failed = queue.getRequest("REQUEST_ID").orElseThrow();
+queue.updateRequest(failed.setNoRetry(false), true);
+```
 
 > **Naming exception.** Request-queue *requests* are iterated with `paginateRequests(...)` — not an
 > `iterate(...)` method — because the request-queue listing is cursor-based rather than
@@ -190,16 +204,25 @@ fields are omitted on the wire): `setId`, `setUrl`, `setUniqueKey`, `setMethod`,
 `setUserData(JsonNode)`, `setPayload(String)` (the HTTP request body), `setHeaders(Map<String,
 String>)`, `setNoRetry(Boolean)`, `setHandledAt(Instant)`, `setRetryCount(Integer)`,
 `setLoadedUrl(String)` (the URL actually loaded, after redirects), and
-`setErrorMessages(List<String>)`.
+`setErrorMessages(List<String>)`. `getLockExpiresAt()` (read-only, no setter) is populated only on
+items returned from `listAndLockHead`.
 
 Return types:
 - `RequestQueueOperationInfo` (from `addRequest`/`updateRequest`): `getRequestId()`,
   `isWasAlreadyPresent()`, `isWasAlreadyHandled()`.
 - `RequestQueueHead` (from `listHead`): `getItems()` (a list of `RequestQueueRequest`),
-  `getLimit()`, `isHadMultipleClients()`.
+  `getLimit()`, `getQueueModifiedAt()` (`Instant`), `isHadMultipleClients()`.
 - `BatchAddResult` (from `batchAddRequests`): `getProcessedRequests()` (a list of
   `RequestQueueOperationInfo`) and `getUnprocessedRequests()` (a list of `RequestQueueRequest`).
+- `BatchDeleteResult` (from `batchDeleteRequests`): `getProcessedRequests()` (a list of
+  `DeletedRequestInfo`, exposing `getId()`/`getUniqueKey()`) and `getUnprocessedRequests()` (a list
+  of `RequestQueueRequest`).
+- `LockedRequestQueueHead` (from `listAndLockHead`): as `RequestQueueHead` plus `getLockSecs()`,
+  `isQueueHasLockedRequests()` and `getClientKey()`; each item's `getLockExpiresAt()` is populated.
+- `RequestsList` (from `listRequests`): `getItems()`, `getLimit()`, `getCursor()`,
+  `getNextCursor()` (pass to a further `listRequests` call to continue paging).
+- `RequestLockInfo` (from `prolongRequestLock`): `getLockExpiresAt()` (`Instant`).
+- `UnlockRequestsResult` (from `unlockRequests`): `getUnlockedCount()`.
 
-The remaining lock/list operations return raw `JsonNode` (see
-[Raw JSON values](README.md#raw-json-values)); `batchDeleteRequests(Object)` accepts a
-JSON-serializable list of request identifiers (each with an `id` or `uniqueKey`).
+`batchDeleteRequests(Object)` accepts a JSON-serializable list of request identifiers (each with an
+`id` or `uniqueKey`).

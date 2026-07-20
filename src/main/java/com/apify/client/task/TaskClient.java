@@ -7,6 +7,7 @@ import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
+import com.apify.client.log.StreamedLog;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
@@ -62,10 +63,59 @@ public final class TaskClient {
   /**
    * Starts the task and waits (client-side polling) for it to finish. {@code waitSecs} bounds the
    * wait; {@code null} waits indefinitely.
+   *
+   * <p>This overload does not stream the run's log; use {@link #call(Object, TaskCallOptions,
+   * Long)} for that (matching the reference client's default {@code call} behavior).
    */
   public ActorRun call(Object input, TaskStartOptions options, Long waitSecs) {
     ActorRun run = start(input, options);
     return root.run(run.getId()).waitForFinish(waitSecs);
+  }
+
+  /**
+   * Starts the task and waits (client-side polling) for it to finish, additionally streaming the
+   * run's log for the duration of the wait — matching the reference client's {@code call}, whose
+   * {@code options.log} defaults to {@code 'default'}. {@code waitSecs} bounds the wait; {@code
+   * null} waits indefinitely.
+   *
+   * <p>Log streaming is best-effort: if starting it fails (e.g. the log is not yet available), the
+   * run still starts and is still waited for, just without redirected log output. Use {@link
+   * TaskCallOptions#disableLogStreaming()} to opt out entirely, or {@link
+   * TaskCallOptions#logOptions(com.apify.client.log.StreamedLogOptions)} for a custom destination.
+   */
+  public ActorRun call(Object input, TaskCallOptions options, Long waitSecs) {
+    TaskCallOptions opts = options != null ? options : new TaskCallOptions();
+    ActorRun run = start(input, opts.toStartOptions());
+    RunClient runClient = root.run(run.getId());
+
+    StreamedLog streamedLog = null;
+    if (opts.logStreamingEnabledValue()) {
+      streamedLog = startStreamedLogQuietly(runClient, opts);
+    }
+    try {
+      return runClient.waitForFinish(waitSecs);
+    } finally {
+      if (streamedLog != null) {
+        streamedLog.close();
+      }
+    }
+  }
+
+  /**
+   * Starts {@code call}'s default log streaming, swallowing (rather than propagating) any failure
+   * to open the live log stream, so a transient log-endpoint issue cannot abort the run itself.
+   */
+  private static StreamedLog startStreamedLogQuietly(RunClient runClient, TaskCallOptions opts) {
+    try {
+      StreamedLog streamedLog =
+          opts.logOptionsValue() != null
+              ? runClient.getStreamedLog(opts.logOptionsValue())
+              : runClient.getStreamedLog();
+      streamedLog.start();
+      return streamedLog;
+    } catch (RuntimeException e) {
+      return null;
+    }
   }
 
   /** Fetches the task's stored input, or empty if none is set. */

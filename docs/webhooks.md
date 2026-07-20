@@ -50,7 +50,13 @@ WebhookDispatch dispatch = client.webhook("WEBHOOK_ID").test();
 System.out.println(dispatch.getId());
 ```
 
-`Webhook` fields: `getId()`, `getUserId()`, `getRequestUrl()`, `getEventTypes()`.
+`Webhook` fields: `getId()`, `getUserId()`, `getRequestUrl()`, `getEventTypes()`, `getCreatedAt()`
+/ `getModifiedAt()` (`Instant`), `isAdHoc()` (a one-off webhook attached to a single run, e.g. via
+`ActorStartOptions.webhooks(...)`, rather than a persistent account-level webhook),
+`getCondition()` (`JsonNode`; one of an Actor ID, a task ID or a specific run ID, depending on how
+the webhook was configured), `isIgnoreSslErrors()`, `isDoNotRetry()`, `getPayloadTemplate()`,
+`getHeadersTemplate()`, `getDescription()`, and `getStats()` (`WebhookStats`, exposing
+`getTotalDispatches()`).
 
 ## `WebhookDispatchCollectionClient` and `WebhookDispatchClient`
 

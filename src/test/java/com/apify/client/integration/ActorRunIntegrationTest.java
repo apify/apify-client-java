@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
+import com.apify.client.actor.ActorCallOptions;
+import com.apify.client.actor.ActorClient;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.dataset.DatasetListItemsOptions;
 import com.apify.client.log.StreamedLog;
@@ -14,11 +16,21 @@ import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
 import com.apify.client.run.RunListOptions;
 import com.apify.client.run.RunResurrectOptions;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class ActorRunIntegrationTest extends IntegrationBase {
+
+  // Note: RunClient.metamorph/reboot/charge are intentionally NOT exercised by a live integration
+  // test here, matching the project's existing convention for UserIntegrationTest#updateLimits.
+  // `metamorph` requires a second target Actor under the same account with a compatible input
+  // schema. `reboot` requires a genuinely *running* container; the store Actor exercised in this
+  // suite (hello-world) finishes in ~1-2s, so a live reboot test would be either flaky-by-
+  // construction or need a bespoke slow-running test Actor this suite doesn't otherwise need.
+  // `charge` only applies to pay-per-event Actors, which none of this suite's fixtures are. All
+  // three remain covered offline by ClientBehaviourRegressionTest.
 
   @Test
   void listRuns() {
@@ -41,6 +53,74 @@ class ActorRunIntegrationTest extends IntegrationBase {
     client.run(run.getId()).dataset().listItems(new DatasetListItemsOptions());
     client.run(run.getId()).keyValueStore().getRecord("OUTPUT");
     client.run(run.getId()).requestQueue().listHead(null);
+
+    // Nested run-storage metadata GETs (previously untested): confirm the run's default storages
+    // are reachable as full metadata resources, not just via the item/record/head-level calls
+    // above.
+    assertTrue(client.run(run.getId()).dataset().get().isPresent());
+    assertTrue(client.run(run.getId()).keyValueStore().get().isPresent());
+    assertTrue(client.run(run.getId()).requestQueue().get().isPresent());
+
+    // Typed getters (previously only reachable via getExtra()): verify the API's response
+    // actually deserializes into them, not just that the code compiles.
+    assertTrue(run.getGeneralAccess() != null);
+    assertTrue(run.getStats() != null);
+    assertTrue(run.getOptions() != null && run.getOptions().getBuild() != null);
+    assertTrue(run.getMeta() != null && run.getMeta().getOrigin() != null);
+    assertTrue(run.getUsage() != null);
+  }
+
+  @Test
+  void actorRunsNestedCollection() throws InterruptedException {
+    ApifyClient client = requireClient();
+    ActorClient actor = client.actor("apify/hello-world");
+    ActorRun run = actor.call(null, new ActorStartOptions(), 120L);
+
+    // Runs are sorted ascending by startedAt by default, and "apify/hello-world" is a heavily
+    // used public Actor, so the just-started run would never surface within a small default-order
+    // page; request newest-first. The LIST endpoint's index can also lag a just-finished run by a
+    // moment (eventual consistency, same class of race as
+    // IterationIntegrationTest#findsAllEventually), so poll with a bounded retry too.
+    boolean found = false;
+    for (int attempt = 0; !found && attempt < 10; attempt++) {
+      var page = actor.runs().list(new ListOptions().limit(5L).desc(true), new RunListOptions());
+      assertTrue(page.getTotal() >= 0);
+      found = page.getItems().stream().anyMatch(r -> run.getId().equals(r.getId()));
+      if (!found) {
+        Thread.sleep(1000);
+      }
+    }
+    assertTrue(found, "expected the just-started run to appear in the Actor's run collection");
+
+    var iterated =
+        actor.runs().iterate(new ListOptions().limit(5L).desc(true), new RunListOptions());
+    assertTrue(iterated.hasNext());
+  }
+
+  @Test
+  void callWithActorCallOptionsStreamsLogByDefault() {
+    ApifyClient client = requireClient();
+    ActorClient actor = client.actor("apify/hello-world");
+    List<String> collected = new java.util.concurrent.CopyOnWriteArrayList<>();
+    // The log-streaming call() overload (ActorCallOptions), matching the reference client's
+    // default call(options.log='default') behavior: the run's log is streamed for the duration of
+    // the wait without any explicit opt-in. runActorAndReadOutputs above exercises the plain
+    // (non-streaming) ActorStartOptions overload.
+    ActorRun run =
+        actor.call(
+            null,
+            new ActorCallOptions().logOptions(new StreamedLogOptions().toLog(collected::add)),
+            120L);
+    assertEquals("SUCCEEDED", run.getStatus());
+    assertTrue(!collected.isEmpty(), "expected the default call() to have streamed log lines");
+  }
+
+  @Test
+  void callWithActorCallOptionsCanDisableLogStreaming() {
+    ApifyClient client = requireClient();
+    ActorClient actor = client.actor("apify/hello-world");
+    ActorRun run = actor.call(null, new ActorCallOptions().disableLogStreaming(), 120L);
+    assertEquals("SUCCEEDED", run.getStatus());
   }
 
   @Test

@@ -18,6 +18,16 @@ import java.util.Optional;
 
 /** A client for a specific dataset (and run-nested variants). */
 public final class DatasetClient {
+
+  /** Header reporting the total number of items available (not just in this page). */
+  private static final String HEADER_PAGINATION_TOTAL = "X-Apify-Pagination-Total";
+
+  /** Header reporting the offset this page started at. */
+  private static final String HEADER_PAGINATION_OFFSET = "X-Apify-Pagination-Offset";
+
+  /** Header reporting the effective page size limit applied to this page. */
+  private static final String HEADER_PAGINATION_LIMIT = "X-Apify-Pagination-Limit";
+
   private final HttpClientCore http;
   private final ResourceContext ctx;
 
@@ -152,9 +162,9 @@ public final class DatasetClient {
     PaginationList<T> result = new PaginationList<>();
     result.setItems(items);
     result.setCount(count);
-    result.setTotal(headerLong(resp, "X-Apify-Pagination-Total", count));
-    result.setOffset(headerLong(resp, "X-Apify-Pagination-Offset", 0));
-    result.setLimit(headerLong(resp, "X-Apify-Pagination-Limit", count));
+    result.setTotal(headerLong(resp, HEADER_PAGINATION_TOTAL, count));
+    result.setOffset(headerLong(resp, HEADER_PAGINATION_OFFSET, 0));
+    result.setLimit(headerLong(resp, HEADER_PAGINATION_LIMIT, count));
     if (desc != null) {
       result.setDesc(desc);
     }

@@ -206,6 +206,39 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void batchAddRequestsSplitsChunksByPayloadSize() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200, "{\"data\":{\"processedRequests\":[],\"unprocessedRequests\":[]}}");
+    // Five requests, each carrying a ~4 MiB payload: three of them already exceed the ~9 MiB
+    // per-call limit, so byte-size chunking must split this single 5-request batch (well under
+    // the 25-request count limit alone) into more than one HTTP call.
+    String bigPayload = "x".repeat(4 * 1024 * 1024);
+    List<RequestQueueRequest> requests = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      requests.add(new RequestQueueRequest("https://example.com", "k" + i).setPayload(bigPayload));
+    }
+    client(backend)
+        .requestQueue("q1")
+        .batchAddRequests(
+            requests,
+            false,
+            new BatchAddRequestsOptions().maxParallel(1).maxUnprocessedRequestsRetries(0));
+    assertTrue(backend.calls > 1, "large requests should be split across multiple batch calls");
+  }
+
+  @Test
+  void batchAddRequestsThrowsWhenSingleRequestExceedsPayloadLimit() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
+    String hugePayload = "x".repeat(10 * 1024 * 1024); // exceeds the ~9 MiB limit on its own
+    List<RequestQueueRequest> requests =
+        List.of(new RequestQueueRequest("https://example.com", "k0").setPayload(hugePayload));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> client(backend).requestQueue("q1").batchAddRequests(requests, false));
+  }
+
+  @Test
   void batchAddRequestsRetriesUnprocessed() {
     MockTransport backend =
         new MockTransport(

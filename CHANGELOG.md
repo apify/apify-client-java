@@ -45,14 +45,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   single `ApiPaths` constants class, referenced by each dedicated resource client instead of being
   passed in from `ApifyClient`.
 - Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-20T094852Z`.
+- Extracted a shared `AbstractCollectionClient<T, O>` (internal) for the repetitive
+  offset/limit `list`/`iterate` boilerplate on `DatasetCollectionClient`,
+  `KeyValueStoreCollectionClient`, `RequestQueueCollectionClient`, `ActorCollectionClient`,
+  `ScheduleCollectionClient`, `TaskCollectionClient`, `BuildCollectionClient` and
+  `RunCollectionClient`; behavior is unchanged.
 
 ### Added
 
 - `ApifyClient.setStatusMessage(String, SetStatusMessageOptions)`, matching the reference client's
   top-level `setStatusMessage`.
+- `ActorClient.call(Object, ActorCallOptions, Long)` / `TaskClient.call(Object, TaskCallOptions,
+  Long)`: a log-streaming `call` overload that streams the run's log for the duration of the wait
+  by default, matching the reference client's `call` defaulting `options.log` to `'default'`.
+  `ActorCallOptions`/`TaskCallOptions` mirror `ActorStartOptions`/`TaskStartOptions` (minus
+  `waitForFinish`) and add `disableLogStreaming()` / `logOptions(StreamedLogOptions)`.
+- Typed return values for `RequestQueueClient.listAndLockHead` (`LockedRequestQueueHead`),
+  `prolongRequestLock` (`RequestLockInfo`), `unlockRequests` (`UnlockRequestsResult`),
+  `batchDeleteRequests` (`BatchDeleteResult`) and `listRequests` (`RequestsList`), replacing raw
+  `JsonNode`. `RequestQueueHead`/`RequestQueueRequest` gained `queueModifiedAt`/`lockExpiresAt`.
+- Typed getters replacing several `getExtra()`-only fields: `Schedule` (`title`, `timezone`,
+  `isExclusive`, `description`, `createdAt`, `modifiedAt`, `nextRunAt`, `lastRunAt`, `actions`,
+  `notifications`), `Webhook` (`condition`, `ignoreSslErrors`, `doNotRetry`, `payloadTemplate`,
+  `headersTemplate`, `isAdHoc`, `stats`, `description`, `createdAt`, `modifiedAt`), `Task`
+  (`description`, `stats`, `options`, `input`, `actorStandby`), `ActorRun` (`generalAccess`,
+  `chargedEventCounts`, `pricingInfo`, `usage`, `usageUsd`, `stats`, `options`, `meta`).
 
 ### Fixed
 
+- `RequestQueueClient.batchAddRequests` now additionally splits chunks by cumulative JSON-encoded
+  byte size (matching the reference client's `MAX_PAYLOAD_SIZE_BYTES`), not just the 25-request
+  count limit, so a batch of individually large requests (e.g. sizeable `userData`) can no longer
+  413.
 - `ApifyApiException` now extends `ApifyClientException` (previously `RuntimeException` directly),
   so `catch (ApifyClientException)` catches API errors as documented.
 - `PaginationList.getItems()` no longer throws `NullPointerException` when the API response

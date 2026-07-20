@@ -17,9 +17,10 @@
      guards against; there is nothing to defensively copy for a service object.
 
   3. UWF_UNWRITTEN_FIELD / UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD on Jackson-populated DTOs/response
-     shapes ({@code KeyValueStoreKey}, the internal error-response mapping in {@code
-     HttpClientCore}): their fields are written by the deserializer via reflection, which SpotBugs
-     cannot see - a known false positive for data-binding models.
+     shapes ({@code KeyValueStoreKey}, {@code DeletedRequestInfo}, {@code ActorRunMeta}, {@code
+     TaskOptions}, the internal error-response mapping in {@code HttpClientCore}): their fields are
+     written by the deserializer via reflection, which SpotBugs cannot see - a known false positive
+     for data-binding models.
 -->
 <FindBugsFilter>
   <Match>
@@ -35,7 +36,12 @@
     <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
   <Match>
-    <Class name="com.apify.client.keyvalue.KeyValueStoreKey"/>
+    <Or>
+      <Class name="com.apify.client.keyvalue.KeyValueStoreKey"/>
+      <Class name="com.apify.client.requestqueue.DeletedRequestInfo"/>
+      <Class name="com.apify.client.run.ActorRunMeta"/>
+      <Class name="com.apify.client.task.TaskOptions"/>
+    </Or>
     <Bug pattern="UWF_UNWRITTEN_FIELD"/>
   </Match>
   <Match>

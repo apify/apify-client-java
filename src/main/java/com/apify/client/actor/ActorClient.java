@@ -9,6 +9,7 @@ import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
+import com.apify.client.log.StreamedLog;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
@@ -74,10 +75,60 @@ public final class ActorClient {
    * Starts the Actor and waits (client-side polling) for it to finish. {@code waitSecs} bounds the
    * wait; {@code null} waits indefinitely. Returns the finished run (or the still-running run if
    * the wait budget was exhausted).
+   *
+   * <p>This overload does not stream the run's log; use {@link #call(Object, ActorCallOptions,
+   * Long)} for that (matching the reference client's default {@code call} behavior).
    */
   public ActorRun call(Object input, ActorStartOptions options, Long waitSecs) {
     ActorRun run = start(input, options);
     return root.run(run.getId()).waitForFinish(waitSecs);
+  }
+
+  /**
+   * Starts the Actor and waits (client-side polling) for it to finish, additionally streaming the
+   * run's log for the duration of the wait — matching the reference client's {@code call}, whose
+   * {@code options.log} defaults to {@code 'default'}. {@code waitSecs} bounds the wait; {@code
+   * null} waits indefinitely. Returns the finished run (or the still-running run if the wait budget
+   * was exhausted).
+   *
+   * <p>Log streaming is best-effort: if starting it fails (e.g. the log is not yet available), the
+   * run still starts and is still waited for, just without redirected log output. Use {@link
+   * ActorCallOptions#disableLogStreaming()} to opt out entirely, or {@link
+   * ActorCallOptions#logOptions(com.apify.client.log.StreamedLogOptions)} for a custom destination.
+   */
+  public ActorRun call(Object input, ActorCallOptions options, Long waitSecs) {
+    ActorCallOptions opts = options != null ? options : new ActorCallOptions();
+    ActorRun run = start(input, opts.toStartOptions());
+    RunClient runClient = root.run(run.getId());
+
+    StreamedLog streamedLog = null;
+    if (opts.logStreamingEnabledValue()) {
+      streamedLog = startStreamedLogQuietly(runClient, opts);
+    }
+    try {
+      return runClient.waitForFinish(waitSecs);
+    } finally {
+      if (streamedLog != null) {
+        streamedLog.close();
+      }
+    }
+  }
+
+  /**
+   * Starts {@code call}'s default log streaming, swallowing (rather than propagating) any failure
+   * to open the live log stream, so a transient log-endpoint issue cannot abort the run itself.
+   */
+  private static StreamedLog startStreamedLogQuietly(RunClient runClient, ActorCallOptions opts) {
+    try {
+      StreamedLog streamedLog =
+          opts.logOptionsValue() != null
+              ? runClient.getStreamedLog(opts.logOptionsValue())
+              : runClient.getStreamedLog();
+      streamedLog.start();
+      return streamedLog;
+    } catch (RuntimeException e) {
+      return null;
+    }
   }
 
   /** Validates the given input against the Actor's default-build input schema. */

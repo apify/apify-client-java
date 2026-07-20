@@ -76,6 +76,14 @@ class WebhookIntegrationTest extends IntegrationBase {
       assertEquals("https://example.com/updated", updated.getRequestUrl());
       webhook.dispatches().list(new ListOptions());
       webhook.test();
+
+      // Typed getters (previously only reachable via getExtra()): verify the API's response
+      // actually deserializes into them, not just that the code compiles.
+      assertTrue(wh.isAdHoc());
+      assertTrue(wh.getCondition() != null);
+      assertTrue(wh.getCreatedAt() != null);
+      assertTrue(wh.getModifiedAt() != null);
+      assertTrue(wh.getStats() != null);
     } finally {
       client.webhook(wh.getId()).delete();
     }

@@ -31,18 +31,13 @@ public final class ActorVersionCollectionClient {
   /**
    * Returns an iterator over the Actor's versions. Unlike the paginated collection iterators, this
    * fetches eagerly: the single request runs when {@code iterate} is called, not on first {@code
-   * next()}. The full explanation is why {@code GET .../versions} cannot use the offset/limit
-   * paging engine at all (next paragraph).
-   *
-   * <p>{@code GET /v2/actors/{actorId}/versions} is <em>not</em> offset/limit paginated: it takes
-   * no pagination parameters and returns the full version list in a single {@code {total, items}}
-   * response (the server ignores {@code offset}). This iterates that one fetched page, so draining
-   * the iterator always terminates and never re-yields a version. (Routing it through the offset/
-   * limit paging engine would loop forever, since the server returns the same non-empty page at
-   * every offset — this is why the sibling non-paginated {@code env-vars} collection is also a
-   * single-fetch iterator.) The options' {@code limit} still caps the number yielded ({@code null}
-   * or non-positive = all); {@code offset} has no effect (the server ignores it) and there is no
-   * page size to tune.
+   * next()}. That's because {@code GET /v2/actors/{actorId}/versions} is not offset/limit paginated
+   * at all — it takes no pagination parameters and always returns the full version list in one
+   * {@code {total, items}} response, so routing it through the offset/limit paging engine would
+   * loop forever (the server returns the same non-empty page at every offset; this is why the
+   * sibling non-paginated {@code env-vars} collection is also a single-fetch iterator). The
+   * options' {@code limit} still caps the number yielded ({@code null} or non-positive = all);
+   * {@code offset} has no effect and there is no page size to tune.
    */
   public Iterator<ActorVersion> iterate(ListOptions options) {
     ListOptions opts = options != null ? options : new ListOptions();

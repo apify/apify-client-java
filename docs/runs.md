@@ -91,6 +91,16 @@ The status is one of `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `T
 `ABORTING`, `ABORTED`; `isTerminal()` is true for the finished states (`SUCCEEDED`, `FAILED`,
 `TIMED-OUT`, `ABORTED`).
 
+`ActorRun` additionally exposes: `getGeneralAccess()` (`String`; who can access the run without
+owning it, e.g. `"ANYONE_WITH_ID_CAN_READ"`, `"RESTRICTED"`, or `null` to follow the account/Actor
+default), `getChargedEventCounts()` (`Map<String, Long>`; per-event-type charge counts for
+pay-per-event Actors, `null` otherwise), `getPricingInfo()` (`JsonNode`; shape depends on the
+Actor's pricing model), `getUsage()` / `getUsageUsd()` (`ActorRunUsage`; per-billable-unit resource
+consumption, the latter as its USD cost), `getStats()` (`ActorRunStats`; runtime metrics like
+`getDurationMillis()`, `getMemAvgBytes()`, `getCpuAvgUsage()`), `getOptions()` (`ActorRunOptions`;
+the run configuration actually applied, which may differ from what was requested), and `getMeta()`
+(`ActorRunMeta`; `getOrigin()`, `getClientIp()`, `getUserAgent()` — how the run was initiated).
+
 `RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)` and
 `idempotencyKey(String)` — the latter is auto-generated when unset so a transport-retried charge is
 applied at most once.

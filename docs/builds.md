@@ -34,4 +34,29 @@ if (finished.isTerminal()) {
 }
 ```
 
-`ActorBuildOptions` fields (all optional): `betaPackages`, `tag`, `useCache`, `waitForFinish`.
+`build(versionNumber, options)`'s `versionNumber` (e.g. `"0.0"`) selects *which Actor version's
+source* to build, matching one of the version numbers under `client.actor(id).versions()`.
+`ActorBuildOptions.tag(...)` is unrelated to that: it is the *build tag* (e.g. `"latest"`, `"beta"`)
+stamped onto the resulting build, which is what `ActorStartOptions.build(...)` /
+`Actor.defaultBuild(...)` later resolve by name — a version can be rebuilt many times under the
+same tag, with each new build replacing which build that tag currently points to.
+
+`ActorBuildOptions` fields (all optional): `betaPackages` (`Boolean`; if `true`, use beta versions
+of Apify packages instead of the latest stable ones), `tag` (`String`; the build tag to apply, e.g.
+`"latest"` — see above), `useCache` (`Boolean`; whether to reuse the Docker build cache, default
+`true`), `waitForFinish` (`Long`; maximum seconds to wait server-side for the build to finish
+before the API responds, max 60 — see `defaultBuild` below for the same wait model).
+
+`ActorClient.defaultBuild(Long waitForFinish)` resolves the Actor's currently-tagged default build
+(the build behind the `"latest"`/`"default"` tag, i.e. what a plain `start`/`call` with no explicit
+`build` would run) and returns a `BuildClient` handle for it — it does not itself return the `Build`
+object. `waitForFinish` only bounds how long the *resolving GET* waits server-side for that build to
+finish before responding (`null`/`0` returns immediately with whatever state the build is
+currently in); it does not make `defaultBuild` block until the build is done. To actually observe
+the finished build, call `.get()` (or `.waitForFinish(...)` for client-side polling) on the returned
+handle:
+
+```java
+BuildClient defaultBuild = client.actor("me/my-actor").defaultBuild(30L);
+Build finished = defaultBuild.waitForFinish(300L);
+```

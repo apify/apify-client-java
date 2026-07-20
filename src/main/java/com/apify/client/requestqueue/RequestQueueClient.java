@@ -7,8 +7,6 @@ import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -27,6 +25,26 @@ public final class RequestQueueClient {
 
   /** The API limit on requests per batch call; larger inputs are split into chunks of this size. */
   private static final int MAX_REQUESTS_PER_BATCH = 25;
+
+  /**
+   * The API's request-body payload-size limit for a batch-add call, in bytes (9 MiB), matching the
+   * reference JS client's {@code MAX_PAYLOAD_SIZE_BYTES}. A batch of up to {@link
+   * #MAX_REQUESTS_PER_BATCH} requests can still exceed this if the requests are individually large
+   * (e.g. sizeable {@code userData}), so {@link #batchAddRequests(List, boolean,
+   * BatchAddRequestsOptions)} additionally splits chunks by cumulative JSON-encoded byte size to
+   * avoid a 413 (Payload Too Large).
+   */
+  private static final long MAX_PAYLOAD_SIZE_BYTES = 9L * 1024 * 1024;
+
+  /**
+   * Safety margin subtracted from {@link #MAX_PAYLOAD_SIZE_BYTES} before slicing by byte size, so a
+   * chunk sized right at the boundary is not rejected due to minor framing overhead. Matches the
+   * reference client's {@code SAFETY_BUFFER_PERCENT}.
+   */
+  private static final double PAYLOAD_SAFETY_BUFFER_PERCENT = 0.01 / 100;
+
+  /** The two bytes of an empty JSON array ({@code []}), the baseline for a byte-size chunk. */
+  private static final int EMPTY_JSON_ARRAY_BYTES = 2;
 
   /**
    * Upper bound on the unprocessed-requests backoff exponent, so {@code 2^attempt} cannot blow up.
@@ -164,13 +182,15 @@ public final class RequestQueueClient {
 
   /**
    * Atomically returns and locks up to {@code limit} requests from the head of the queue for {@code
-   * lockSecs} seconds. Returns the raw locked-head object.
+   * lockSecs} seconds, so other clients cannot retrieve them until the lock expires or is released
+   * via {@link #deleteRequestLock}. This is the primary method used by distributed crawlers to
+   * coordinate work across multiple workers.
    */
-  public JsonNode listAndLockHead(long lockSecs, Long limit) {
+  public LockedRequestQueueHead listAndLockHead(long lockSecs, Long limit) {
     QueryParams params = new QueryParams();
     params.addLong("lockSecs", lockSecs).addLong("limit", limit);
     withClientKey(params);
-    return ctx.postWithBody("head/lock", params, null, "", Json.type(JsonNode.class));
+    return ctx.postWithBody("head/lock", params, null, "", LockedRequestQueueHead.class);
   }
 
   /**
@@ -184,25 +204,38 @@ public final class RequestQueueClient {
   /**
    * Adds multiple requests to the queue. If {@code forefront} is true, they are added to the front.
    *
-   * <p>The input is automatically split into chunks of at most 25 requests (the API limit). Chunks
-   * are sent using up to {@link BatchAddRequestsOptions#maxParallel} parallel API calls, and any
-   * requests the API leaves unprocessed (typically rate-limited) are retried with exponential
-   * backoff up to {@link BatchAddRequestsOptions#maxUnprocessedRequestsRetries} times. The
-   * per-chunk results are merged into a single {@link BatchAddResult}.
+   * <p>The input is automatically split into chunks of at most 25 requests (the API count limit)
+   * that additionally respect the API's ~9 MiB request-body payload-size limit ({@link
+   * #MAX_PAYLOAD_SIZE_BYTES}): a chunk of up to 25 requests is further split by cumulative
+   * JSON-encoded byte size, so a batch of individually large requests (e.g. sizeable {@code
+   * userData}) cannot 413. Chunks are sent using up to {@link BatchAddRequestsOptions#maxParallel}
+   * parallel API calls, and any requests the API leaves unprocessed (typically rate-limited) are
+   * retried with exponential backoff up to {@link
+   * BatchAddRequestsOptions#maxUnprocessedRequestsRetries} times. The per-chunk results are merged
+   * into a single {@link BatchAddResult}.
    *
    * <p>Requests that remain unprocessed after all retries (typically due to persistent
    * rate-limiting or server errors) are returned in {@link BatchAddResult#getUnprocessedRequests()}
    * rather than raising an exception. A non-retryable client error (a 4xx other than 429, such as
    * an invalid token or insufficient permissions) is instead thrown as an {@link
    * ApifyApiException}, since it will not succeed on retry and should not be silently hidden as
-   * "unprocessed".
+   * "unprocessed". A single request whose own JSON encoding already exceeds the payload-size limit
+   * is rejected up front with {@link IllegalArgumentException}, since no chunk size could ever fit
+   * it.
    */
   public BatchAddResult batchAddRequests(
       List<RequestQueueRequest> requests, boolean forefront, BatchAddRequestsOptions options) {
+    long payloadSizeLimitBytes =
+        MAX_PAYLOAD_SIZE_BYTES
+            - (long) Math.ceil(MAX_PAYLOAD_SIZE_BYTES * PAYLOAD_SAFETY_BUFFER_PERCENT);
+
     List<List<RequestQueueRequest>> chunks = new ArrayList<>();
-    for (int start = 0; start < requests.size(); start += MAX_REQUESTS_PER_BATCH) {
+    for (int start = 0; start < requests.size(); ) {
       int end = Math.min(start + MAX_REQUESTS_PER_BATCH, requests.size());
-      chunks.add(new ArrayList<>(requests.subList(start, end)));
+      List<RequestQueueRequest> countSlice = requests.subList(start, end);
+      List<RequestQueueRequest> chunk = sliceByByteLength(countSlice, payloadSizeLimitBytes, start);
+      chunks.add(new ArrayList<>(chunk));
+      start += chunk.size();
     }
 
     BatchAddResult merged = new BatchAddResult();
@@ -231,6 +264,55 @@ public final class RequestQueueClient {
       pool.shutdownNow();
     }
     return merged;
+  }
+
+  /**
+   * Returns the longest leading run of {@code requests} whose combined JSON payload stays under
+   * {@code maxByteLength}, always keeping at least one request so the caller's chunking loop makes
+   * forward progress. Ports the reference client's {@code sliceArrayByByteLength}. {@code
+   * startIndex} is the position of {@code requests.get(0)} in the caller's full input list, used
+   * only to report which request is oversized.
+   *
+   * @throws IllegalArgumentException if any individual request's own JSON encoding already exceeds
+   *     {@code maxByteLength} (no chunk size could ever fit it)
+   */
+  private static List<RequestQueueRequest> sliceByByteLength(
+      List<RequestQueueRequest> requests, long maxByteLength, int startIndex) {
+    if (jsonByteLength(requests) < maxByteLength) {
+      return requests;
+    }
+
+    List<RequestQueueRequest> sliced = new ArrayList<>();
+    long byteLength = EMPTY_JSON_ARRAY_BYTES;
+    for (int i = 0; i < requests.size(); i++) {
+      RequestQueueRequest request = requests.get(i);
+      long itemBytes = jsonByteLength(request);
+      if (itemBytes > maxByteLength) {
+        throw new IllegalArgumentException(
+            "RequestQueueClient.batchAddRequests: the request at index "
+                + (startIndex + i)
+                + " exceeds the maximum allowed payload size ("
+                + maxByteLength
+                + " bytes)");
+      }
+      if (byteLength + itemBytes >= maxByteLength) {
+        break;
+      }
+      byteLength += itemBytes;
+      sliced.add(request);
+    }
+
+    // Guarantee forward progress: keep at least the first request. It cannot be individually
+    // oversized (that would already have thrown above), so this never produces an over-limit chunk.
+    if (sliced.isEmpty()) {
+      sliced.add(requests.get(0));
+    }
+    return sliced;
+  }
+
+  /** The byte length of {@code value}'s JSON encoding, as sent on the wire. */
+  private static long jsonByteLength(Object value) {
+    return Json.toBytes(value).length;
   }
 
   private static BatchAddResult awaitResult(Future<BatchAddResult> future) {
@@ -354,27 +436,27 @@ public final class RequestQueueClient {
 
   /**
    * Deletes multiple requests in a single call. Each entry identifies a request (e.g. by id or
-   * uniqueKey). Returns the raw batch result.
+   * uniqueKey).
    */
-  public JsonNode batchDeleteRequests(Object requests) {
+  public BatchDeleteResult batchDeleteRequests(Object requests) {
     QueryParams params = withClientKey(new QueryParams());
-    return ctx.deleteWithBody("requests/batch", params, requests, JsonNode.class);
+    return ctx.deleteWithBody("requests/batch", params, requests, BatchDeleteResult.class);
   }
 
-  /** Lists the queue's requests with pagination. Returns the raw response. */
-  public JsonNode listRequests(ListRequestsOptions options) {
+  /** Lists the queue's requests with pagination. */
+  public RequestsList listRequests(ListRequestsOptions options) {
     options.validate();
     QueryParams params = new QueryParams();
     options.apply(params);
     withClientKey(params);
-    return ctx.getResourceRequired("requests", params, Json.type(JsonNode.class));
+    return ctx.getResourceRequired("requests", params, RequestsList.class);
   }
 
   /**
    * Extends the lock on a request by {@code lockSecs} seconds. If {@code forefront} is true, the
-   * request is moved to the front when its lock expires. Returns the raw response.
+   * request is moved to the front when its lock expires.
    */
-  public JsonNode prolongRequestLock(String id, long lockSecs, boolean forefront) {
+  public RequestLockInfo prolongRequestLock(String id, long lockSecs, boolean forefront) {
     QueryParams params = new QueryParams();
     params.addLong("lockSecs", lockSecs).addBool("forefront", forefront);
     withClientKey(params);
@@ -383,7 +465,7 @@ public final class RequestQueueClient {
         params,
         null,
         "",
-        JsonNode.class);
+        RequestLockInfo.class);
   }
 
   /**
@@ -406,10 +488,10 @@ public final class RequestQueueClient {
     }
   }
 
-  /** Releases all locks the client holds on this queue's requests. Returns the raw response. */
-  public JsonNode unlockRequests() {
+  /** Releases all locks the client holds on this queue's requests. */
+  public UnlockRequestsResult unlockRequests() {
     QueryParams params = withClientKey(new QueryParams());
-    return ctx.postWithBody("requests/unlock", params, null, "", Json.type(JsonNode.class));
+    return ctx.postWithBody("requests/unlock", params, null, "", UnlockRequestsResult.class);
   }
 
   /**
@@ -437,13 +519,6 @@ public final class RequestQueueClient {
   public Iterator<RequestQueueRequest> paginateRequests(
       Long totalLimit, Long chunkSize, List<String> filter) {
     return new RequestsIterator(totalLimit, chunkSize, filter);
-  }
-
-  /** Shape of a paginated requests listing. */
-  @JsonIgnoreProperties(ignoreUnknown = true)
-  private static final class RequestsPage {
-    public List<RequestQueueRequest> items = List.of();
-    public String nextCursor;
   }
 
   /** Lazily iterates over a request queue's requests via the cursor-based listing endpoint. */
@@ -500,12 +575,12 @@ public final class RequestQueueClient {
       }
       params.addCsv("filter", filter);
       withClientKey(params);
-      RequestsPage page = ctx.getResourceRequired("requests", params, RequestsPage.class);
+      RequestsList page = ctx.getResourceRequired("requests", params, RequestsList.class);
       started = true;
-      buffer = page.items;
+      buffer = page.getItems();
       pos = 0;
-      nextCursor = page.nextCursor;
-      if (page.items.isEmpty() && (nextCursor == null || nextCursor.isEmpty())) {
+      nextCursor = page.getNextCursor();
+      if (buffer.isEmpty() && (nextCursor == null || nextCursor.isEmpty())) {
         exhausted = true;
       }
     }

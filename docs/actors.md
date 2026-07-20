@@ -47,7 +47,8 @@ Actor created = client.actors().create(Map.of(
 | `update(Object)` | Update the Actor with the given fields. Returns `Actor`. |
 | `delete()` | Delete the Actor. |
 | `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Returns `ActorRun`. |
-| `call(Object input, ActorStartOptions, Long waitSecs)` | Start a run and poll until it finishes (`null` waits indefinitely). Returns `ActorRun`. |
+| `call(Object input, ActorStartOptions, Long waitSecs)` | Start a run and poll until it finishes (`null` waits indefinitely); does **not** stream the run's log. Returns `ActorRun`. |
+| `call(Object input, ActorCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default (matching the reference client's `call` defaulting `options.log` to `'default'`). Use `ActorCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
 | `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Returns `boolean`. `ValidateInputOptions` fields (optional): `build`, `contentType`. |
 | `build(String versionNumber, ActorBuildOptions)` | Build a version. Returns `Build`. |
 | `defaultBuild(Long waitForFinish)` | Resolve the default build. Returns `BuildClient`. |
@@ -66,6 +67,13 @@ of the input body, defaults to `application/json`), `restartOnError` (restart th
 `LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), and `webhooks(List<Object>)` — ad-hoc webhook definitions
 (each a JSON-serializable `Map`, as in [Webhooks](webhooks.md)) that the client base64-encodes on the
 wire.
+
+`ActorCallOptions` (for the log-streaming `call` overload) mirrors `ActorStartOptions` field for
+field, but omits `waitForFinish`: that field asks the API to hold the HTTP response open
+server-side while the run finishes, which is redundant with (and wastes a request slot next to)
+`call`'s own client-side `waitSecs` polling. It adds `disableLogStreaming()` (matching the
+reference client's `log: null`) and `logOptions(StreamedLogOptions)` (a custom destination/prefix,
+matching a custom `Log` instance) — see [Streamed log redirection](runs.md#streamed-log-redirection).
 
 `lastRun(String status)` filters only by status; `lastRun(LastRunOptions)` also accepts an origin
 filter. `LastRunOptions` has fluent setters `status(String)` (e.g. `SUCCEEDED`, `RUNNING`) and

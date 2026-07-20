@@ -1,5 +1,6 @@
 package com.apify.client;
 
+import com.apify.client.internal.ListOptionsLike;
 import com.apify.client.internal.QueryParams;
 
 /**
@@ -7,7 +8,7 @@ import com.apify.client.internal.QueryParams;
  * schedules, webhooks, Actor versions). All fields are optional; leave one unset to use the API
  * default.
  */
-public final class ListOptions {
+public final class ListOptions implements ListOptionsLike {
   private Long offset;
   private Long limit;
   private Boolean desc;
@@ -35,14 +36,17 @@ public final class ListOptions {
     return this;
   }
 
+  @Override
   public Long offsetValue() {
     return offset;
   }
 
+  @Override
   public Long limitValue() {
     return limit;
   }
 
+  @Override
   public void apply(QueryParams q) {
     q.addLong("offset", offset).addLong("limit", limit);
     applyFilters(q);
@@ -51,6 +55,7 @@ public final class ListOptions {
   /**
    * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
    */
+  @Override
   public void applyFilters(QueryParams q) {
     q.addBool("desc", desc);
   }
