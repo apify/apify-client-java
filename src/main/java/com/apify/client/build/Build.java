@@ -1,7 +1,7 @@
 package com.apify.client.build;
 
 import com.apify.client.ApifyResource;
-import com.apify.client.Statuses;
+import com.apify.client.internal.Statuses;
 import java.time.Instant;
 
 /** A single build of an Actor. */

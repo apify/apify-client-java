@@ -10,6 +10,7 @@ import com.apify.client.requestqueue.RequestQueueRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Demonstrates each storage type: create the storage, push data to it, then read the data back.
@@ -21,7 +22,10 @@ public final class Storages {
 
   public static void main(String[] args) {
     ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
-    String suffix = Long.toString(System.currentTimeMillis());
+    // Random, not time-based: this example (like the integration tests) may run concurrently
+    // against the same account from several processes/languages at once, and two runs starting in
+    // the same millisecond would otherwise collide on the same storage name.
+    String suffix = UUID.randomUUID().toString().substring(0, 8);
 
     // Dataset: create, push items, read them back.
     Dataset dataset = client.datasets().getOrCreate("java-example-ds-" + suffix);

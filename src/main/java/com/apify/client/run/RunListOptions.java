@@ -1,7 +1,7 @@
 package com.apify.client.run;
 
 import com.apify.client.ListOptions;
-import com.apify.client.QueryParams;
+import com.apify.client.internal.QueryParams;
 import java.util.List;
 
 /**

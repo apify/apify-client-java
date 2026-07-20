@@ -1,9 +1,5 @@
 # Storages: datasets, key-value stores, request queues
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 The three storage types share a consistent shape: a collection client (`list`, `getOrCreate`) and a
 single-resource client (`get`, `update`, `delete`, plus storage-specific operations). Run-nested
 default storages are reachable via `client.run(id).dataset()` / `.keyValueStore()` /
@@ -164,12 +160,15 @@ as for datasets.
 | `prolongRequestLock(String id, long lockSecs, boolean forefront)` | Extend a lock. Returns `JsonNode`. |
 | `deleteRequestLock(String id, boolean forefront)` | Release a lock. No return value. |
 | `unlockRequests()` | Release all the client's locks. Returns `JsonNode`. |
-| `paginateRequests(Long pageLimit)` | A lazy `Iterator<RequestQueueRequest>` over all requests, paging with the queue's forward cursor. |
+| `paginateRequests(Long pageLimit)` | A lazy `Iterator<RequestQueueRequest>` over all requests, paging with the queue's forward cursor. Equivalent to `paginateRequests(null, pageLimit, null)`. |
+| `paginateRequests(Long totalLimit, Long chunkSize, List<String> filter)` | As above, with a cap on the total number yielded (`null`/non-positive = unbounded) and an optional state `filter` (`ListRequestsOptions.FILTER_LOCKED`/`FILTER_PENDING`), matching `listRequests`'s filter. |
 
-> **Naming exception.** Request-queue *requests* are iterated with `paginateRequests(Long pageLimit)`
-> — not an `iterate(...)` method — because the request-queue listing is cursor-based rather than
-> offset/limit. Its single argument is the per-request page size; there is no total-items cap. Every
-> other resource uses the `iterate`/`iterateItems`/`iterateKeys` family.
+> **Naming exception.** Request-queue *requests* are iterated with `paginateRequests(...)` — not an
+> `iterate(...)` method — because the request-queue listing is cursor-based rather than
+> offset/limit; it always starts from the beginning of the queue (resuming from an explicit
+> `exclusiveStartId`/`cursor` is not supported by the iterator — use `listRequests(ListRequestsOptions)`
+> directly for that single-page use case). Every other resource uses the
+> `iterate`/`iterateItems`/`iterateKeys` family.
 
 ```java
 RequestQueue rq = client.requestQueues().getOrCreate("my-queue");
@@ -186,9 +185,12 @@ while (it.hasNext()) {
 `FILTER_PENDING`.
 
 `RequestQueueRequest` models a request. Its `(url, uniqueKey)` constructor covers the common case
-(`uniqueKey` is the deduplication key); fluent setters `setId`, `setUrl`, `setUniqueKey`,
-`setMethod`, `setUserData(JsonNode)` and matching getters cover the rest (unset fields are omitted on
-the wire).
+(`uniqueKey` is the deduplication key); fluent setters and matching getters cover the rest (unset
+fields are omitted on the wire): `setId`, `setUrl`, `setUniqueKey`, `setMethod`,
+`setUserData(JsonNode)`, `setPayload(String)` (the HTTP request body), `setHeaders(Map<String,
+String>)`, `setNoRetry(Boolean)`, `setHandledAt(Instant)`, `setRetryCount(Integer)`,
+`setLoadedUrl(String)` (the URL actually loaded, after redirects), and
+`setErrorMessages(List<String>)`.
 
 Return types:
 - `RequestQueueOperationInfo` (from `addRequest`/`updateRequest`): `getRequestId()`,

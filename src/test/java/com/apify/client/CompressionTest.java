@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import com.aayushatharva.brotli4j.Brotli4jLoader;
 import com.aayushatharva.brotli4j.decoder.Decoder;
 import com.aayushatharva.brotli4j.decoder.DirectDecompress;
-import com.apify.client.http.HttpClientCore;
+import com.apify.client.internal.HttpClientCore;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;

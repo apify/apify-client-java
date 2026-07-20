@@ -52,8 +52,9 @@ class DatasetItemsIteratorTest {
   @Test
   void typedIterateItemsAtDefaultPageSize() {
     // Typed iteration at the server-default page size uses the 3-arg form with a null chunkSize.
-    // (No (options, Class<T>) overload exists: it would make iterateItems(opts, null) ambiguous
-    // with (options, Long) — see commit 02c977e.) Decodes each item into the requested type.
+    // (No (options, Class<T>) overload exists: with a null second argument, the compiler could not
+    // tell it apart from the (options, Long chunkSize) overload — ambiguous overload resolution.)
+    // Decodes each item into the requested type.
     MockTransport backend =
         new MockTransport(
             List.of(MockTransport.ok(200, "[{\"n\":1},{\"n\":2}]"), MockTransport.ok(200, "[]")));

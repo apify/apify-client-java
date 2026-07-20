@@ -1,6 +1,6 @@
 package com.apify.client.store;
 
-import com.apify.client.QueryParams;
+import com.apify.client.internal.QueryParams;
 
 /** Options for listing/iterating the Apify Store ({@code GET /v2/store}). */
 public final class StoreListOptions {

@@ -1,9 +1,5 @@
 # Tasks
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Tasks are pre-configured Actor runs with stored input. Access the task collection with
 `client.tasks()` and a single task with `client.task(id)`.
 

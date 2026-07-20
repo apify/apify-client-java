@@ -1,11 +1,11 @@
 package com.apify.client.build;
 
-import com.apify.client.ApiPaths;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
 import com.apify.client.http.ApiResponse;
-import com.apify.client.http.HttpClientCore;
-import com.apify.client.http.Json;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.Json;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 import com.apify.client.log.LogClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Optional;

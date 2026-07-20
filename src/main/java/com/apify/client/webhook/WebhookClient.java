@@ -1,9 +1,9 @@
 package com.apify.client.webhook;
 
-import com.apify.client.ApiPaths;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
-import com.apify.client.http.HttpClientCore;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 import java.util.Optional;
 
 /** A client for a specific webhook ({@code /v2/webhooks/{webhookId}}). */

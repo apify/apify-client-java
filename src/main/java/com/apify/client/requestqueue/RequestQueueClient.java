@@ -1,13 +1,12 @@
 package com.apify.client.requestqueue;
 
-import com.apify.client.ApiPaths;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
-import com.apify.client.http.ApiResponse;
 import com.apify.client.http.ApifyApiException;
 import com.apify.client.http.ApifyTransportException;
-import com.apify.client.http.HttpClientCore;
-import com.apify.client.http.Json;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.Json;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
@@ -140,18 +139,12 @@ public final class RequestQueueClient {
     QueryParams params = new QueryParams();
     params.addBool("forefront", forefront);
     withClientKey(params);
-    String url =
-        ctx.mergedParams(params)
-            .applyToUrl(
-                ctx.subUrl("requests/" + ResourceContext.encodePathSegment(request.getId())));
-    ApiResponse resp =
-        http.call(
-            "PUT",
-            url,
-            Json.toBytes(request),
-            ResourceContext.CONTENT_TYPE_JSON,
-            http.baseRequestTimeout());
-    return Json.parseData(resp.body, RequestQueueOperationInfo.class);
+    return ctx.putWithBody(
+        "requests/" + ResourceContext.encodePathSegment(request.getId()),
+        params,
+        Json.toBytes(request),
+        ResourceContext.CONTENT_TYPE_JSON,
+        RequestQueueOperationInfo.class);
   }
 
   /** Deletes a request by ID. */
@@ -385,11 +378,12 @@ public final class RequestQueueClient {
     QueryParams params = new QueryParams();
     params.addLong("lockSecs", lockSecs).addBool("forefront", forefront);
     withClientKey(params);
-    String url =
-        ctx.mergedParams(params)
-            .applyToUrl(ctx.subUrl("requests/" + ResourceContext.encodePathSegment(id) + "/lock"));
-    ApiResponse resp = http.call("PUT", url, null, "", http.baseRequestTimeout());
-    return Json.parseData(resp.body, Json.type(JsonNode.class));
+    return ctx.putWithBody(
+        "requests/" + ResourceContext.encodePathSegment(id) + "/lock",
+        params,
+        null,
+        "",
+        JsonNode.class);
   }
 
   /**
@@ -420,10 +414,29 @@ public final class RequestQueueClient {
 
   /**
    * Returns a lazy iterator over all requests in the queue, fetching pages of up to {@code
-   * pageLimit} requests at a time ({@code null} for the server default).
+   * pageLimit} requests at a time ({@code null} for the server default). Equivalent to {@link
+   * #paginateRequests(Long, Long, List) paginateRequests(null, pageLimit, null)} (no total cap, no
+   * state filter).
    */
   public Iterator<RequestQueueRequest> paginateRequests(Long pageLimit) {
-    return new RequestsIterator(pageLimit);
+    return paginateRequests(null, pageLimit, null);
+  }
+
+  /**
+   * Returns a lazy iterator over the queue's requests via the cursor-based listing endpoint. {@code
+   * totalLimit} caps the total number of requests yielded across all pages ({@code
+   * null}/non-positive = unbounded); {@code chunkSize} is the per-request page size ({@code null} =
+   * server default); {@code filter} restricts to requests in the given states ({@link
+   * ListRequestsOptions#FILTER_LOCKED}/{@link ListRequestsOptions#FILTER_PENDING}, {@code null} =
+   * no filter), matching {@link #listRequests(ListRequestsOptions)}'s filter.
+   *
+   * <p>Always starts from the beginning of the queue; resuming from an explicit {@code
+   * exclusiveStartId}/{@code cursor} is not supported here (use {@link
+   * #listRequests(ListRequestsOptions)} directly for that single-page use case).
+   */
+  public Iterator<RequestQueueRequest> paginateRequests(
+      Long totalLimit, Long chunkSize, List<String> filter) {
+    return new RequestsIterator(totalLimit, chunkSize, filter);
   }
 
   /** Shape of a paginated requests listing. */
@@ -435,21 +448,29 @@ public final class RequestQueueClient {
 
   /** Lazily iterates over a request queue's requests via the cursor-based listing endpoint. */
   private final class RequestsIterator implements Iterator<RequestQueueRequest> {
-    private final Long pageLimit;
+    private final Long totalLimit;
+    private final Long chunkSize;
+    private final List<String> filter;
     private List<RequestQueueRequest> buffer = List.of();
     private int pos;
     private String nextCursor;
+    private long yielded;
     private boolean started;
     private boolean exhausted;
 
-    RequestsIterator(Long pageLimit) {
-      this.pageLimit = pageLimit;
+    RequestsIterator(Long totalLimit, Long chunkSize, List<String> filter) {
+      this.totalLimit = totalLimit != null && totalLimit > 0 ? totalLimit : null;
+      this.chunkSize = chunkSize;
+      this.filter = filter;
     }
 
     @Override
     public boolean hasNext() {
       while (pos >= buffer.size()) {
         if (exhausted || (started && (nextCursor == null || nextCursor.isEmpty()))) {
+          return false;
+        }
+        if (totalLimit != null && yielded >= totalLimit) {
           return false;
         }
         fetchPage();
@@ -462,15 +483,22 @@ public final class RequestQueueClient {
       if (!hasNext()) {
         throw new NoSuchElementException();
       }
+      yielded++;
       return buffer.get(pos++);
     }
 
     private void fetchPage() {
       QueryParams params = new QueryParams();
+      Long capRemaining = totalLimit != null ? totalLimit - yielded : null;
+      Long pageLimit =
+          capRemaining == null
+              ? chunkSize
+              : (chunkSize == null ? capRemaining : Math.min(capRemaining, chunkSize));
       params.addLong("limit", pageLimit);
       if (nextCursor != null && !nextCursor.isEmpty()) {
         params.addString("cursor", nextCursor);
       }
+      params.addCsv("filter", filter);
       withClientKey(params);
       RequestsPage page = ctx.getResourceRequired("requests", params, RequestsPage.class);
       started = true;

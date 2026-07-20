@@ -1,6 +1,6 @@
 package com.apify.client.requestqueue;
 
-import com.apify.client.QueryParams;
+import com.apify.client.internal.QueryParams;
 import java.util.List;
 
 /** Configures {@link RequestQueueClient#listRequests(ListRequestsOptions)}. */

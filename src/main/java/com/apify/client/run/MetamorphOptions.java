@@ -1,6 +1,6 @@
 package com.apify.client.run;
 
-import com.apify.client.ResourceContext;
+import com.apify.client.internal.ResourceContext;
 
 /** Configures {@link RunClient#metamorph}. */
 public final class MetamorphOptions {

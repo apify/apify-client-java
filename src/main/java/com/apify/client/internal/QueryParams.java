@@ -1,4 +1,4 @@
-package com.apify.client;
+package com.apify.client.internal;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;

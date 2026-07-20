@@ -1,4 +1,4 @@
-package com.apify.client;
+package com.apify.client.internal;
 
 import java.util.Set;
 

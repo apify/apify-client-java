@@ -1,9 +1,9 @@
 package com.apify.client;
 
 import com.apify.client.http.DefaultHttpTransport;
-import com.apify.client.http.HttpClientCore;
 import com.apify.client.http.HttpTransport;
 import com.apify.client.http.RetryConfig;
+import com.apify.client.internal.HttpClientCore;
 import java.time.Duration;
 import java.util.function.BooleanSupplier;
 
@@ -44,7 +44,7 @@ public final class ApifyClientBuilder {
 
   /** Overrides the base URL of the API. The {@code /v2} suffix is appended automatically. */
   public ApifyClientBuilder baseUrl(String baseUrl) {
-    this.baseUrl = baseUrl;
+    this.baseUrl = requireNonBlank(baseUrl, "baseUrl");
     return this;
   }
 
@@ -54,31 +54,38 @@ public final class ApifyClientBuilder {
    * automatically.
    */
   public ApifyClientBuilder publicBaseUrl(String publicBaseUrl) {
-    this.publicBaseUrl = publicBaseUrl;
+    this.publicBaseUrl = requireNonBlank(publicBaseUrl, "publicBaseUrl");
     return this;
   }
 
   /** Sets the maximum number of retries for failed requests (default 8). */
   public ApifyClientBuilder maxRetries(int maxRetries) {
-    this.maxRetries = maxRetries;
+    this.maxRetries = requireNonNegative(maxRetries, "maxRetries");
     return this;
   }
 
   /** Sets the minimum delay between retries (default 500ms). */
   public ApifyClientBuilder minDelayBetweenRetries(Duration minDelayBetweenRetries) {
-    this.minDelayBetweenRetries = minDelayBetweenRetries;
+    this.minDelayBetweenRetries =
+        requireNonNegative(minDelayBetweenRetries, "minDelayBetweenRetries");
     return this;
   }
 
   /** Sets the maximum (exponentially-grown) delay between retries (default equals the timeout). */
   public ApifyClientBuilder maxDelayBetweenRetries(Duration maxDelayBetweenRetries) {
-    this.maxDelayBetweenRetries = maxDelayBetweenRetries;
+    this.maxDelayBetweenRetries =
+        requireNonNegative(maxDelayBetweenRetries, "maxDelayBetweenRetries");
     return this;
   }
 
-  /** Sets the overall per-request timeout (default 360s). */
+  /**
+   * Sets the maximum per-attempt request (socket) timeout (default 360s): the ceiling each retry
+   * attempt's timeout grows toward, not a wall-clock bound on the cumulative time across retries.
+   * The connection-establishment timeout is separate and configured on the {@link HttpTransport}
+   * (see {@link DefaultHttpTransport#DefaultHttpTransport(Duration)}).
+   */
   public ApifyClientBuilder timeout(Duration timeout) {
-    this.timeout = timeout;
+    this.timeout = requireNonNegative(timeout, "timeout");
     return this;
   }
 
@@ -88,10 +95,37 @@ public final class ApifyClientBuilder {
     return this;
   }
 
-  /** Replaces the default HTTP backend with a custom implementation (the replaceable transport). */
+  /** Replaces the default HTTP transport with a custom implementation. */
   public ApifyClientBuilder httpTransport(HttpTransport httpTransport) {
+    if (httpTransport == null) {
+      throw new IllegalArgumentException("httpTransport must not be null");
+    }
     this.httpTransport = httpTransport;
     return this;
+  }
+
+  /** Validates a required, non-blank string argument, returning it unchanged. */
+  private static String requireNonBlank(String value, String argName) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException(argName + " must not be null or blank");
+    }
+    return value;
+  }
+
+  /** Validates a non-negative {@code int} argument, returning it unchanged. */
+  private static int requireNonNegative(int value, String argName) {
+    if (value < 0) {
+      throw new IllegalArgumentException(argName + " must not be negative");
+    }
+    return value;
+  }
+
+  /** Validates a non-null, non-negative {@link Duration} argument, returning it unchanged. */
+  private static Duration requireNonNegative(Duration value, String argName) {
+    if (value == null || value.isNegative()) {
+      throw new IllegalArgumentException(argName + " must not be null or negative");
+    }
+    return value;
   }
 
   /** Test seam: overrides how the client decides the {@code isAtHome} User-Agent flag. */
@@ -100,26 +134,33 @@ public final class ApifyClientBuilder {
     return this;
   }
 
+  /** The API path suffix every base URL is normalized to end with. */
+  private static final String API_VERSION_PATH = "/v2";
+
   /** Builds the configured {@link ApifyClient}. */
   public ApifyClient build() {
-    HttpTransport backend = httpTransport != null ? httpTransport : new DefaultHttpTransport();
+    HttpTransport transport = httpTransport != null ? httpTransport : new DefaultHttpTransport();
     String userAgent = buildUserAgent(userAgentSuffix, isAtHomeFn);
     RetryConfig retry =
         new RetryConfig(maxRetries, minDelayBetweenRetries, maxDelayBetweenRetries, timeout);
-    HttpClientCore http = new HttpClientCore(backend, token, userAgent, retry);
+    HttpClientCore http = new HttpClientCore(transport, token, userAgent, retry);
 
-    String apiBase = trimTrailingSlash(baseUrl) + "/v2";
-    String publicSource = publicBaseUrl != null ? publicBaseUrl : baseUrl;
-    String publicBase = trimTrailingSlash(publicSource) + "/v2";
+    String apiBase = normalizeApiUrl(baseUrl);
+    String publicBase = normalizeApiUrl(publicBaseUrl != null ? publicBaseUrl : baseUrl);
     return new ApifyClient(http, apiBase, publicBase);
   }
 
+  /** Strips any trailing slashes and appends {@link #API_VERSION_PATH}. */
+  private static String normalizeApiUrl(String url) {
+    return trimTrailingSlash(url) + API_VERSION_PATH;
+  }
+
   private static String trimTrailingSlash(String s) {
-    int end = s.length();
-    while (end > 0 && s.charAt(end - 1) == '/') {
-      end--;
+    String result = s;
+    while (result.endsWith("/")) {
+      result = result.substring(0, result.length() - 1);
     }
-    return s.substring(0, end);
+    return result;
   }
 
   /**

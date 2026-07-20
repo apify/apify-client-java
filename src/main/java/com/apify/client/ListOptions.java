@@ -1,5 +1,7 @@
 package com.apify.client;
 
+import com.apify.client.internal.QueryParams;
+
 /**
  * The standard offset/limit pagination shared by most {@code list} endpoints (builds, runs, tasks,
  * schedules, webhooks, Actor versions). All fields are optional; leave one unset to use the API

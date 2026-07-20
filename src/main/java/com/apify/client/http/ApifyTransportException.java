@@ -21,8 +21,9 @@ public final class ApifyTransportException extends ApifyClientException {
 
   /**
    * Reports whether this transport failure was caused by the request timing out, as opposed to some
-   * other network failure. Backend-agnostic: it recognizes {@link HttpTimeoutException}, the {@link
-   * HttpTransport} contract's own timeout signal, not any specific backend's exception type.
+   * other network failure. Transport-implementation-agnostic: it recognizes {@link
+   * HttpTimeoutException}, the {@link HttpTransport} contract's own timeout signal, not any
+   * specific transport implementation's exception type.
    */
   public boolean isTimeout() {
     return getCause() instanceof HttpTimeoutException;

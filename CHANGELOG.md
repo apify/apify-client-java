@@ -12,20 +12,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** split the single `com.apify.client` package into resource-scoped sub-packages
   (`com.apify.client.actor`, `.build`, `.run`, `.dataset`, `.keyvalue`, `.requestqueue`, `.task`,
   `.schedule`, `.webhook`, `.user`, `.store`, `.log`, `.http`); `ApifyClient`, its builder, shared
-  value types and the exception hierarchy stay in the root package.
+  value types and the exception hierarchy stay in the root package. Pure implementation plumbing
+  (`ResourceContext`, `QueryParams`, `HttpClientCore`, `Json`, `Signatures`, `Statuses`,
+  `DataEnvelope`, `ApiPaths`, `PaginatedIterator`, ...) moved to a new, non-exported
+  `com.apify.client.internal` package; a `module-info.java` exports only the resource-scoped
+  packages above.
 - **Breaking:** renamed the replaceable transport: `HttpBackend` -> `HttpTransport`,
   `DefaultHttpBackend` -> `DefaultHttpTransport`, `HttpBackend.sendStreaming` ->
   `HttpTransport.sendStreamingResponse`, `ApifyClientBuilder.httpBackend` ->
   `ApifyClientBuilder.httpTransport`.
-- **Breaking:** reworked the exception hierarchy: added a common `ApifyClientException` base;
-  the previously internal, package-private transport-failure exception is now a public
-  `ApifyTransportException`; timeout detection is backend-agnostic via a new
-  `HttpTimeoutException` that any `HttpTransport` implementation can throw.
+- **Breaking:** reworked the exception hierarchy: added a common `ApifyClientException` base that
+  `ApifyApiException` and the new public `ApifyTransportException` both extend; timeout detection
+  is transport-agnostic via a new `HttpTimeoutException` that any `HttpTransport` implementation
+  can throw.
 - **Breaking:** `ApifyClient.getUserAgent()`/`getApiBaseUrl()` are no longer public.
-- **Breaking:** removed `ApifyClient.setStatusMessage(...)`; use
-  `client.run(runId).update(Map.of("statusMessage", ..., "isStatusMessageTerminal", ...))`.
+- **Breaking:** `RunClient.setLastRunParams` is no longer public; last-run construction is now
+  internal to `RunClient.lastRun(...)`, used by `ActorClient.lastRun`/`TaskClient.lastRun`.
 - `DatasetClient`/`KeyValueStoreClient` are now fully immutable: the public-base-URL is set at
-  construction instead of through a self-mutating `withPublicBase` step.
+  construction instead of through a self-mutating `withPublicBase` step. `ResourceContext` no
+  longer has any in-place-mutating call site.
 - Lowered the default HTTP connection-establishment timeout from 30s to 10s and made it
   configurable (`DefaultHttpTransport(Duration)`).
 - Consolidated the internal `call`/`callWithHeaders` overloads under a single `call` name.
@@ -39,16 +44,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Centralized the API's resource-collection path segments (e.g. `datasets`, `actor-builds`) into a
   single `ApiPaths` constants class, referenced by each dedicated resource client instead of being
   passed in from `ApifyClient`.
-- Verified the client against OpenAPI specification version `v2-2026-07-20T094852Z` and bumped
-  `Version.API_SPEC_VERSION`. The spec change only added already-handled error responses (`402`,
-  `404`, `409` on the build/task endpoints), an `ErrorType` enum value, and allowed `null` for a
-  tagged build's `buildNumber`; all are already covered by the client's generic status-code error
-  handling and untyped-extras model deserialization, so no interface or behavior change was needed.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-20T094852Z`.
+
+### Added
+
+- `ApifyClient.setStatusMessage(String, SetStatusMessageOptions)`, matching the reference client's
+  top-level `setStatusMessage`.
 
 ### Fixed
 
-- `PaginationList.setItems` now defensively copies its input, closing a representation-exposure
-  gap surfaced by making the setter part of the client's cross-package public surface.
+- `ApifyApiException` now extends `ApifyClientException` (previously `RuntimeException` directly),
+  so `catch (ApifyClientException)` catches API errors as documented.
+- `PaginationList.getItems()` no longer throws `NullPointerException` when the API response
+  contains an explicit `"items": null`.
+- `PaginationList.setItems` now defensively copies its input.
 
 ## [0.3.1] - 2026-07-14
 
@@ -59,12 +68,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Verified the client against OpenAPI specification version `v2-2026-07-13T092445Z` and bumped
-  `Version.API_SPEC_VERSION`. The spec change only added already-handled error responses (`402`
-  Payment Required on actor and run-resurrect run-sync endpoints, `408` Request Timeout on the
-  task run-sync endpoint) and relaxed `required` constraints on run/build/key-value-store/webhook
-  stats counters; both are already covered by the client's generic status-code error handling and
-  its forward-compatible model deserialization, so no interface or behavior change was needed.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-13T092445Z`.
 
 ### Fixed
 
@@ -130,12 +134,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Verified the client against OpenAPI specification version `v2-2026-07-10T105921Z` and bumped
-  `Version.API_SPEC_VERSION` accordingly. The spec delta is forward-compatible: new `401`/`402`
-  error responses on several endpoints (handled generically by `ApifyApiException`) and relaxed
-  nullability/optionality on some response fields — already tolerated because the models use
-  nullable boxed field types (a JSON `null` deserializes to `null`) and an optional field simply
-  stays unset.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-10T105921Z`.
 - **Breaking:** `StoreCollectionClient.iterate` now takes `iterate(StoreListOptions, Long chunkSize)`,
   where the options' `limit` is the total-items cap and `chunkSize` is the page size. Previously
   `limit` was the per-page size. This aligns Store iteration with the reference client and the new
@@ -159,8 +158,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Verified the client against OpenAPI specification version `v2-2026-07-08T143931Z` and bumped
-  `Version.API_SPEC_VERSION` accordingly.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-08T143931Z`.
 - Aligned the `User-Agent` OS token with the reference JS client's `os.platform()` token: it now
   uses the short, lowercase platform identifier (`linux`, `darwin`, `win32`, `android`, …) instead
   of the human-readable `os.name` value.
@@ -174,8 +172,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Verified the client against OpenAPI specification version `v2-2026-07-07T132551Z` and bumped
-  `Version.API_SPEC_VERSION` accordingly.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-07T132551Z`.
 - Corrected the `LastRunOptions` documentation: `origin` is now a spec-declared query parameter on
   the `runs/last` endpoints (behaviour unchanged).
 

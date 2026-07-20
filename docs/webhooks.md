@@ -1,9 +1,5 @@
 # Webhooks & dispatches
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Webhooks notify an external service when specific events occur. Access the collection with
 `client.webhooks()` and a single webhook with `client.webhook(id)`. Dispatches (individual
 invocations) are available account-wide via `client.webhookDispatches()` /

@@ -1,6 +1,6 @@
 package com.apify.client.dataset;
 
-import com.apify.client.QueryParams;
+import com.apify.client.internal.QueryParams;
 
 /**
  * Adds format-specific options for {@link DatasetClient#downloadItems} on top of the shared item

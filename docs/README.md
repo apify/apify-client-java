@@ -1,9 +1,5 @@
 # Apify Java client documentation
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 This directory documents the public API of the Apify Java client, organized by resource. Each page
 lists the available methods with their parameters and short snippets. The snippets are code
 fragments that assume a configured `client` and the imports listed below, not standalone `main`
@@ -31,10 +27,38 @@ empty `Optional` rather than an exception. API failures are thrown as `ApifyApiE
 
 ## Imports and dependencies
 
-Snippets in these docs assume the client types are imported from `com.apify.client` (e.g.
-`import com.apify.client.*;`) plus standard-library types (`java.util.List`, `java.util.ArrayList`,
-`java.util.Map`, `java.util.Optional`, `java.util.Iterator`, `java.util.function.Consumer`,
-`java.time.Duration`, `java.io.InputStream`).
+Client types are **not** all in one package: `import com.apify.client.*;` only resolves
+`ApifyClient`, its builder, and the shared kernel types below — a wildcard import does not reach
+into sub-packages in Java. Every resource has its own sub-package for its client(s), model(s) and
+option types, so import each resource you use from its own package:
+
+| Package | Contains |
+|---|---|
+| `com.apify.client` (root) | `ApifyClient`, `ApifyClientBuilder`, `Version`, `PaginationList<T>`, `ListOptions`, `StorageListOptions`, `ApifyResource` |
+| `com.apify.client.http` | `ApifyClientException`, `ApifyApiException`, `ApifyTransportException`, `HttpTransport`, `DefaultHttpTransport`, `HttpTimeoutException` |
+| `com.apify.client.actor` | `Actor`, `ActorClient`, `ActorListOptions`, `ActorStartOptions`, `ActorBuildOptions`, `ActorVersion`, `ActorEnvVar`, ... |
+| `com.apify.client.build` | `Build`, `BuildClient`, `BuildCollectionClient` |
+| `com.apify.client.run` | `ActorRun`, `RunClient`, `RunListOptions`, `LastRunOptions`, `MetamorphOptions`, `RunChargeOptions`, `RunResurrectOptions`, `SetStatusMessageOptions` |
+| `com.apify.client.dataset` | `Dataset`, `DatasetClient`, `DatasetListItemsOptions`, `DatasetDownloadOptions` |
+| `com.apify.client.keyvalue` | `KeyValueStore`, `KeyValueStoreClient`, `KeyValueStoreRecord`, `GetRecordOptions`, `SetRecordOptions`, `ListKeysOptions` |
+| `com.apify.client.requestqueue` | `RequestQueue`, `RequestQueueClient`, `RequestQueueRequest`, `ListRequestsOptions`, `BatchAddRequestsOptions` |
+| `com.apify.client.task` | `Task`, `TaskClient`, `TaskStartOptions`, `ValidateInputOptions` |
+| `com.apify.client.schedule` | `Schedule`, `ScheduleClient` |
+| `com.apify.client.webhook` | `Webhook`, `WebhookClient`, `WebhookDispatch`, `WebhookDispatchClient` |
+| `com.apify.client.user` | `User`, `UserClient` |
+| `com.apify.client.store` | `ActorStoreListItem`, `StoreCollectionClient`, `StoreListOptions` |
+| `com.apify.client.log` | `LogClient`, `LogOptions`, `StreamedLog`, `StreamedLogOptions` |
+
+For example, the [top-level README's dataset snippet](../README.md#quick-start) needs
+`com.apify.client.ApifyClient`, `com.apify.client.PaginationList`,
+`com.apify.client.dataset.DatasetListItemsOptions`, `com.apify.client.run.ActorRun`,
+`com.apify.client.actor.ActorStartOptions` and `com.fasterxml.jackson.databind.JsonNode` — five
+different packages for one six-line snippet.
+
+Snippets in these docs also assume the standard-library types they use are imported
+(`java.util.List`, `java.util.ArrayList`, `java.util.Map`, `java.util.Optional`,
+`java.util.Iterator`, `java.util.UUID`, `java.util.function.Consumer`, `java.time.Duration`,
+`java.io.InputStream`).
 
 Raw-JSON return values use Jackson's `com.fasterxml.jackson.databind.JsonNode`. Jackson is a
 transitive dependency of this client, so it is already on your classpath.
@@ -44,13 +68,14 @@ transitive dependency of this client, so it is already on your classpath.
 A few methods return data whose shape is not modelled by this client and is instead exposed as a
 Jackson `JsonNode` (or accept an arbitrary `Object` serialized to JSON):
 
-- Read: `me().monthlyUsage(...)`, `me().limits()`, `task(id).getInput()`,
-  `build(id).getOpenApiDefinition()`, `dataset(id).getStatistics()` (returned as
-  `Optional<JsonNode>`), and the raw request-queue operations (`listRequests`, `listAndLockHead`,
-  `prolongRequestLock`, `unlockRequests`, `batchDeleteRequests`).
-- Write: `task(id).updateInput(...)` and `me().updateLimits(...)` accept an arbitrary
-  JSON-serializable value, as do definition/`update`/`create` arguments generally — a `Map`, a
-  `JsonNode`, or your own POJO.
+- Read, returning a required `JsonNode` (never absent): `me().monthlyUsage(...)`, `me().limits()`,
+  and the raw request-queue operations `listRequests`, `listAndLockHead`, `prolongRequestLock`,
+  `unlockRequests`, `batchDeleteRequests`.
+- Read, returning `Optional<JsonNode>` (empty when the underlying resource has none): `dataset(id).getStatistics()`,
+  `task(id).getInput()`, `build(id).getOpenApiDefinition()`.
+- Write: `task(id).updateInput(...)` (itself returning a required `JsonNode`, the updated input)
+  and `me().updateLimits(...)` accept an arbitrary JSON-serializable value, as do
+  definition/`update`/`create` arguments generally — a `Map`, a `JsonNode`, or your own POJO.
 
 Navigate a `JsonNode` with `node.get("field")`, `node.path("a").asText()`, etc.
 
@@ -65,6 +90,25 @@ not mapped to a typed getter, so nothing the API returns is lost. For example a 
 ```java
 Schedule schedule = client.schedule("SCHEDULE_ID").get().orElseThrow();
 Object actions = schedule.getExtra().get("actions");
+```
+
+Some models expose only their most commonly used fields as typed getters and leave more of the
+API response in `getExtra()` than others — `Schedule`, `Webhook`, `Task` and `ActorRun` in
+particular currently model a subset of what the API returns (e.g. a `Schedule`'s `title`,
+`timezone`, `notifications`; a `Webhook`'s `condition`, `payloadTemplate`, `stats`; an `ActorRun`'s
+`usage`, `options`, `pricingInfo`). Read those fields via `getExtra()` until a typed getter is
+added; the raw JSON key is unchanged either way.
+
+## Setting the current run's status message
+
+`client.setStatusMessage(String message, SetStatusMessageOptions)` (import from
+`com.apify.client.run`) updates the status message of the current Actor run (identified by the
+`ACTOR_RUN_ID` environment variable); it only works from inside a run and throws
+`IllegalStateException` otherwise. `SetStatusMessageOptions.isStatusMessageTerminal(boolean)` marks
+the message as final so it won't be overwritten. Returns the updated `ActorRun`.
+
+```java
+client.setStatusMessage("half way there", new SetStatusMessageOptions().isStatusMessageTerminal(false));
 ```
 
 ## Optional option fields

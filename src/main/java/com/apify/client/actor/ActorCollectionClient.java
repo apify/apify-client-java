@@ -1,10 +1,10 @@
 package com.apify.client.actor;
 
-import com.apify.client.ApiPaths;
 import com.apify.client.PaginationList;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
-import com.apify.client.http.HttpClientCore;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 import java.util.Iterator;
 
 /** A client for the Actor collection ({@code GET/POST /v2/actors}). */

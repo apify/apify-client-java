@@ -64,9 +64,11 @@ any other environment variable) automatically. Read it yourself if you want that
 
 All public client types live under `com.apify.client`, split by resource into sub-packages (e.g.
 `com.apify.client.run.ActorRun`, `com.apify.client.dataset.DatasetListItemsOptions`) — see
-[Resources](#resources) below for the full list. The remaining snippets in this file are fragments
-that assume a configured `client`; the [resource pages](docs/README.md) show each fragment as a
-complete, correctly-imported program. Reading items from a run's default dataset:
+[Resources](#resources) below for the full list; [`docs/README.md`](docs/README.md#imports-and-dependencies)
+enumerates the model/option-type packages. The remaining snippets in this file (like the Quick
+start one above) are fragments that assume a configured `client` and the correct imports for the
+types they use — they are not, by themselves, complete programs; the [resource pages](docs/README.md)
+show the same kind of fragment per method. Reading items from a run's default dataset:
 
 ```java
 ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
@@ -75,8 +77,9 @@ PaginationList<JsonNode> items =
 System.out.println("Items in this page: " + items.getCount());
 ```
 
-The types used above — `PaginationList<T>`, `DatasetListItemsOptions`, and the per-resource clients —
-are documented on the [resource pages](docs/README.md); `ApifyApiException` is covered under
+The types used above — `PaginationList<T>` (root package), `DatasetListItemsOptions`
+(`com.apify.client.dataset`), and the per-resource clients — are documented on the
+[resource pages](docs/README.md); `ApifyApiException` (`com.apify.client.http`) is covered under
 [Error handling](#error-handling) below. [`docs/examples.md`](docs/examples.md) has complete,
 runnable programs (build-and-run, storages, log redirection, and more).
 
@@ -103,13 +106,13 @@ The transport is a replaceable component. The default is `DefaultHttpTransport` 
 proxy/TLS:
 
 ```java
-HttpTransport backend = new DefaultHttpTransport(java.net.http.HttpClient.newHttpClient());
-ApifyClient withBackend = ApifyClient.builder().token("t").httpTransport(backend).build();
+HttpTransport transport = new DefaultHttpTransport(java.net.http.HttpClient.newHttpClient());
+ApifyClient withTransport = ApifyClient.builder().token("t").httpTransport(transport).build();
 ```
 
-Cross-cutting behaviour applied to every request lives in the client, not the backend:
-bearer-token authentication, the mandated `User-Agent` header, and retries with exponential
-backoff and jitter on `429`, `5xx` and network errors.
+Cross-cutting behaviour applied to every request lives in the client, not the transport
+implementation: bearer-token authentication, the mandated `User-Agent` header, and retries with
+exponential backoff and jitter on `429`, `5xx` and network errors.
 
 ## Fetching single resources
 
@@ -122,8 +125,18 @@ client.actor("apify/hello-world").get().ifPresent(actor -> System.out.println(ac
 
 ## Error handling
 
-API failures (a request that reaches the API but returns a non-success status) are thrown as
-`ApifyApiException`, an unchecked exception exposing the parsed error details:
+Every exception this client throws is an unchecked `com.apify.client.http.ApifyClientException`.
+It has two concrete subtypes, both also in `com.apify.client.http`:
+
+- `ApifyApiException` — the request reached the API, which answered with a non-success status.
+- `ApifyTransportException` — the request never produced an API response at all (connection
+  failure, DNS, timeout, or a local failure preparing the request/response, e.g. compression).
+  `isTimeout()` reports whether the underlying cause was specifically a timeout (backed by
+  `HttpTimeoutException`, part of the `HttpTransport` contract, not any specific transport
+  implementation's own exception type).
+
+Catch `ApifyClientException` to handle both failure modes uniformly, or catch a specific subtype to
+handle one of them differently. `ApifyApiException` is imported from `com.apify.client.http`:
 
 ```java
 try {
@@ -132,6 +145,8 @@ try {
   System.out.println("status=" + e.getStatusCode() + " type=" + e.getType());
 }
 ```
+
+`ApifyApiException` exposes the parsed error details:
 
 | Accessor | Meaning |
 |---|---|

@@ -1,6 +1,6 @@
 package com.apify.client.actor;
 
-import com.apify.client.QueryParams;
+import com.apify.client.internal.QueryParams;
 
 /** Options for {@link ActorCollectionClient#list(ActorListOptions)}. */
 public final class ActorListOptions {

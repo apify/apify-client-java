@@ -1,10 +1,9 @@
-package com.apify.client;
+package com.apify.client.internal;
 
+import com.apify.client.PaginationList;
 import com.apify.client.http.ApiResponse;
 import com.apify.client.http.ApifyApiException;
 import com.apify.client.http.ApifyTransportException;
-import com.apify.client.http.HttpClientCore;
-import com.apify.client.http.Json;
 import com.fasterxml.jackson.databind.JavaType;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -270,6 +269,26 @@ public final class ResourceContext {
       String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp = http.call("POST", u, body, contentType, http.baseRequestTimeout());
+    return Json.parse(resp.body, dataClass);
+  }
+
+  /** PUT with a raw body (optional) and content type, unwrapping the data envelope. */
+  public <T> T putWithBody(
+      String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
+    String u = mergedParams(params).applyToUrl(subUrl(subPath));
+    ApiResponse resp = http.call("PUT", u, body, contentType, http.baseRequestTimeout());
+    return Json.parseData(resp.body, dataClass);
+  }
+
+  /**
+   * PUT with a raw body and content type, parsing the response body directly <em>without</em>
+   * unwrapping a {@code {"data": ...}} envelope. Used by endpoints (e.g. actor task input) whose
+   * response is a plain object rather than the standard data envelope.
+   */
+  public <T> T putWithBodyNoEnvelope(
+      String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
+    String u = mergedParams(params).applyToUrl(subUrl(subPath));
+    ApiResponse resp = http.call("PUT", u, body, contentType, http.baseRequestTimeout());
     return Json.parse(resp.body, dataClass);
   }
 

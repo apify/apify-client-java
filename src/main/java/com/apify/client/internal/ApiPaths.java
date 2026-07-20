@@ -1,4 +1,4 @@
-package com.apify.client;
+package com.apify.client.internal;
 
 /**
  * The Apify API's top-level resource-collection path segments (e.g. {@code datasets} in {@code

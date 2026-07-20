@@ -11,8 +11,8 @@ import java.net.http.HttpResponse;
  *
  * <p>Implementations are responsible only for sending a single, fully-prepared request and
  * returning the raw response. Authentication, the {@code User-Agent} header, retries and
- * (de)serialization are handled by the client, so a backend only needs to perform one network
- * round-trip.
+ * (de)serialization are handled by the client, so a transport implementation only needs to perform
+ * one network round-trip.
  *
  * <p>A non-2xx HTTP status is <b>not</b> an error at this layer — return it as a normal {@link
  * HttpResponse}. Only transport-level failures (connection refused, DNS, timeout) should be thrown.

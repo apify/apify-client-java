@@ -1,8 +1,8 @@
 package com.apify.client.actor;
 
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
-import com.apify.client.http.HttpClientCore;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 import java.util.Optional;
 
 /**

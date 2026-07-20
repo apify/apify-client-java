@@ -1,14 +1,15 @@
 package com.apify.client.dataset;
 
-import com.apify.client.ApiPaths;
-import com.apify.client.PaginatedIterator;
 import com.apify.client.PaginationList;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
-import com.apify.client.Signatures;
 import com.apify.client.http.ApiResponse;
-import com.apify.client.http.HttpClientCore;
-import com.apify.client.http.Json;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.Extras;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.Json;
+import com.apify.client.internal.PaginatedIterator;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
+import com.apify.client.internal.Signatures;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Iterator;
@@ -212,7 +213,7 @@ public final class DatasetClient {
     options.apply(params);
     Optional<Dataset> dataset = get();
     if (dataset.isPresent()) {
-      String secret = extractString(dataset.get().getExtra(), "urlSigningSecretKey");
+      String secret = Extras.extractString(dataset.get().getExtra(), "urlSigningSecretKey");
       if (secret != null) {
         String sig = Signatures.signStorageContent(secret, dataset.get().getId(), expiresInSecs);
         params.addString("signature", sig);
@@ -227,11 +228,5 @@ public final class DatasetClient {
 
   private static long headerLong(ApiResponse resp, String name, long fallback) {
     return resp.headers.firstValueAsLong(name).orElse(fallback);
-  }
-
-  /** Reads a string field from an extra map, returning {@code null} if absent or not a string. */
-  public static String extractString(java.util.Map<String, Object> extra, String key) {
-    Object v = extra.get(key);
-    return (v instanceof String) ? (String) v : null;
   }
 }

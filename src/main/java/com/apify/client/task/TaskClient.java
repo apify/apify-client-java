@@ -1,11 +1,12 @@
 package com.apify.client.task;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
 import com.apify.client.http.ApiResponse;
-import com.apify.client.http.HttpClientCore;
-import com.apify.client.http.Json;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.Json;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
@@ -28,7 +29,7 @@ public final class TaskClient {
   public TaskClient(ApifyClient root, HttpClientCore http, String baseUrl, String id) {
     this.root = root;
     this.http = http;
-    this.ctx = ResourceContext.single(http, baseUrl, "actor-tasks", id);
+    this.ctx = ResourceContext.single(http, baseUrl, ApiPaths.ACTOR_TASKS, id);
   }
 
   /** Fetches the task object, or empty if it does not exist. */
@@ -78,17 +79,12 @@ public final class TaskClient {
 
   /** Replaces the task's stored input and returns the updated input. */
   public JsonNode updateInput(Object input) {
-    // Route through mergedParams like the task's other calls, so any inherited params are
-    // preserved.
-    String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("input"));
-    ApiResponse resp =
-        http.call(
-            "PUT",
-            url,
-            Json.toBytes(input),
-            ResourceContext.CONTENT_TYPE_JSON,
-            http.baseRequestTimeout());
-    return Json.parse(resp.body, JsonNode.class);
+    return ctx.putWithBodyNoEnvelope(
+        "input",
+        new QueryParams(),
+        Json.toBytes(input),
+        ResourceContext.CONTENT_TYPE_JSON,
+        JsonNode.class);
   }
 
   /**
@@ -103,9 +99,7 @@ public final class TaskClient {
    * Returns a client for the last run of this task, optionally filtered by status and/or origin.
    */
   public RunClient lastRun(LastRunOptions options) {
-    RunClient client = new RunClient(root, http, ctx.subUrl(""), "runs", "last");
-    client.setLastRunParams(options);
-    return client;
+    return RunClient.lastRun(root, http, ctx.subUrl(""), options);
   }
 
   /** A client for this task's run collection. */

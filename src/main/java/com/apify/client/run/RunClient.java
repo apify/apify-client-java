@@ -1,12 +1,12 @@
 package com.apify.client.run;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
 import com.apify.client.actor.Actor;
 import com.apify.client.dataset.DatasetClient;
-import com.apify.client.http.HttpClientCore;
-import com.apify.client.http.Json;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.Json;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 import com.apify.client.keyvalue.KeyValueStoreClient;
 import com.apify.client.log.LogClient;
 import com.apify.client.log.StreamedLog;
@@ -31,28 +31,47 @@ public final class RunClient {
   /** Header the API uses to deduplicate charge requests. */
   private static final String CHARGE_IDEMPOTENCY_HEADER = "idempotency-key";
 
+  /**
+   * Exclusive upper bound of the random suffix appended to an auto-generated idempotency key: it
+   * only needs to be unique enough to avoid collisions within a single request, not
+   * cryptographically secure, so six decimal digits' worth of entropy is ample.
+   */
+  private static final long IDEMPOTENCY_KEY_RANDOM_BOUND = 1_000_000;
+
   private final ApifyClient root;
   private final ResourceContext ctx;
   private final String id;
 
   public RunClient(
       ApifyClient root, HttpClientCore http, String baseUrl, String resourcePath, String id) {
+    this(root, ResourceContext.single(http, baseUrl, resourcePath, id), id);
+  }
+
+  private RunClient(ApifyClient root, ResourceContext ctx, String id) {
     this.root = root;
-    this.ctx = ResourceContext.single(http, baseUrl, resourcePath, id);
+    this.ctx = ctx;
     this.id = id;
   }
 
   /**
-   * Pins the {@code status} and/or {@code origin} query parameters inherited by all calls on this
-   * client (used by the last-run accessors). Empty values are skipped.
+   * Builds a {@code RunClient} for a "last run" accessor ({@code runs/last}, nested under an Actor
+   * or task), with the {@code status}/{@code origin} filters from {@code options} pinned as query
+   * parameters inherited by every call on the returned client. Shared by {@code
+   * ActorClient#lastRun}/{@code TaskClient#lastRun} so the construction logic (and the once-off use
+   * of {@link ResourceContext#seedParams}, which returns a new, still-immutable context rather than
+   * mutating one in place) lives in a single place (DRY).
    */
-  public void setLastRunParams(LastRunOptions options) {
+  public static RunClient lastRun(
+      ApifyClient root, HttpClientCore http, String parentUrl, LastRunOptions options) {
+    ResourceContext ctx = ResourceContext.single(http, parentUrl, "runs", "last");
+    QueryParams filter = new QueryParams();
     if (options.statusValue() != null && !options.statusValue().isEmpty()) {
-      ctx.baseParams.addRaw("status", options.statusValue());
+      filter.addRaw("status", options.statusValue());
     }
     if (options.originValue() != null && !options.originValue().isEmpty()) {
-      ctx.baseParams.addRaw("origin", options.originValue());
+      filter.addRaw("origin", options.originValue());
     }
+    return new RunClient(root, ctx.seedParams(filter), "last");
   }
 
   /** Fetches the run object, or empty if it does not exist. */
@@ -166,7 +185,7 @@ public final class RunClient {
         + "-"
         + System.currentTimeMillis()
         + "-"
-        + ThreadLocalRandom.current().nextLong(1_000_000);
+        + ThreadLocalRandom.current().nextLong(IDEMPOTENCY_KEY_RANDOM_BOUND);
   }
 
   /**

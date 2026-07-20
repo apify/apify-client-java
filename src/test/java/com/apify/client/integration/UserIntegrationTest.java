@@ -17,6 +17,18 @@ class UserIntegrationTest extends IntegrationBase {
   }
 
   @Test
+  void getUserById() {
+    ApifyClient client = requireClient();
+    var me = client.me().get();
+    assertTrue(me.isPresent());
+    // The account's own id is always a valid target for the by-id accessor (public profile view),
+    // covering `ApifyClient.user(id)` in addition to the `me()` convenience already exercised
+    // above.
+    var byId = client.user(me.get().getId()).get();
+    assertTrue(byId.isPresent());
+  }
+
+  @Test
   void getMonthlyUsage() {
     ApifyClient client = requireClient();
     JsonNode usage = client.me().monthlyUsage();

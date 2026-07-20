@@ -8,6 +8,7 @@ import com.apify.client.ListOptions;
 import com.apify.client.actor.Actor;
 import com.apify.client.actor.ActorBuildOptions;
 import com.apify.client.build.Build;
+import com.apify.client.build.BuildClient;
 import org.junit.jupiter.api.Test;
 
 class BuildIntegrationTest extends IntegrationBase {
@@ -34,6 +35,23 @@ class BuildIntegrationTest extends IntegrationBase {
       // the build-nested .../log accessor, so the "simple GET per endpoint" rule is met for it.
       assertNotNull(client.log(build.getId()).get());
       client.build(build.getId()).getOpenApiDefinition();
+    } finally {
+      client.actor(created.getId()).delete();
+    }
+  }
+
+  @Test
+  void buildAbortAndDelete() {
+    ApifyClient client = requireClient();
+    Actor created =
+        client.actors().create(ActorIntegrationTest.minimalActor(uniqueName("build-abort")));
+    try {
+      Build build = client.actor(created.getId()).build("0.0", new ActorBuildOptions());
+      BuildClient buildClient = client.build(build.getId());
+      Build aborted = buildClient.abort();
+      assertNotNull(aborted.getStatus());
+      buildClient.waitForFinish(60L);
+      buildClient.delete();
     } finally {
       client.actor(created.getId()).delete();
     }

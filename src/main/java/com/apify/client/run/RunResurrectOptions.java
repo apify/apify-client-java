@@ -1,6 +1,6 @@
 package com.apify.client.run;
 
-import com.apify.client.QueryParams;
+import com.apify.client.internal.QueryParams;
 
 /** Configures {@link RunClient#resurrect(RunResurrectOptions)}. */
 public final class RunResurrectOptions {

@@ -52,10 +52,11 @@ public final class PaginationList<T> {
 
   /** The items of this page (never {@code null}; unmodifiable). */
   public List<T> getItems() {
-    // items is already an immutable List.copyOf() copy (see setItems); wrapping it again is a
-    // no-op at runtime but satisfies static analysis that the getter cannot expose a mutable
-    // reference to the backing list, without weakening the real defense (the copy in setItems).
-    return Collections.unmodifiableList(items);
+    // Null-coalesce: Jackson binds directly to the (private) `items` field for deserialization
+    // (see Json's FIELD/ANY visibility config), which bypasses setItems()'s List.copyOf() default
+    // whenever the API response contains an explicit `"items": null`. Falling back to List.of()
+    // here keeps the "never null" contract regardless of how the field was populated.
+    return items == null ? List.of() : Collections.unmodifiableList(items);
   }
 
   // Setters used by the collection-listing and dataset-items paths, which build a page from a

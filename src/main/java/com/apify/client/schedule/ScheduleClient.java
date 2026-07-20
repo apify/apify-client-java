@@ -1,10 +1,10 @@
 package com.apify.client.schedule;
 
-import com.apify.client.ApiPaths;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
 import com.apify.client.http.ApiResponse;
-import com.apify.client.http.HttpClientCore;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 

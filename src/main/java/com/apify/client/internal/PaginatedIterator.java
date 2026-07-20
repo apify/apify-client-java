@@ -1,5 +1,6 @@
-package com.apify.client;
+package com.apify.client.internal;
 
+import com.apify.client.PaginationList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;

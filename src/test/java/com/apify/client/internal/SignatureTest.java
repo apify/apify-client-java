@@ -1,4 +1,4 @@
-package com.apify.client;
+package com.apify.client.internal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

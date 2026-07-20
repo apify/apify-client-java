@@ -144,6 +144,11 @@
                     <!-- Be gentle on the shared integration-test account: run test classes serially. -->
                     <forkCount>1</forkCount>
                     <reuseForks>true</reuseForks>
+                    <!-- Keep running the test suite on the classpath, unaffected by module-info's
+                         `exports`: tests intentionally reach into com.apify.client.internal (e.g.
+                         HttpClientCore, ResourceContext) as white-box unit tests, which the module
+                         path would block since that package is not exported. -->
+                    <useModulePath>false</useModulePath>
                 </configuration>
             </plugin>
 

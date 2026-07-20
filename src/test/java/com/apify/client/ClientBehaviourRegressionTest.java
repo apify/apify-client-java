@@ -247,8 +247,8 @@ class ClientBehaviourRegressionTest {
   @Test
   void getWithWaitClampsServerWaitToConfiguredTimeout() {
     // With a 10s per-request timeout, a caller asking for waitForFinish=60 must be clamped below
-    // the
-    // timeout (10 - 5s margin = 5) so the synchronous get can't abort itself on the socket timeout.
+    // the timeout (10 - 5s margin = 5) so the synchronous get can't abort itself on the socket
+    // timeout.
     MockTransport backend =
         MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
     ApifyClient client =

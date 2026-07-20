@@ -1,13 +1,14 @@
 package com.apify.client.keyvalue;
 
-import com.apify.client.ApiPaths;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
-import com.apify.client.Signatures;
-import com.apify.client.dataset.DatasetClient;
 import com.apify.client.http.ApiResponse;
-import com.apify.client.http.HttpClientCore;
-import com.apify.client.http.Json;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.Extras;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.Json;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
+import com.apify.client.internal.Signatures;
+import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -204,9 +205,9 @@ public final class KeyValueStoreClient {
    * ({@code timeoutSecs}, {@code doNotRetryTimeouts}).
    */
   public void setRecord(String key, byte[] value, String contentType, SetRecordOptions options) {
-    java.time.Duration timeout =
+    Duration timeout =
         options.timeoutSecsValue() != null
-            ? java.time.Duration.ofSeconds(options.timeoutSecsValue())
+            ? Duration.ofSeconds(options.timeoutSecsValue())
             : ctx.http.baseRequestTimeout();
     ctx.putRaw(
         "records/" + ResourceContext.encodePathSegment(key),
@@ -236,7 +237,7 @@ public final class KeyValueStoreClient {
     QueryParams params = new QueryParams();
     Optional<KeyValueStore> store = get();
     if (store.isPresent()) {
-      String secret = DatasetClient.extractString(store.get().getExtra(), "urlSigningSecretKey");
+      String secret = Extras.extractString(store.get().getExtra(), "urlSigningSecretKey");
       if (secret != null) {
         params.addString("signature", Signatures.createHmacSignature(secret, key));
       }
@@ -269,7 +270,7 @@ public final class KeyValueStoreClient {
     if (options.signatureValue() == null) {
       Optional<KeyValueStore> store = get();
       if (store.isPresent()) {
-        String secret = DatasetClient.extractString(store.get().getExtra(), "urlSigningSecretKey");
+        String secret = Extras.extractString(store.get().getExtra(), "urlSigningSecretKey");
         if (secret != null) {
           params.addString(
               "signature",

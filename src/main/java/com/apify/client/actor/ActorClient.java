@@ -1,13 +1,14 @@
 package com.apify.client.actor;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
 import com.apify.client.build.Build;
 import com.apify.client.build.BuildClient;
 import com.apify.client.build.BuildCollectionClient;
-import com.apify.client.http.HttpClientCore;
-import com.apify.client.http.Json;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.Json;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
@@ -33,7 +34,7 @@ public final class ActorClient {
   public ActorClient(ApifyClient root, HttpClientCore http, String baseUrl, String id) {
     this.root = root;
     this.http = http;
-    this.ctx = ResourceContext.single(http, baseUrl, "actors", id);
+    this.ctx = ResourceContext.single(http, baseUrl, ApiPaths.ACTORS, id);
     this.baseUrl = baseUrl;
     this.id = id;
   }
@@ -137,9 +138,7 @@ public final class ActorClient {
    * Returns a client for the last run of this Actor, optionally filtered by status and/or origin.
    */
   public RunClient lastRun(LastRunOptions options) {
-    RunClient client = new RunClient(root, http, ctx.subUrl(""), "runs", "last");
-    client.setLastRunParams(options);
-    return client;
+    return RunClient.lastRun(root, http, ctx.subUrl(""), options);
   }
 
   /** A client for this Actor's build collection. */

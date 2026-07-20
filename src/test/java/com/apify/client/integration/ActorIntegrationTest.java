@@ -7,10 +7,13 @@ import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
 import com.apify.client.PaginationList;
 import com.apify.client.actor.Actor;
+import com.apify.client.actor.ActorBuildOptions;
 import com.apify.client.actor.ActorClient;
 import com.apify.client.actor.ActorEnvVar;
 import com.apify.client.actor.ActorListOptions;
 import com.apify.client.actor.ActorVersion;
+import com.apify.client.build.Build;
+import com.apify.client.build.BuildClient;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -115,6 +118,27 @@ class ActorIntegrationTest extends IntegrationBase {
     // {"valid": <bool>}. A well-formed input validates true.
     boolean valid = client.actor("apify/hello-world").validateInput(Map.of("firstNumber", 1));
     assertTrue(valid);
+  }
+
+  @Test
+  void actorDefaultBuildAndWebhooks() {
+    ApifyClient client = requireClient();
+    Actor created = client.actors().create(minimalActor(uniqueName("default-build")));
+    try {
+      ActorClient actor = client.actor(created.getId());
+      Build build = actor.build("0.0", new ActorBuildOptions());
+      client.build(build.getId()).waitForFinish(300L);
+
+      BuildClient defaultBuild = actor.defaultBuild(60L);
+      assertTrue(defaultBuild.get().isPresent());
+
+      // Read-only nested webhook collection (GET + iterate); the account has none registered for
+      // this fresh Actor, so this just exercises both calls succeeding against an empty result.
+      assertTrue(actor.webhooks().list(new ListOptions()).getTotal() >= 0);
+      assertTrue(!actor.webhooks().iterate(new ListOptions()).hasNext());
+    } finally {
+      client.actor(created.getId()).delete();
+    }
   }
 
   @Test

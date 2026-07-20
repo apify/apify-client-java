@@ -1,6 +1,5 @@
-package com.apify.client.http;
+package com.apify.client.internal;
 
-import com.apify.client.DataEnvelope;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
@@ -106,7 +105,7 @@ public final class Json {
   public static <T> T parseData(byte[] body, JavaType dataType) {
     JavaType envelopeType = parametric(DataEnvelope.class, dataType);
     DataEnvelope<T> envelope = parse(body, envelopeType);
-    return envelope.data;
+    return envelope.getData();
   }
 
   /** Parses a data-envelope whose {@code data} is of the given class. */

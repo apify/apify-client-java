@@ -1,6 +1,7 @@
 package com.apify.client.http;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -14,7 +15,7 @@ import java.util.Map;
  * <p>It is an unchecked exception so callers are not forced to wrap every call; recover from it
  * with a normal {@code try}/{@code catch} where relevant.
  */
-public class ApifyApiException extends RuntimeException {
+public class ApifyApiException extends ApifyClientException {
 
   private static final long serialVersionUID = 1L;
 
@@ -25,7 +26,12 @@ public class ApifyApiException extends RuntimeException {
   private final String path;
   private final transient Map<String, Object> data;
 
-  ApifyApiException(
+  /**
+   * Constructs an exception describing an API error response. Public so the internal HTTP client
+   * (in a separate, non-exported package) can build one; end users are not expected to construct
+   * this directly.
+   */
+  public ApifyApiException(
       int statusCode,
       String type,
       String message,
@@ -39,7 +45,10 @@ public class ApifyApiException extends RuntimeException {
     this.attempt = attempt;
     this.httpMethod = httpMethod;
     this.path = path;
-    this.data = data;
+    // Defensively copy: this constructor is public (built by the internal HTTP client, in a
+    // separate package, but nothing stops an external caller from building one too), so the
+    // caller's map must not remain a live, externally-mutable alias of this exception's state.
+    this.data = data == null ? null : new LinkedHashMap<>(data);
   }
 
   /** The HTTP status code of the error response. */

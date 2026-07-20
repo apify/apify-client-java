@@ -1,5 +1,7 @@
 package com.apify.client;
 
+import com.apify.client.internal.QueryParams;
+
 /**
  * Options for the storage collection list endpoints ({@code GET /v2/datasets}, {@code
  * /v2/key-value-stores}, {@code /v2/request-queues}), which add {@code unnamed} and {@code

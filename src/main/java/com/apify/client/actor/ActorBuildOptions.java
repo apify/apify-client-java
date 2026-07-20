@@ -1,6 +1,6 @@
 package com.apify.client.actor;
 
-import com.apify.client.QueryParams;
+import com.apify.client.internal.QueryParams;
 
 /** Configures {@link ActorClient#build(String, ActorBuildOptions)}. */
 public final class ActorBuildOptions {

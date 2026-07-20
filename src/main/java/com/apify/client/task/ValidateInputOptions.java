@@ -1,8 +1,8 @@
 package com.apify.client.task;
 
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
 import com.apify.client.actor.ActorClient;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 
 /**
  * Configures {@link ActorClient#validateInput(Object, ValidateInputOptions)}. All fields are

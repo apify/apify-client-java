@@ -76,12 +76,13 @@ final class MockTransport implements HttpTransport {
   }
 
   static Scripted timeoutError() {
-    // Throws the HttpTransport contract's own backend-agnostic timeout signal (not the JDK
-    // HttpClient's), matching what any real backend implementation is expected to do.
+    // Throws the HttpTransport contract's own transport-implementation-agnostic timeout signal
+    // (not the JDK HttpClient's), matching what any real transport implementation is expected to
+    // do.
     return new Scripted(0, null, new HttpTimeoutException("request timed out", null));
   }
 
-  // synchronized: batchAddRequests may drive this backend from several threads at once.
+  // synchronized: batchAddRequests may drive this transport from several threads at once.
   @Override
   public synchronized HttpResponse<byte[]> send(HttpRequest request) throws IOException {
     int idx = calls++;

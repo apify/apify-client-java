@@ -1,7 +1,7 @@
 package com.apify.client.task;
 
-import com.apify.client.QueryParams;
 import com.apify.client.actor.ActorStartOptions;
+import com.apify.client.internal.QueryParams;
 import java.util.List;
 
 /**

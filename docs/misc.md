@@ -1,9 +1,5 @@
 # Store, users & logs
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 ## Apify Store — `client.store()`
 
 Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollectionClient`.
@@ -38,7 +34,7 @@ while (shown < 5 && it.hasNext()) {
 | Method | Description |
 |---|---|
 | `get()` | Fetch the user. Returns `Optional<User>` (private details for `me()` via `getExtra()`). |
-| `monthlyUsage()` / `monthlyUsage(String date)` | Account monthly usage (`me()` only). Returns `JsonNode`. |
+| `monthlyUsage()` / `monthlyUsage(String date)` | Account monthly usage (`me()` only). `date` (any day within the target month, formatted `YYYY-MM-DD`) reports that month; `null`/empty reports the current month. Returns `JsonNode`. |
 | `limits()` | Account resource limits (`me()` only). Returns `JsonNode`. |
 | `updateLimits(Object)` | Update account limits (`me()` only). No return value. |
 

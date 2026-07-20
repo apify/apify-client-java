@@ -1,9 +1,5 @@
 # Examples
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Each example below is a code fragment (not a standalone `main`) that assumes a configured `client`
 and the imports listed in the [documentation index](README.md#imports-and-dependencies). The
 complete, standalone programs (with imports and a `main`) live under
@@ -25,8 +21,9 @@ System.out.println("Items in this page: " + items.getCount());
 
 ```java
 // Named storages persist on your account; each block deletes its storage in a finally so the
-// example does not leak them. A unique suffix keeps the names from colliding across parallel runs.
-String suffix = Long.toString(System.currentTimeMillis());
+// example does not leak them. A random (not time-based) suffix keeps the names from colliding
+// across parallel runs, including two runs starting in the same millisecond.
+String suffix = UUID.randomUUID().toString().substring(0, 8);
 
 // Dataset: create, push items, read them back.
 Dataset dataset = client.datasets().getOrCreate("java-example-ds-" + suffix);
@@ -75,8 +72,8 @@ user.ifPresent(u -> {
 
 ```java
 Actor created = client.actors().create(Map.of(
-    // A unique name avoids collisions across parallel runs.
-    "name", "my-example-actor-" + System.currentTimeMillis(),
+    // A random (not time-based) suffix avoids collisions across parallel runs.
+    "name", "my-example-actor-" + UUID.randomUUID().toString().substring(0, 8),
     "isPublic", false,
     "versions", List.of(Map.of(
         "versionNumber", "0.0",

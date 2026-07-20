@@ -1,6 +1,6 @@
 package com.apify.client.webhook;
 
-import com.apify.client.http.HttpClientCore;
+import com.apify.client.internal.HttpClientCore;
 
 /**
  * A read-only client for the webhooks nested under an Actor ({@code GET /v2/actors/{id}/webhooks})

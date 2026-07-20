@@ -7,15 +7,18 @@ import com.apify.client.build.BuildCollectionClient;
 import com.apify.client.dataset.DatasetClient;
 import com.apify.client.dataset.DatasetCollectionClient;
 import com.apify.client.http.DefaultHttpTransport;
-import com.apify.client.http.HttpClientCore;
 import com.apify.client.http.HttpTransport;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.HttpClientCore;
 import com.apify.client.keyvalue.KeyValueStoreClient;
 import com.apify.client.keyvalue.KeyValueStoreCollectionClient;
 import com.apify.client.log.LogClient;
 import com.apify.client.requestqueue.RequestQueueClient;
 import com.apify.client.requestqueue.RequestQueueCollectionClient;
+import com.apify.client.run.ActorRun;
 import com.apify.client.run.RunClient;
 import com.apify.client.run.RunCollectionClient;
+import com.apify.client.run.SetStatusMessageOptions;
 import com.apify.client.schedule.ScheduleClient;
 import com.apify.client.schedule.ScheduleCollectionClient;
 import com.apify.client.store.StoreCollectionClient;
@@ -26,6 +29,8 @@ import com.apify.client.webhook.WebhookClient;
 import com.apify.client.webhook.WebhookCollectionClient;
 import com.apify.client.webhook.WebhookDispatchClient;
 import com.apify.client.webhook.WebhookDispatchCollectionClient;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * The entry point for interacting with the Apify API.
@@ -59,8 +64,8 @@ import com.apify.client.webhook.WebhookDispatchCollectionClient;
  */
 public final class ApifyClient {
 
-  /** Addresses the current user ({@code /users/me}). */
-  private static final String ME_USER_PLACEHOLDER = "me";
+  /** Environment variable holding the run id of the Actor run the client is executing in. */
+  private static final String ACTOR_RUN_ID_ENV_VAR = "ACTOR_RUN_ID";
 
   private final HttpClientCore http;
   private final String baseUrl;
@@ -231,11 +236,32 @@ public final class ApifyClient {
 
   /** A client for the current user ({@code /users/me}). */
   public UserClient me() {
-    return new UserClient(http, baseUrl, ME_USER_PLACEHOLDER);
+    return new UserClient(http, baseUrl, UserClient.ME);
   }
 
   /** A client for a specific user by ID or username. */
   public UserClient user(String id) {
     return new UserClient(http, baseUrl, id);
+  }
+
+  /**
+   * Sets the status message of the current Actor run.
+   *
+   * <p>This convenience method updates the run identified by the {@code ACTOR_RUN_ID} environment
+   * variable, so it only works when called from inside an Actor run. Throws {@link
+   * IllegalStateException} if {@code ACTOR_RUN_ID} is not set. Matches the reference client's
+   * top-level {@code setStatusMessage}.
+   */
+  public ActorRun setStatusMessage(String message, SetStatusMessageOptions options) {
+    String runId = System.getenv(ACTOR_RUN_ID_ENV_VAR);
+    if (runId == null || runId.isEmpty()) {
+      throw new IllegalStateException(ACTOR_RUN_ID_ENV_VAR + " environment variable is not set");
+    }
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("statusMessage", message);
+    if (options != null && options.isStatusMessageTerminal() != null) {
+      body.put("isStatusMessageTerminal", options.isStatusMessageTerminal());
+    }
+    return run(runId).update(body);
   }
 }

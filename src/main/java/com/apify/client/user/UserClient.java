@@ -1,10 +1,10 @@
 package com.apify.client.user;
 
-import com.apify.client.ApiPaths;
-import com.apify.client.QueryParams;
-import com.apify.client.ResourceContext;
-import com.apify.client.http.HttpClientCore;
-import com.apify.client.http.Json;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.Json;
+import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Optional;
 
@@ -16,14 +16,14 @@ import java.util.Optional;
  * client.
  */
 public final class UserClient {
-  private static final String ME = "me";
 
-  private final HttpClientCore http;
+  /** The special user id addressing the currently-authenticated account ({@code /users/me}). */
+  public static final String ME = "me";
+
   private final ResourceContext ctx;
   private final boolean isMe;
 
   public UserClient(HttpClientCore http, String baseUrl, String id) {
-    this.http = http;
     this.ctx = ResourceContext.single(http, baseUrl, ApiPaths.USERS, id);
     this.isMe = ME.equals(id);
   }
@@ -67,15 +67,11 @@ public final class UserClient {
   /** Updates the current account's resource limits. Only available for {@code me}. */
   public void updateLimits(Object newLimits) {
     requireMe();
-    // Route through mergedParams for consistency with the sibling limits() read (a no-op here since
-    // UserClient is never seeded with inherited params, but keeps every call site uniform).
-    String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("limits"));
-    http.call(
-        "PUT",
-        url,
-        Json.toBytes(newLimits),
-        ResourceContext.CONTENT_TYPE_JSON,
-        http.baseRequestTimeout());
+    // Route through the shared PUT primitive for consistency with every other resource client's
+    // update-style call; the response body (the updated limits) is intentionally not parsed,
+    // matching the reference client's void-returning updateLimits.
+    ctx.putRaw(
+        "limits", new QueryParams(), Json.toBytes(newLimits), ResourceContext.CONTENT_TYPE_JSON);
   }
 
   private void requireMe() {

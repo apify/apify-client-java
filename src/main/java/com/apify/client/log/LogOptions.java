@@ -1,6 +1,6 @@
 package com.apify.client.log;
 
-import com.apify.client.QueryParams;
+import com.apify.client.internal.QueryParams;
 
 /** Configures log retrieval/streaming. */
 public final class LogOptions {

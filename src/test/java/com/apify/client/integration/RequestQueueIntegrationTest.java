@@ -88,6 +88,30 @@ class RequestQueueIntegrationTest extends IntegrationBase {
   }
 
   @Test
+  void requestQueuePaginateWithTotalLimit() {
+    ApifyClient client = requireClient();
+    RequestQueue rq = client.requestQueues().getOrCreate(uniqueName("rq-page-limit"));
+    try {
+      RequestQueueClient queue = client.requestQueue(rq.getId());
+      for (int i = 0; i < 5; i++) {
+        String url = "https://example.com/" + i;
+        queue.addRequest(new RequestQueueRequest(url, url), false);
+      }
+      // totalLimit caps the number yielded across all pages, independent of the per-page chunk
+      // size (chunkSize=2 forces at least two page fetches to satisfy a totalLimit of 3).
+      Iterator<RequestQueueRequest> it = queue.paginateRequests(3L, 2L, null);
+      int count = 0;
+      while (it.hasNext()) {
+        it.next();
+        count++;
+      }
+      assertEquals(3, count);
+    } finally {
+      client.requestQueue(rq.getId()).delete();
+    }
+  }
+
+  @Test
   void requestQueueBatchAddRequests() {
     ApifyClient client = requireClient();
     RequestQueue rq = client.requestQueues().getOrCreate(uniqueName("rq-batch"));

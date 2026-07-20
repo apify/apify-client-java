@@ -10,6 +10,7 @@ import com.apify.client.run.ActorRun;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Demonstrates the full Actor lifecycle: create a new Actor from source files, build it, run it,
@@ -20,7 +21,10 @@ public final class CreateBuildRunActor {
 
   public static void main(String[] args) {
     ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
-    String name = "java-example-" + System.currentTimeMillis();
+    // Random, not time-based: this example (like the integration tests) may run concurrently
+    // against the same account from several processes/languages at once, and two runs starting in
+    // the same millisecond would otherwise collide on the same Actor name.
+    String name = "java-example-" + UUID.randomUUID().toString().substring(0, 8);
 
     Map<String, Object> actorDef =
         Map.of(

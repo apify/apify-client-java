@@ -1,6 +1,6 @@
 package com.apify.client.keyvalue;
 
-import com.apify.client.QueryParams;
+import com.apify.client.internal.QueryParams;
 
 /** Configures {@link KeyValueStoreClient#listKeys(ListKeysOptions)}. */
 public final class ListKeysOptions {

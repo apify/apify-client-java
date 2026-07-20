@@ -1,9 +1,5 @@
 # Runs
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 `client.task(id).runs()`) and a single run with `client.run(id)`.
 
@@ -49,7 +45,7 @@ background thread and redirects each complete, timestamped message to a destinat
 `AutoCloseable` — call `start()` to begin redirection and `stop()` (or `close()`, via
 try-with-resources) to end it.
 
-With no options, messages go to a `java.util.logging.Logger` at `INFO` level, prefixed with the
+With no options, messages go to an SLF4J `Logger` at `INFO` level, prefixed with the
 Actor name and run id (looked up automatically). `StreamedLogOptions` customizes it:
 
 - `toLog(Consumer<String>)` — send each complete message to your own consumer instead of the
@@ -71,12 +67,13 @@ try (StreamedLog streamedLog =
 For raw stream access without redirection, use `log().stream(new LogOptions().raw(true))`; use
 `log()` for the full log text or for non-raw/download options.
 
-To set the current run's status message from inside an Actor, resolve the run id (e.g. from the
-`ACTOR_RUN_ID` environment variable) and `update()` it directly:
+To set the current run's status message from inside an Actor, use the top-level
+`client.setStatusMessage(...)` (see [the docs index](README.md#setting-the-current-runs-status-message)).
+To update the status message of a run other than the current one, call `update()` on its
+`RunClient` directly:
 
 ```java
-String runId = System.getenv("ACTOR_RUN_ID");
-client.run(runId).update(Map.of("statusMessage", "half way there", "isStatusMessageTerminal", false));
+client.run("RUN_ID").update(Map.of("statusMessage", "half way there", "isStatusMessageTerminal", false));
 ```
 
 > **`lastRun()` clients are for reads.** A `RunClient` obtained via `actor(id).lastRun(...)` /

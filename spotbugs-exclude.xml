@@ -39,7 +39,7 @@
     <Bug pattern="UWF_UNWRITTEN_FIELD"/>
   </Match>
   <Match>
-    <Class name="com.apify.client.http.HttpClientCore$ErrorBody"/>
+    <Class name="com.apify.client.internal.HttpClientCore$ErrorBody"/>
     <Bug pattern="UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD"/>
   </Match>
 </FindBugsFilter>

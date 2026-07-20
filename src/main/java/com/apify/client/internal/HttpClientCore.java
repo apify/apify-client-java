@@ -1,7 +1,12 @@
-package com.apify.client.http;
+package com.apify.client.internal;
 
 import com.aayushatharva.brotli4j.Brotli4jLoader;
 import com.aayushatharva.brotli4j.encoder.Encoder;
+import com.apify.client.http.ApiResponse;
+import com.apify.client.http.ApifyApiException;
+import com.apify.client.http.ApifyTransportException;
+import com.apify.client.http.HttpTransport;
+import com.apify.client.http.RetryConfig;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -70,7 +75,11 @@ public final class HttpClientCore {
     }
   }
 
-  /** Reports whether the brotli path is active on this platform (package-private for tests). */
+  /**
+   * Reports whether the brotli path is active on this platform. Public so tests outside this
+   * package (which lives in the non-exported {@code com.apify.client.internal} package) can assert
+   * on it.
+   */
   public static boolean brotliAvailable() {
     return BROTLI_AVAILABLE;
   }
@@ -89,10 +98,6 @@ public final class HttpClientCore {
 
   public String userAgent() {
     return userAgent;
-  }
-
-  HttpTransport backend() {
-    return backend;
   }
 
   /** The configured maximum per-attempt request timeout, in whole seconds. */
@@ -307,7 +312,8 @@ public final class HttpClientCore {
    * JS client. When {@code preferBrotli} is {@code true} the body is brotli-encoded ({@code
    * Content-Encoding: br}); otherwise it is gzip-encoded ({@code Content-Encoding: gzip}). Callers
    * pass {@link #BROTLI_AVAILABLE}; making the coding an explicit parameter keeps this a pure
-   * function of its inputs rather than of hidden static state. Package-private.
+   * function of its inputs rather than of hidden static state. Public so {@code CompressionTest}
+   * (outside this non-exported package) can exercise it directly.
    */
   public static Compressed compress(byte[] data, boolean preferBrotli) {
     return preferBrotli

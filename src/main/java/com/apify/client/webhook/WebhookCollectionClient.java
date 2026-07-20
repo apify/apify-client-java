@@ -1,7 +1,7 @@
 package com.apify.client.webhook;
 
-import com.apify.client.QueryParams;
-import com.apify.client.http.HttpClientCore;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.QueryParams;
 
 /**
  * A client for the account-wide webhook collection ({@code GET/POST /v2/webhooks}), supporting both

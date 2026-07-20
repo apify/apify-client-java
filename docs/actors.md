@@ -1,9 +1,5 @@
 # Actors, versions & environment variables
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Access the Actor collection with `client.actors()` and a single Actor with `client.actor(id)`,
 where `id` is an Actor ID or `username~name` (a `/` in the id is accepted and normalized).
 
@@ -99,8 +95,8 @@ and deletes a single version and exposes its environment variables.
 
 | Method | Description |
 |---|---|
-| `list(ListOptions)` | List the Actor's versions. Returns `PaginationList<ActorVersion>`. |
-| `iterate(ListOptions)` | Lazy `Iterator<ActorVersion>` over all versions; `limit` caps the total (`null`/unset or non-positive = all). The versions endpoint is not paginated (one fetch returns every version), so `offset` has no effect and there is no page size to tune. |
+| `list(ListOptions)` | List the Actor's versions. Returns `PaginationList<ActorVersion>`. The endpoint takes no query parameters; `options` (`offset`/`limit`/`desc`) is accepted only for signature consistency with every other `list(ListOptions)` and has no effect — pass `null`. |
+| `iterate(ListOptions)` | Lazy `Iterator<ActorVersion>` over all versions; `limit` caps the total (`null`/unset or non-positive = all), applied client-side after the single fetch. `offset` has no effect and there is no page size to tune. |
 | `create(Object version)` | Create a version. Returns `ActorVersion`. |
 
 ### `ActorVersionClient` — `client.actor(id).version(v)`
