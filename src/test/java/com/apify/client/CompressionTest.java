@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import com.aayushatharva.brotli4j.Brotli4jLoader;
 import com.aayushatharva.brotli4j.decoder.Decoder;
 import com.aayushatharva.brotli4j.decoder.DirectDecompress;
+import com.apify.client.http.HttpClientCore;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,8 +32,8 @@ class CompressionTest {
   private static final String RECORD_KEY = "record";
   private static final String CONTENT_TYPE = "application/octet-stream";
 
-  private static ApifyClient client(MockBackend backend) {
-    return ApifyClient.builder().token("t").httpBackend(backend).maxRetries(0).build();
+  private static ApifyClient client(MockTransport backend) {
+    return ApifyClient.builder().token("t").httpTransport(backend).maxRetries(0).build();
   }
 
   private static byte[] gunzip(byte[] data) throws IOException {
@@ -113,7 +114,7 @@ class CompressionTest {
 
   @Test
   void largeBodyIsCompressedWithPreferredEncoding() throws IOException {
-    MockBackend backend = MockBackend.ofConstant(201, "");
+    MockTransport backend = MockTransport.ofConstant(201, "");
     byte[] payload = payload(4096, (byte) 'a');
 
     client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE);
@@ -131,7 +132,7 @@ class CompressionTest {
 
   @Test
   void smallBodyIsNotCompressed() {
-    MockBackend backend = MockBackend.ofConstant(201, "");
+    MockTransport backend = MockTransport.ofConstant(201, "");
     byte[] payload = payload(16, (byte) 'b');
 
     client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE);
@@ -144,7 +145,7 @@ class CompressionTest {
 
   @Test
   void bodyExactlyAtThresholdIsCompressed() throws IOException {
-    MockBackend backend = MockBackend.ofConstant(201, "");
+    MockTransport backend = MockTransport.ofConstant(201, "");
     byte[] payload = payload(1024, (byte) 'c');
 
     client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE);

@@ -29,11 +29,11 @@ import java.util.NoSuchElementException;
  * signal would truncate iteration. Terminating on an empty page costs one extra request at the end
  * but yields the complete result in every case.
  */
-final class PaginatedIterator<T> implements Iterator<T> {
+public final class PaginatedIterator<T> implements Iterator<T> {
 
   /** Fetches a single page starting at {@code offset}, requesting at most {@code limit} items. */
   @FunctionalInterface
-  interface PageFetcher<T> {
+  public interface PageFetcher<T> {
     PaginationList<T> fetch(long offset, Long limit);
   }
 
@@ -47,7 +47,8 @@ final class PaginatedIterator<T> implements Iterator<T> {
   private long yielded;
   private boolean exhausted;
 
-  PaginatedIterator(Long totalLimit, Long chunkSize, Long startOffset, PageFetcher<T> fetcher) {
+  public PaginatedIterator(
+      Long totalLimit, Long chunkSize, Long startOffset, PageFetcher<T> fetcher) {
     this.totalLimit = totalLimit != null && totalLimit > 0 ? totalLimit : null;
     this.chunkSize = chunkSize != null && chunkSize > 0 ? chunkSize : null;
     this.offset = startOffset != null && startOffset > 0 ? startOffset : 0;

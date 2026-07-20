@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
-import com.apify.client.Schedule;
-import com.apify.client.ScheduleClient;
+import com.apify.client.schedule.Schedule;
+import com.apify.client.schedule.ScheduleClient;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;

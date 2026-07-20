@@ -67,12 +67,6 @@ Schedule schedule = client.schedule("SCHEDULE_ID").get().orElseThrow();
 Object actions = schedule.getExtra().get("actions");
 ```
 
-## Setting single-resource status
-
-`client.setStatusMessage(String message, boolean isTerminal)` updates the status message of the
-current Actor run (identified by the `ACTOR_RUN_ID` environment variable); it only works from inside
-a run and throws `IllegalStateException` otherwise. Returns the updated `ActorRun`.
-
 ## Optional option fields
 
 Option objects use fluent setters and nullable (boxed) fields; an unset field means "use the API

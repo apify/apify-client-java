@@ -52,31 +52,38 @@ public final class PaginationList<T> {
 
   /** The items of this page (never {@code null}; unmodifiable). */
   public List<T> getItems() {
+    // items is already an immutable List.copyOf() copy (see setItems); wrapping it again is a
+    // no-op at runtime but satisfies static analysis that the getter cannot expose a mutable
+    // reference to the backing list, without weakening the real defense (the copy in setItems).
     return Collections.unmodifiableList(items);
   }
 
-  // Package-private setters used by the dataset-items path, which builds pages from headers.
-  void setTotal(long total) {
+  // Setters used by the collection-listing and dataset-items paths, which build a page from a
+  // parsed response (or, for dataset items, from response headers) one field at a time.
+  public void setTotal(long total) {
     this.total = total;
   }
 
-  void setOffset(long offset) {
+  public void setOffset(long offset) {
     this.offset = offset;
   }
 
-  void setLimit(long limit) {
+  public void setLimit(long limit) {
     this.limit = limit;
   }
 
-  void setCount(long count) {
+  public void setCount(long count) {
     this.count = count;
   }
 
-  void setDesc(boolean desc) {
+  public void setDesc(boolean desc) {
     this.desc = desc;
   }
 
-  void setItems(List<T> items) {
-    this.items = items;
+  public void setItems(List<T> items) {
+    // Copy defensively: items is set once by the client from a freshly-parsed/collected list, but
+    // taking an immutable copy means a caller can never mutate this page's items afterwards by
+    // mutating the list it passed in, and getItems() needs no wrapping to stay unmodifiable.
+    this.items = List.copyOf(items);
   }
 }

@@ -3,12 +3,16 @@ package com.apify.client.integration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.apify.client.ActorRun;
-import com.apify.client.ActorStartOptions;
 import com.apify.client.ApifyClient;
-import com.apify.client.LastRunOptions;
 import com.apify.client.ListOptions;
-import com.apify.client.RunListOptions;
+import com.apify.client.actor.ActorStartOptions;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.log.StreamedLog;
+import com.apify.client.log.StreamedLogOptions;
+import com.apify.client.run.ActorRun;
+import com.apify.client.run.LastRunOptions;
+import com.apify.client.run.RunClient;
+import com.apify.client.run.RunListOptions;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +36,7 @@ class ActorRunIntegrationTest extends IntegrationBase {
     Optional<String> log = client.run(run.getId()).log().get();
     assertTrue(log.isPresent() && !log.get().isEmpty());
 
-    client.run(run.getId()).dataset().listItems(new com.apify.client.DatasetListItemsOptions());
+    client.run(run.getId()).dataset().listItems(new DatasetListItemsOptions());
     client.run(run.getId()).keyValueStore().getRecord("OUTPUT");
   }
 
@@ -58,11 +62,11 @@ class ActorRunIntegrationTest extends IntegrationBase {
   void streamedLogRedirection() {
     ApifyClient client = requireClient();
     ActorRun run = client.actor("apify/hello-world").start(null, new ActorStartOptions());
-    com.apify.client.RunClient runClient = client.run(run.getId());
+    RunClient runClient = client.run(run.getId());
 
     java.util.List<String> collected = new java.util.concurrent.CopyOnWriteArrayList<>();
-    try (com.apify.client.StreamedLog streamedLog =
-        runClient.getStreamedLog(new com.apify.client.StreamedLogOptions().toLog(collected::add))) {
+    try (StreamedLog streamedLog =
+        runClient.getStreamedLog(new StreamedLogOptions().toLog(collected::add))) {
       streamedLog.start();
       runClient.waitForFinish(120L);
     }

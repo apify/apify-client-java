@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
-import com.apify.client.Webhook;
-import com.apify.client.WebhookClient;
-import com.apify.client.WebhookDispatch;
+import com.apify.client.webhook.Webhook;
+import com.apify.client.webhook.WebhookClient;
+import com.apify.client.webhook.WebhookDispatch;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;

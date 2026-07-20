@@ -71,8 +71,13 @@ try (StreamedLog streamedLog =
 For raw stream access without redirection, use `log().stream(new LogOptions().raw(true))`; use
 `log()` for the full log text or for non-raw/download options.
 
-To set the current run's status message from inside an Actor, use the top-level
-`client.setStatusMessage(...)` (see [the docs index](README.md#setting-single-resource-status)).
+To set the current run's status message from inside an Actor, resolve the run id (e.g. from the
+`ACTOR_RUN_ID` environment variable) and `update()` it directly:
+
+```java
+String runId = System.getenv("ACTOR_RUN_ID");
+client.run(runId).update(Map.of("statusMessage", "half way there", "isStatusMessageTerminal", false));
+```
 
 > **`lastRun()` clients are for reads.** A `RunClient` obtained via `actor(id).lastRun(...)` /
 > `task(id).lastRun(...)` targets the `runs/last` path and is intended for reading (`get`,

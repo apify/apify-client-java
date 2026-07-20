@@ -5,6 +5,6 @@ package com.apify.client;
  *
  * @param <T> the type of the wrapped payload
  */
-final class DataEnvelope<T> {
+public final class DataEnvelope<T> {
   public T data;
 }

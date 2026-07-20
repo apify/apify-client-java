@@ -5,6 +5,28 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.apify.client.actor.Actor;
+import com.apify.client.actor.ActorListOptions;
+import com.apify.client.actor.ActorVersion;
+import com.apify.client.dataset.DatasetDownloadOptions;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.dataset.DownloadItemsFormat;
+import com.apify.client.http.ApifyApiException;
+import com.apify.client.http.ApifyTransportException;
+import com.apify.client.keyvalue.KeyValueStore;
+import com.apify.client.keyvalue.KeyValueStoreRecord;
+import com.apify.client.keyvalue.ListKeysOptions;
+import com.apify.client.keyvalue.SetRecordOptions;
+import com.apify.client.requestqueue.BatchAddRequestsOptions;
+import com.apify.client.requestqueue.BatchAddResult;
+import com.apify.client.requestqueue.RequestQueueRequest;
+import com.apify.client.run.ActorRun;
+import com.apify.client.run.LastRunOptions;
+import com.apify.client.run.RunChargeOptions;
+import com.apify.client.store.ActorStoreListItem;
+import com.apify.client.store.StoreListOptions;
+import com.apify.client.webhook.NestedWebhookCollectionClient;
+import com.apify.client.webhook.Webhook;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,14 +40,14 @@ import org.junit.jupiter.api.Test;
  */
 class ClientBehaviourRegressionTest {
 
-  private static ApifyClient client(MockBackend backend) {
+  private static ApifyClient client(MockTransport backend) {
     return client(backend, 0);
   }
 
-  private static ApifyClient client(MockBackend backend, int maxRetries) {
+  private static ApifyClient client(MockTransport backend, int maxRetries) {
     return ApifyClient.builder()
         .token("test-token")
-        .httpBackend(backend)
+        .httpTransport(backend)
         .maxRetries(maxRetries)
         .minDelayBetweenRetries(Duration.ofMillis(1))
         .build();
@@ -33,7 +55,7 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void chargeSendsIdempotencyKey() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{}}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
     client(backend).run("run123").charge(new RunChargeOptions("my-event"));
     String key = backend.lastHeaders.firstValue("idempotency-key").orElse("");
     assertTrue(
@@ -45,7 +67,7 @@ class ClientBehaviourRegressionTest {
   void lastRunForwardsStatusFilterToNestedStorages() {
     // A status/origin-filtered last-run client must forward those filters to its nested
     // dataset/key-value-store/request-queue/log accessors, so they resolve the same run.
-    MockBackend ds = MockBackend.ofConstant(200, "[]");
+    MockTransport ds = MockTransport.ofConstant(200, "[]");
     client(ds)
         .actor("me/x")
         .lastRun("SUCCEEDED")
@@ -54,7 +76,7 @@ class ClientBehaviourRegressionTest {
     assertTrue(ds.lastUrl.contains("runs/last/dataset/items"), ds.lastUrl);
     assertTrue(ds.lastUrl.contains("status=SUCCEEDED"), ds.lastUrl);
 
-    MockBackend log = MockBackend.ofConstant(200, "log-text");
+    MockTransport log = MockTransport.ofConstant(200, "log-text");
     client(log)
         .actor("me/x")
         .lastRun(new LastRunOptions().status("SUCCEEDED").origin("API"))
@@ -68,7 +90,7 @@ class ClientBehaviourRegressionTest {
   @Test
   void plainRunNestedStoragesCarryNoInheritedFilter() {
     // A non-last-run client has no pinned params, so nested accessors stay filter-free.
-    MockBackend ds = MockBackend.ofConstant(200, "[]");
+    MockTransport ds = MockTransport.ofConstant(200, "[]");
     client(ds).run("run123").dataset().listItems(new DatasetListItemsOptions());
     assertTrue(ds.lastUrl.contains("actor-runs/run123/dataset/items"), ds.lastUrl);
     assertFalse(ds.lastUrl.contains("status="), ds.lastUrl);
@@ -76,14 +98,14 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void chargeHonorsExplicitIdempotencyKey() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{}}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
     client(backend).run("run123").charge(new RunChargeOptions("e").idempotencyKey("fixed-key"));
     assertEquals("fixed-key", backend.lastHeaders.firstValue("idempotency-key").orElse(""));
   }
 
   @Test
   void chargeRejectsMissingEventName() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{}}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
     ApifyClient client = client(backend);
     assertThrows(
         IllegalArgumentException.class, () -> client.run("r").charge(new RunChargeOptions(null)));
@@ -94,14 +116,14 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void getRecordDefaultsAttachment() {
-    MockBackend backend = MockBackend.ofConstant(200, "raw-bytes");
+    MockTransport backend = MockTransport.ofConstant(200, "raw-bytes");
     client(backend).keyValueStore("store1").getRecord("OUTPUT");
     assertTrue(backend.lastUrl.contains("attachment=1"), backend.lastUrl);
   }
 
   @Test
   void keyValueStoreRecordDefensivelyCopiesBytes() {
-    MockBackend backend = MockBackend.ofConstant(200, "raw-bytes");
+    MockTransport backend = MockTransport.ofConstant(200, "raw-bytes");
     KeyValueStoreRecord record =
         client(backend).keyValueStore("s").getRecord("OUTPUT").orElseThrow();
     byte[] first = record.getValue();
@@ -113,9 +135,9 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void setRecordDoesNotRetryTimeoutsWhenOptedOut() {
-    MockBackend timeouts = new MockBackend(List.of(MockBackend.timeoutError()));
+    MockTransport timeouts = new MockTransport(List.of(MockTransport.timeoutError()));
     assertThrows(
-        HttpClientCore.TransportException.class,
+        ApifyTransportException.class,
         () ->
             client(timeouts, 3)
                 .keyValueStore("s")
@@ -129,16 +151,16 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void setRecordRetriesTimeoutsByDefault() {
-    MockBackend timeouts = new MockBackend(List.of(MockBackend.timeoutError()));
+    MockTransport timeouts = new MockTransport(List.of(MockTransport.timeoutError()));
     assertThrows(
-        HttpClientCore.TransportException.class,
+        ApifyTransportException.class,
         () -> client(timeouts, 3).keyValueStore("s").setRecord("k", new byte[] {1}, "text/plain"));
     assertEquals(4, timeouts.calls, "timeouts should be retried (maxRetries + 1 attempts)");
   }
 
   @Test
   void createKeysPublicUrlForwardsFilterOptions() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{\"id\":\"store1\"}}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"store1\"}}");
     String url =
         client(backend)
             .keyValueStore("store1")
@@ -150,7 +172,7 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void downloadItemsForwardsItemSelectionParams() {
-    MockBackend backend = MockBackend.ofConstant(200, "col1,col2\n");
+    MockTransport backend = MockTransport.ofConstant(200, "col1,col2\n");
     client(backend)
         .dataset("d1")
         .downloadItems(
@@ -167,8 +189,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void batchAddRequestsChunks() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"processedRequests\":[],\"unprocessedRequests\":[]}}");
     List<RequestQueueRequest> requests = new ArrayList<>();
     for (int i = 0; i < 60; i++) {
@@ -185,14 +207,14 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void batchAddRequestsRetriesUnprocessed() {
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"processedRequests\":[{\"uniqueKey\":\"k0\",\"requestId\":\"r0\"}],"
                         + "\"unprocessedRequests\":[{\"uniqueKey\":\"k1\",\"url\":\"https://example.com\"}]}}"),
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"processedRequests\":[{\"uniqueKey\":\"k1\",\"requestId\":\"r1\"}],"
                         + "\"unprocessedRequests\":[]}}")));
@@ -214,8 +236,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void getWithWaitForwardsWaitForFinish() {
-    MockBackend backend =
-        MockBackend.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
+    MockTransport backend =
+        MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
     Optional<ActorRun> run = client(backend).run("r1").getWithWait(30L);
     assertTrue(run.isPresent(), "run should be present");
     assertEquals("r1", run.get().getId());
@@ -227,12 +249,12 @@ class ClientBehaviourRegressionTest {
     // With a 10s per-request timeout, a caller asking for waitForFinish=60 must be clamped below
     // the
     // timeout (10 - 5s margin = 5) so the synchronous get can't abort itself on the socket timeout.
-    MockBackend backend =
-        MockBackend.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
+    MockTransport backend =
+        MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
     ApifyClient client =
         ApifyClient.builder()
             .token("t")
-            .httpBackend(backend)
+            .httpTransport(backend)
             .maxRetries(0)
             .timeout(Duration.ofSeconds(10))
             .build();
@@ -243,12 +265,12 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void waitForFinishClampsServerWaitToConfiguredTimeout() {
-    MockBackend backend =
-        MockBackend.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}");
+    MockTransport backend =
+        MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}");
     ApifyClient client =
         ApifyClient.builder()
             .token("t")
-            .httpBackend(backend)
+            .httpTransport(backend)
             .maxRetries(0)
             .minDelayBetweenRetries(Duration.ofMillis(1))
             .timeout(Duration.ofSeconds(20))
@@ -260,15 +282,15 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void getResourceReturnsEmptyOnNullData() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":null}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":null}");
     Optional<KeyValueStore> store = client(backend).keyValueStore("s").get();
     assertTrue(store.isEmpty(), "a 200 with null data must map to an empty Optional, not throw");
   }
 
   @Test
   void storeIterateDoesNotMutateCallerOptionsAndHonorsOffset() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"items\":[],\"total\":0,\"offset\":0,\"limit\":0,\"count\":0}}");
     StoreListOptions options = new StoreListOptions().offset(100L).limit(50L);
     client(backend).store().iterate(options, null).hasNext();
@@ -279,19 +301,19 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void storeIterateWalksMultiplePages() {
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{},{}],\"total\":3,\"offset\":0,\"limit\":2,\"count\":2}}"),
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{}],\"total\":3,\"offset\":2,\"limit\":2,\"count\":1}}"),
                 // Trailing empty page: the iterator stops on an empty page (it does not trust the
                 // reported total, which some endpoints under-report), so a final empty page is
                 // required to terminate an uncapped walk.
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[],\"total\":3,\"offset\":3,\"limit\":2,\"count\":0}}")));
     // No total cap; page size 2 drives paging until the empty page.
@@ -309,13 +331,13 @@ class ClientBehaviourRegressionTest {
   @Test
   void collectionIterateSingleArgDelegatesToServerDefaultPageSize() {
     // The arg-less-chunkSize convenience overload must page correctly (delegates with null chunk).
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{},{}],\"total\":2,\"offset\":0,\"limit\":2,\"count\":2}}"),
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[],\"total\":2,\"offset\":2,\"limit\":2,\"count\":0}}")));
     java.util.Iterator<Actor> it = client(backend).actors().iterate(new ActorListOptions());
@@ -333,8 +355,8 @@ class ClientBehaviourRegressionTest {
   void iterateSnapshotsOptionsSoLaterMutationsDoNotLeak() {
     // The iterator must capture the options (offset/limit AND filters) at call time; mutating the
     // caller's options object afterwards must not change subsequent page requests.
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"items\":[{}],\"total\":1,\"offset\":0,\"limit\":0,\"count\":1}}");
     ActorListOptions options = new ActorListOptions().sortBy("createdAt");
     java.util.Iterator<Actor> it = client(backend).actors().iterate(options);
@@ -346,8 +368,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void runCollectionListToleratesNullOptionsAndFilter() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"items\":[],\"total\":0,\"offset\":0,\"limit\":0,\"count\":0}}");
     PaginationList<ActorRun> runs = client(backend).runs().list(null, null);
     assertEquals(0, runs.getItems().size());
@@ -355,8 +377,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void nestedWebhookCollectionListsWithoutCreate() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"items\":[],\"total\":0,\"offset\":0,\"limit\":0,\"count\":0}}");
     // Compile-time guarantee: the nested collection type has no create(); it only lists.
     NestedWebhookCollectionClient nested = client(backend).task("t1").webhooks();
@@ -365,7 +387,7 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void accountWebhookCollectionCanCreate() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{\"id\":\"wh1\"}}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"wh1\"}}");
     Webhook created = client(backend).webhooks().create(java.util.Map.of("eventTypes", List.of()));
     assertEquals("wh1", created.getId());
     assertTrue(backend.lastUrl.endsWith("/webhooks"), backend.lastUrl);
@@ -373,7 +395,7 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void updateLimitsSendsPutToMeLimits() {
-    MockBackend backend = MockBackend.ofConstant(200, "{}");
+    MockTransport backend = MockTransport.ofConstant(200, "{}");
     client(backend).me().updateLimits(java.util.Map.of("maxMonthlyUsageUsd", 100));
     assertTrue(backend.lastUrl.endsWith("/users/me/limits"), backend.lastUrl);
     assertTrue(backend.lastBody.contains("\"maxMonthlyUsageUsd\":100"), backend.lastBody);
@@ -384,8 +406,8 @@ class ClientBehaviourRegressionTest {
   void batchAddRequestsThrowsOnNonRetryableClientError() {
     // A hard 4xx (e.g. bad token / insufficient permissions) must surface, not be masked as
     // "unprocessed" — otherwise a caller cannot tell it apart from ordinary rate-limiting.
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             403, "{\"error\":{\"type\":\"insufficient-permissions\",\"message\":\"no\"}}");
     ApifyApiException ex =
         assertThrows(
@@ -402,8 +424,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void batchAddRequestsRunsChunksInParallel() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"processedRequests\":[],\"unprocessedRequests\":[]}}");
     List<RequestQueueRequest> requests = new ArrayList<>();
     for (int i = 0; i < 60; i++) {
@@ -422,12 +444,12 @@ class ClientBehaviourRegressionTest {
   void waitForFinishReturnsWhenResourceAppearsAfter404() {
     // A just-started run can transiently 404 (replica lag); the wait must keep polling until it
     // appears and reaches a terminal state rather than giving up on the first 404.
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}"),
-                MockBackend.ok(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}")));
+                MockTransport.ok(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}")));
     ActorRun run = client(backend).run("r1").waitForFinish(5L);
     assertEquals("r1", run.getId());
     assertEquals("SUCCEEDED", run.getStatus());
@@ -438,15 +460,15 @@ class ClientBehaviourRegressionTest {
   void waitForFinishThrowsWhenResourceNeverAppears() {
     // If the resource is never fetchable within the budget, the wait must fail loudly rather than
     // return a phantom result.
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}");
     assertThrows(IllegalStateException.class, () -> client(backend).run("r1").waitForFinish(0L));
   }
 
   @Test
   void logStreamThrowsOnNonSuccessStatus() {
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(
         403, "{\"error\":{\"type\":\"insufficient-permissions\",\"message\":\"no\"}}");
     ApifyApiException ex =
@@ -461,8 +483,8 @@ class ClientBehaviourRegressionTest {
     // that (same non-empty page for every call). Draining the iterator must terminate and yield
     // each version once. Routing this endpoint through the offset/limit paging engine looped
     // forever (empty-page termination never triggers), so this pins the single-fetch behaviour.
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200,
             "{\"data\":{\"total\":3,\"items\":["
                 + "{\"versionNumber\":\"0.1\"},"
@@ -484,8 +506,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void versionsIterateHonorsTotalLimitCap() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200,
             "{\"data\":{\"total\":3,\"items\":["
                 + "{\"versionNumber\":\"0.1\"},"

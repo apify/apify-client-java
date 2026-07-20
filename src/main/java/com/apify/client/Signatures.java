@@ -11,7 +11,7 @@ import javax.crypto.spec.SecretKeySpec;
  * {@code @apify/utilities} implementation that the reference clients rely on. Internal to the
  * client.
  */
-final class Signatures {
+public final class Signatures {
 
   /** Version tag embedded in storage-content signatures (upstream default). */
   private static final String STORAGE_CONTENT_SIGNATURE_VERSION = "0";
@@ -32,7 +32,7 @@ final class Signatures {
    * createHmacSignature}: HMAC-SHA256(secret, message) as lowercase hex, take the first 30 hex
    * characters, interpret them as a big integer, then base62-encode (alphabet {@code 0-9a-zA-Z}).
    */
-  static String createHmacSignature(String secretKey, String message) {
+  public static String createHmacSignature(String secretKey, String message) {
     byte[] digest = hmacSha256(secretKey, message);
     StringBuilder hex = new StringBuilder(digest.length * 2);
     for (byte b : digest) {
@@ -69,7 +69,7 @@ final class Signatures {
    *
    * @param expiresInSecs optional expiry in seconds ({@code null} for a non-expiring URL)
    */
-  static String signStorageContent(String secretKey, String resourceId, Long expiresInSecs) {
+  public static String signStorageContent(String secretKey, String resourceId, Long expiresInSecs) {
     long expiresAtMillis =
         expiresInSecs != null ? System.currentTimeMillis() + expiresInSecs * 1000L : 0L;
     String version = STORAGE_CONTENT_SIGNATURE_VERSION;

@@ -1,5 +1,9 @@
 package com.apify.client;
 
+import com.apify.client.http.DefaultHttpTransport;
+import com.apify.client.http.HttpClientCore;
+import com.apify.client.http.HttpTransport;
+import com.apify.client.http.RetryConfig;
 import java.time.Duration;
 import java.util.function.BooleanSupplier;
 
@@ -27,7 +31,7 @@ public final class ApifyClientBuilder {
   private Duration maxDelayBetweenRetries = DEFAULT_TIMEOUT;
   private Duration timeout = DEFAULT_TIMEOUT;
   private String userAgentSuffix;
-  private HttpBackend httpBackend;
+  private HttpTransport httpTransport;
   private BooleanSupplier isAtHomeFn = ApifyClientBuilder::defaultIsAtHome;
 
   ApifyClientBuilder() {}
@@ -85,8 +89,8 @@ public final class ApifyClientBuilder {
   }
 
   /** Replaces the default HTTP backend with a custom implementation (the replaceable transport). */
-  public ApifyClientBuilder httpBackend(HttpBackend httpBackend) {
-    this.httpBackend = httpBackend;
+  public ApifyClientBuilder httpTransport(HttpTransport httpTransport) {
+    this.httpTransport = httpTransport;
     return this;
   }
 
@@ -98,7 +102,7 @@ public final class ApifyClientBuilder {
 
   /** Builds the configured {@link ApifyClient}. */
   public ApifyClient build() {
-    HttpBackend backend = httpBackend != null ? httpBackend : new DefaultHttpBackend();
+    HttpTransport backend = httpTransport != null ? httpTransport : new DefaultHttpTransport();
     String userAgent = buildUserAgent(userAgentSuffix, isAtHomeFn);
     RetryConfig retry =
         new RetryConfig(maxRetries, minDelayBetweenRetries, maxDelayBetweenRetries, timeout);

@@ -46,15 +46,15 @@ public final class StorageListOptions {
     return this;
   }
 
-  Long offsetValue() {
+  public Long offsetValue() {
     return offset;
   }
 
-  Long limitValue() {
+  public Long limitValue() {
     return limit;
   }
 
-  void apply(QueryParams q) {
+  public void apply(QueryParams q) {
     q.addLong("offset", offset).addLong("limit", limit);
     applyFilters(q);
   }
@@ -62,7 +62,7 @@ public final class StorageListOptions {
   /**
    * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
    */
-  void applyFilters(QueryParams q) {
+  public void applyFilters(QueryParams q) {
     q.addBool("desc", desc).addBool("unnamed", unnamed).addString("ownership", ownership);
   }
 }

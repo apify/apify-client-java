@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.3.1</version>
+  <version>0.4.0</version>
 </dependency>
 ```
 
@@ -35,40 +35,18 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.3.1'
+  implementation 'com.apify:apify-client:0.4.0'
 }
 ```
 
 ## Quick start
 
-A complete, copy-pasteable first program (save as `HelloApify.java`). First scaffold a minimal
-`pom.xml` next to it so Maven can resolve the client and its runtime dependencies:
-
-```xml
-<project xmlns="http://maven.apache.org/POM/4.0.0">
-  <modelVersion>4.0.0</modelVersion>
-  <groupId>com.example</groupId>
-  <artifactId>hello-apify</artifactId>
-  <version>1.0.0</version>
-  <properties>
-    <maven.compiler.release>17</maven.compiler.release>
-  </properties>
-  <dependencies>
-    <dependency>
-      <groupId>com.apify</groupId>
-      <artifactId>apify-client</artifactId>
-      <version>0.3.1</version>
-    </dependency>
-  </dependencies>
-</project>
-```
-
-Create `HelloApify.java`:
+After adding the dependency (above), create an `ApifyClient`, then drill down into a resource:
 
 ```java
 import com.apify.client.ApifyClient;
-import com.apify.client.ActorRun;
-import com.apify.client.ActorStartOptions;
+import com.apify.client.run.ActorRun;
+import com.apify.client.actor.ActorStartOptions;
 
 class HelloApify {
   public static void main(String[] args) {
@@ -80,32 +58,18 @@ class HelloApify {
 }
 ```
 
-Then populate a `lib/` directory with the client and its runtime dependencies, and compile and run
-against the JVM's `lib/*` classpath wildcard — quote it so the shell does not expand it:
+`ApifyClient.create` takes the token as an explicit argument — it does **not** read `APIFY_TOKEN` (or
+any other environment variable) automatically. Read it yourself if you want that, e.g.
+`ApifyClient.create(System.getenv("APIFY_TOKEN"))`.
 
-```bash
-# 1. Collect apify-client and its runtime dependencies (Jackson, brotli4j codecs, …) into lib/.
-mvn dependency:copy-dependencies -DoutputDirectory=lib -DincludeScope=runtime
-
-# 2. Compile and run. '.' is for the compiled HelloApify.class; lib/* is the JVM classpath wildcard.
-javac -cp '.:lib/*' HelloApify.java   # Windows: javac -cp ".;lib/*" HelloApify.java
-java  -cp '.:lib/*' HelloApify        # Windows: java  -cp ".;lib/*" HelloApify
-```
-
-The remaining snippets below are fragments that assume a configured `client` and these imports: all
-public client types live in the `com.apify.client` package (e.g. `import com.apify.client.*;`); the
-snippets also use `com.fasterxml.jackson.databind.JsonNode` (from the Jackson dependency) for untyped
-data, `java.time.Duration` in the configuration examples, and standard JDK types such as
-`java.util.Optional` and `java.util.Map` (`import java.util.*;`).
+All public client types live under `com.apify.client`, split by resource into sub-packages (e.g.
+`com.apify.client.run.ActorRun`, `com.apify.client.dataset.DatasetListItemsOptions`) — see
+[Resources](#resources) below for the full list. The remaining snippets in this file are fragments
+that assume a configured `client`; the [resource pages](docs/README.md) show each fragment as a
+complete, correctly-imported program. Reading items from a run's default dataset:
 
 ```java
-ApifyClient client = ApifyClient.create("my-api-token");
-
-// Start an Actor and wait for it to finish. The last argument is the wait budget in seconds;
-// pass a value (e.g. 120L) to bound the wait, or null to wait indefinitely.
 ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
-
-// Read items from the run's default dataset.
 PaginationList<JsonNode> items =
     client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
 System.out.println("Items in this page: " + items.getCount());
@@ -113,11 +77,8 @@ System.out.println("Items in this page: " + items.getCount());
 
 The types used above — `PaginationList<T>`, `DatasetListItemsOptions`, and the per-resource clients —
 are documented on the [resource pages](docs/README.md); `ApifyApiException` is covered under
-[Error handling](#error-handling) below.
-
-`ApifyClient.create` takes the token as an explicit argument — it does **not** read `APIFY_TOKEN` (or
-any other environment variable) automatically. Read it yourself if you want that, e.g.
-`ApifyClient.create(System.getenv("APIFY_TOKEN"))`.
+[Error handling](#error-handling) below. [`docs/examples.md`](docs/examples.md) has complete,
+runnable programs (build-and-run, storages, log redirection, and more).
 
 ## Configuration
 
@@ -137,13 +98,13 @@ ApifyClient configured =
 
 ### Replaceable HTTP transport
 
-The transport is a replaceable component. The default is `DefaultHttpBackend` (backed by the JDK's
-`java.net.http.HttpClient`); provide your own `HttpBackend` to share a connection pool or customize
+The transport is a replaceable component. The default is `DefaultHttpTransport` (backed by the JDK's
+`java.net.http.HttpClient`); provide your own `HttpTransport` to share a connection pool or customize
 proxy/TLS:
 
 ```java
-HttpBackend backend = new DefaultHttpBackend(java.net.http.HttpClient.newHttpClient());
-ApifyClient withBackend = ApifyClient.builder().token("t").httpBackend(backend).build();
+HttpTransport backend = new DefaultHttpTransport(java.net.http.HttpClient.newHttpClient());
+ApifyClient withBackend = ApifyClient.builder().token("t").httpTransport(backend).build();
 ```
 
 Cross-cutting behaviour applied to every request lives in the client, not the backend:
@@ -156,10 +117,7 @@ Methods that fetch a single resource return an `Optional<T>`: a missing resource
 empty `Optional` rather than an exception.
 
 ```java
-Optional<Actor> maybeActor = client.actor("apify/hello-world").get();
-if (maybeActor.isPresent()) {
-  System.out.println(maybeActor.get().getTitle());
-}
+client.actor("apify/hello-world").get().ifPresent(actor -> System.out.println(actor.getTitle()));
 ```
 
 ## Error handling
@@ -189,9 +147,12 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.3.1`).
-- `Version.API_SPEC_VERSION` — the Apify OpenAPI specification version this client was verified
-  against (`v2-2026-07-13T092445Z`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.4.0`).
+- `Version.API_SPEC_VERSION` — the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
+  (its `info.version` field) that this client's endpoints, parameters and models were last generated
+  and checked against (`v2-2026-07-20T094852Z`). It is a snapshot, not a live compatibility
+  guarantee: the client keeps working against newer, backward-compatible spec revisions, but a
+  feature added to the API after this snapshot has no corresponding method here yet.
 
 Changes to the public interface other than additive ones are considered breaking changes and follow
 [Semantic Versioning](https://semver.org/).
@@ -234,21 +195,29 @@ Full documentation is in the [`docs/`](docs/README.md) directory, organized by r
 
 ## Resources
 
-| Accessor | Client | Description |
-|---|---|---|
-| `actors()` / `actor(id)` | `ActorCollectionClient` / `ActorClient` | Actors |
-| `builds()` / `build(id)` | `BuildCollectionClient` / `BuildClient` | Actor builds |
-| `runs()` / `run(id)` | `RunCollectionClient` / `RunClient` | Actor runs |
-| `datasets()` / `dataset(id)` | `DatasetCollectionClient` / `DatasetClient` | Datasets |
-| `keyValueStores()` / `keyValueStore(id)` | `KeyValueStoreCollectionClient` / `KeyValueStoreClient` | Key-value stores |
-| `requestQueues()` / `requestQueue(id)` | `RequestQueueCollectionClient` / `RequestQueueClient` | Request queues |
-| `tasks()` / `task(id)` | `TaskCollectionClient` / `TaskClient` | Actor tasks |
-| `schedules()` / `schedule(id)` | `ScheduleCollectionClient` / `ScheduleClient` | Schedules |
-| `webhooks()` / `webhook(id)` | `WebhookCollectionClient` / `WebhookClient` | Webhooks |
-| `webhookDispatches()` / `webhookDispatch(id)` | `WebhookDispatchCollectionClient` / `WebhookDispatchClient` | Webhook dispatches |
-| `store()` | `StoreCollectionClient` | Apify Store |
-| `me()` / `user(id)` | `UserClient` | Users |
-| `log(id)` | `LogClient` | Build/run logs |
+Every resource client lives in its own sub-package of `com.apify.client`, named after the resource.
+`ApifyClient` itself, its builder, the exception types, and shared value types (`PaginationList`,
+`Version`, ...) stay in the root `com.apify.client` package.
+
+| Accessor | Client | Package | Description |
+|---|---|---|---|
+| `actors()` / `actor(id)` | `ActorCollectionClient` / `ActorClient` | `com.apify.client.actor` | Actors |
+| `builds()` / `build(id)` | `BuildCollectionClient` / `BuildClient` | `com.apify.client.build` | Actor builds |
+| `runs()` / `run(id)` | `RunCollectionClient` / `RunClient` | `com.apify.client.run` | Actor runs |
+| `datasets()` / `dataset(id)` | `DatasetCollectionClient` / `DatasetClient` | `com.apify.client.dataset` | Datasets |
+| `keyValueStores()` / `keyValueStore(id)` | `KeyValueStoreCollectionClient` / `KeyValueStoreClient` | `com.apify.client.keyvalue` | Key-value stores |
+| `requestQueues()` / `requestQueue(id)` | `RequestQueueCollectionClient` / `RequestQueueClient` | `com.apify.client.requestqueue` | Request queues |
+| `tasks()` / `task(id)` | `TaskCollectionClient` / `TaskClient` | `com.apify.client.task` | Actor tasks |
+| `schedules()` / `schedule(id)` | `ScheduleCollectionClient` / `ScheduleClient` | `com.apify.client.schedule` | Schedules |
+| `webhooks()` / `webhook(id)` | `WebhookCollectionClient` / `WebhookClient` | `com.apify.client.webhook` | Webhooks |
+| `webhookDispatches()` / `webhookDispatch(id)` | `WebhookDispatchCollectionClient` / `WebhookDispatchClient` | `com.apify.client.webhook` | Webhook dispatches |
+| `store()` | `StoreCollectionClient` | `com.apify.client.store` | Apify Store |
+| `me()` / `user(id)` | `UserClient` | `com.apify.client.user` | Users |
+| `log(id)` | `LogClient` | `com.apify.client.log` | Build/run logs |
+
+The HTTP transport contract (`HttpTransport`, `DefaultHttpTransport`) and the exceptions thrown for
+transport-level failures (`ApifyTransportException`, `HttpTimeoutException`) live in
+`com.apify.client.http`, alongside `ApifyApiException`.
 
 ## License
 

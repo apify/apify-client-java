@@ -1,12 +1,12 @@
 package com.apify.client.examples;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.Dataset;
-import com.apify.client.DatasetListItemsOptions;
-import com.apify.client.KeyValueStore;
-import com.apify.client.KeyValueStoreRecord;
-import com.apify.client.RequestQueue;
-import com.apify.client.RequestQueueRequest;
+import com.apify.client.dataset.Dataset;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.keyvalue.KeyValueStore;
+import com.apify.client.keyvalue.KeyValueStoreRecord;
+import com.apify.client.requestqueue.RequestQueue;
+import com.apify.client.requestqueue.RequestQueueRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;

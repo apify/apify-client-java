@@ -2,9 +2,9 @@ package com.apify.client.integration;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.apify.client.ActorStoreListItem;
 import com.apify.client.ApifyClient;
-import com.apify.client.StoreListOptions;
+import com.apify.client.store.ActorStoreListItem;
+import com.apify.client.store.StoreListOptions;
 import java.util.Iterator;
 import org.junit.jupiter.api.Test;
 

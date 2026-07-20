@@ -1,12 +1,12 @@
 package com.apify.client.examples;
 
-import com.apify.client.Actor;
-import com.apify.client.ActorBuildOptions;
-import com.apify.client.ActorClient;
-import com.apify.client.ActorRun;
-import com.apify.client.ActorStartOptions;
 import com.apify.client.ApifyClient;
-import com.apify.client.Build;
+import com.apify.client.actor.Actor;
+import com.apify.client.actor.ActorBuildOptions;
+import com.apify.client.actor.ActorClient;
+import com.apify.client.actor.ActorStartOptions;
+import com.apify.client.build.Build;
+import com.apify.client.run.ActorRun;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;

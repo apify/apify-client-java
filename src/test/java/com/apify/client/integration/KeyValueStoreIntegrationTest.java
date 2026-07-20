@@ -4,12 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.GetRecordOptions;
-import com.apify.client.KeyValueStore;
-import com.apify.client.KeyValueStoreClient;
-import com.apify.client.KeyValueStoreRecord;
-import com.apify.client.ListKeysOptions;
 import com.apify.client.StorageListOptions;
+import com.apify.client.keyvalue.GetRecordOptions;
+import com.apify.client.keyvalue.KeyValueStore;
+import com.apify.client.keyvalue.KeyValueStoreClient;
+import com.apify.client.keyvalue.KeyValueStoreRecord;
+import com.apify.client.keyvalue.ListKeysOptions;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;

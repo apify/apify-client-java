@@ -1,7 +1,7 @@
 package com.apify.client.examples;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.User;
+import com.apify.client.user.User;
 import java.util.Optional;
 
 /**

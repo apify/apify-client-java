@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
-import com.apify.client.RunListOptions;
-import com.apify.client.Task;
-import com.apify.client.TaskClient;
+import com.apify.client.run.RunListOptions;
+import com.apify.client.task.Task;
+import com.apify.client.task.TaskClient;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 

@@ -1,5 +1,10 @@
 package com.apify.client;
 
+import com.apify.client.http.ApiResponse;
+import com.apify.client.http.ApifyApiException;
+import com.apify.client.http.ApifyTransportException;
+import com.apify.client.http.HttpClientCore;
+import com.apify.client.http.Json;
 import com.fasterxml.jackson.databind.JavaType;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -14,10 +19,10 @@ import java.util.function.Predicate;
  * here implement the CRUD primitives once, so each resource client stays small and consistent
  * (DRY). Internal to the client.
  */
-final class ResourceContext {
+public final class ResourceContext {
 
-  static final String CONTENT_TYPE_JSON = "application/json";
-  static final String CONTENT_TYPE_JSON_CHARSET = "application/json; charset=utf-8";
+  public static final String CONTENT_TYPE_JSON = "application/json";
+  public static final String CONTENT_TYPE_JSON_CHARSET = "application/json; charset=utf-8";
 
   /** How long to wait between polls while waiting for a run/build to finish. */
   private static final Duration WAIT_POLL_INTERVAL = Duration.ofMillis(250);
@@ -42,53 +47,67 @@ final class ResourceContext {
 
   private static final int NOT_FOUND = 404;
 
-  final HttpClientCore http;
+  public final HttpClientCore http;
 
   /** Fully-qualified base URL of the resource, e.g. {@code https://api.apify.com/v2/actors/ID}. */
   final String url;
 
-  final QueryParams baseParams;
+  public final QueryParams baseParams;
 
   /** Origin (scheme + host) the API is reached through. */
   final String apiOrigin;
 
   /** Origin used to build public, shareable URLs (defaults to {@link #apiOrigin}). */
-  String publicOrigin;
+  final String publicOrigin;
 
-  private ResourceContext(HttpClientCore http, String url, String baseUrl) {
+  /**
+   * Immutable: every field is set once here. {@link #withPublicOrigin} and {@link #seedParams}
+   * return a new instance rather than mutating this one, so a {@code ResourceContext} (and the
+   * resource client that holds one) is safe to share across threads once built.
+   */
+  private ResourceContext(
+      HttpClientCore http,
+      String url,
+      QueryParams baseParams,
+      String apiOrigin,
+      String publicOrigin) {
     this.http = http;
     this.url = url;
-    this.baseParams = new QueryParams();
-    this.apiOrigin = originOf(baseUrl);
-    this.publicOrigin = this.apiOrigin;
+    this.baseParams = baseParams;
+    this.apiOrigin = apiOrigin;
+    this.publicOrigin = publicOrigin;
+  }
+
+  private ResourceContext(HttpClientCore http, String url, String baseUrl) {
+    this(http, url, new QueryParams(), originOf(baseUrl), originOf(baseUrl));
   }
 
   /** Creates a context for a collection endpoint: {@code {base}/{resourcePath}}. */
-  static ResourceContext collection(HttpClientCore http, String baseUrl, String resourcePath) {
+  public static ResourceContext collection(
+      HttpClientCore http, String baseUrl, String resourcePath) {
     return new ResourceContext(http, baseUrl + "/" + resourcePath, baseUrl);
   }
 
   /** Creates a context for a single resource: {@code {base}/{resourcePath}/{safeId}}. */
-  static ResourceContext single(
+  public static ResourceContext single(
       HttpClientCore http, String baseUrl, String resourcePath, String id) {
     return new ResourceContext(http, baseUrl + "/" + resourcePath + "/" + toSafeId(id), baseUrl);
   }
 
-  /** Overrides the origin used when building public URLs. */
-  ResourceContext withPublicOrigin(String publicBaseUrl) {
-    this.publicOrigin = originOf(publicBaseUrl);
-    return this;
+  /** A copy of this context with the origin used to build public URLs overridden. */
+  public ResourceContext withPublicOrigin(String publicBaseUrl) {
+    return new ResourceContext(http, url, baseParams, apiOrigin, originOf(publicBaseUrl));
   }
 
   /** This resource's URL with an optional extra path segment appended. */
-  String subUrl(String subPath) {
+  public String subUrl(String subPath) {
     return (subPath == null || subPath.isEmpty()) ? url : url + "/" + subPath;
   }
 
   /**
    * The public (shareable) form of this resource's URL, swapping the API origin for the public one.
    */
-  String publicUrl(String subPath) {
+  public String publicUrl(String subPath) {
     String apiUrl = subUrl(subPath);
     if (publicOrigin.equals(apiOrigin)) {
       return apiUrl;
@@ -100,25 +119,27 @@ final class ResourceContext {
   }
 
   /** Merges the inherited base params with per-call params. */
-  QueryParams mergedParams(QueryParams params) {
+  public QueryParams mergedParams(QueryParams params) {
     return baseParams.copy().extend(params);
   }
 
   /**
-   * Seeds this context's inherited params from a parent context (e.g. so a last-run client's pinned
-   * {@code status}/{@code origin} filters carry into its nested storage/log accessors). No-op when
-   * {@code inherited} is null or empty, so ordinary nested clients are unaffected.
+   * A copy of this context with {@code inherited} merged into its base params (e.g. so a last-run
+   * client's pinned {@code status}/{@code origin} filters carry into its nested storage/log
+   * accessors). Returns {@code this} unchanged when {@code inherited} is null or empty, so ordinary
+   * nested clients are unaffected.
    */
-  ResourceContext seedParams(QueryParams inherited) {
-    if (inherited != null && !inherited.isEmpty()) {
-      baseParams.extend(inherited);
+  public ResourceContext seedParams(QueryParams inherited) {
+    if (inherited == null || inherited.isEmpty()) {
+      return this;
     }
-    return this;
+    return new ResourceContext(
+        http, url, baseParams.copy().extend(inherited), apiOrigin, publicOrigin);
   }
 
   // ---- CRUD primitives ------------------------------------------------------
 
-  <T> Optional<T> getResource(String subPath, QueryParams params, JavaType dataType) {
+  public <T> Optional<T> getResource(String subPath, QueryParams params, JavaType dataType) {
     try {
       // ofNullable, not of: an HTTP 200 with body {"data": null} unwraps to null, which is a valid
       // "no resource" answer rather than a programming error — never surface it as a raw NPE.
@@ -131,21 +152,21 @@ final class ResourceContext {
     }
   }
 
-  <T> Optional<T> getResource(String subPath, QueryParams params, Class<T> dataClass) {
+  public <T> Optional<T> getResource(String subPath, QueryParams params, Class<T> dataClass) {
     return getResource(subPath, params, Json.type(dataClass));
   }
 
-  <T> T getResourceRequired(String subPath, QueryParams params, JavaType dataType) {
+  public <T> T getResourceRequired(String subPath, QueryParams params, JavaType dataType) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp = http.call("GET", u, null, "", http.baseRequestTimeout());
     return Json.parseData(resp.body, dataType);
   }
 
-  <T> T getResourceRequired(String subPath, QueryParams params, Class<T> dataClass) {
+  public <T> T getResourceRequired(String subPath, QueryParams params, Class<T> dataClass) {
     return getResourceRequired(subPath, params, Json.type(dataClass));
   }
 
-  <T> T updateResource(String subPath, Object body, Class<T> dataClass) {
+  public <T> T updateResource(String subPath, Object body, Class<T> dataClass) {
     String u = mergedParams(new QueryParams()).applyToUrl(subUrl(subPath));
     ApiResponse resp =
         http.call("PUT", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout());
@@ -153,7 +174,7 @@ final class ResourceContext {
   }
 
   /** Performs a DELETE; a not-found is treated as a successful no-op. */
-  void deleteResource(String subPath) {
+  public void deleteResource(String subPath) {
     String u = mergedParams(new QueryParams()).applyToUrl(subUrl(subPath));
     try {
       http.call("DELETE", u, null, "", http.baseRequestTimeout());
@@ -164,7 +185,8 @@ final class ResourceContext {
     }
   }
 
-  <T> PaginationList<T> listResource(String subPath, QueryParams params, Class<T> itemClass) {
+  public <T> PaginationList<T> listResource(
+      String subPath, QueryParams params, Class<T> itemClass) {
     JavaType listType = Json.parametric(PaginationList.class, Json.type(itemClass));
     return getResourceRequired(subPath, params, listType);
   }
@@ -175,7 +197,7 @@ final class ResourceContext {
    * drives per page). {@code totalLimit} caps the total items yielded; {@code chunkSize} is the
    * page size (both {@code null} meaning "unbounded" / "server default").
    */
-  <T> Iterator<T> iterateResource(
+  public <T> Iterator<T> iterateResource(
       String subPath,
       Long totalLimit,
       Long chunkSize,
@@ -197,7 +219,7 @@ final class ResourceContext {
         });
   }
 
-  <T> T createResource(QueryParams params, Object body, Class<T> dataClass) {
+  public <T> T createResource(QueryParams params, Object body, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(""));
     ApiResponse resp =
         http.call("POST", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout());
@@ -205,7 +227,7 @@ final class ResourceContext {
   }
 
   /** POST that gets-or-creates a named resource ({@code POST {collection}?name=...}). */
-  <T> T getOrCreateNamed(String name, Class<T> dataClass) {
+  public <T> T getOrCreateNamed(String name, Class<T> dataClass) {
     return getOrCreateNamed(name, null, dataClass);
   }
 
@@ -213,7 +235,7 @@ final class ResourceContext {
    * POST that gets-or-creates a named resource, optionally sending a JSON request body (e.g. a
    * storage {@code schema}). A {@code null} body sends no body, matching the plain get-or-create.
    */
-  <T> T getOrCreateNamed(String name, Object body, Class<T> dataClass) {
+  public <T> T getOrCreateNamed(String name, Object body, Class<T> dataClass) {
     QueryParams params = new QueryParams();
     if (name != null && !name.isEmpty()) {
       params.addString("name", name);
@@ -227,12 +249,12 @@ final class ResourceContext {
   }
 
   /** POST with a raw body (optional) and content type, unwrapping the data envelope. */
-  <T> T postWithBody(
+  public <T> T postWithBody(
       String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
     return postWithBody(subPath, params, body, contentType, Json.type(dataClass));
   }
 
-  <T> T postWithBody(
+  public <T> T postWithBody(
       String subPath, QueryParams params, byte[] body, String contentType, JavaType dataType) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp = http.call("POST", u, body, contentType, http.baseRequestTimeout());
@@ -244,7 +266,7 @@ final class ResourceContext {
    * {"data": ...}} envelope. Used by endpoints (e.g. actor input validation) whose response is a
    * plain object rather than the standard data envelope.
    */
-  <T> T postWithBodyNoEnvelope(
+  public <T> T postWithBodyNoEnvelope(
       String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp = http.call("POST", u, body, contentType, http.baseRequestTimeout());
@@ -252,7 +274,7 @@ final class ResourceContext {
   }
 
   /** DELETE with a JSON body (used for batch request deletion), unwrapping the data envelope. */
-  <T> T deleteWithBody(String subPath, QueryParams params, Object body, Class<T> dataClass) {
+  public <T> T deleteWithBody(String subPath, QueryParams params, Object body, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp =
         http.call("DELETE", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout());
@@ -260,7 +282,7 @@ final class ResourceContext {
   }
 
   /** GET returning the raw response (no data envelope). Returns {@code null} on not-found. */
-  ApiResponse getRaw(String subPath, QueryParams params) {
+  public ApiResponse getRaw(String subPath, QueryParams params) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     try {
       return http.call("GET", u, null, "", http.baseRequestTimeout());
@@ -273,7 +295,7 @@ final class ResourceContext {
   }
 
   /** HEAD request; returns whether the resource exists. */
-  boolean headExists(String subPath, QueryParams params) {
+  public boolean headExists(String subPath, QueryParams params) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     try {
       http.call("HEAD", u, null, "", http.baseRequestTimeout());
@@ -287,7 +309,7 @@ final class ResourceContext {
   }
 
   /** PUT with raw bytes and a content type (used for key-value-store record uploads). */
-  void putRaw(String subPath, QueryParams params, byte[] body, String contentType) {
+  public void putRaw(String subPath, QueryParams params, byte[] body, String contentType) {
     putRaw(subPath, params, body, contentType, http.baseRequestTimeout(), false);
   }
 
@@ -296,7 +318,7 @@ final class ResourceContext {
    * over whether transport timeouts are retried. Used by key-value-store record uploads that expose
    * the reference client's {@code timeoutSecs}/{@code doNotRetryTimeouts} write options.
    */
-  void putRaw(
+  public void putRaw(
       String subPath,
       QueryParams params,
       byte[] body,
@@ -325,7 +347,7 @@ final class ResourceContext {
    * connection longer than the client's own per-request timeout. Returns {@code null} for a {@code
    * null} input (no server-side wait requested).
    */
-  Long clampServerWait(Long waitForFinishSecs) {
+  public Long clampServerWait(Long waitForFinishSecs) {
     if (waitForFinishSecs == null) {
       return null;
     }
@@ -341,7 +363,7 @@ final class ResourceContext {
    * currently present: a just-started run/build can transiently return 404 (database-replica lag),
    * which is treated as "not yet available".
    */
-  <T> T waitForFinish(
+  public <T> T waitForFinish(
       Long waitSecs, String resourceName, JavaType dataType, Predicate<T> isTerminal) {
     // Clamp to MAX_WAIT_FOR_FINISH_SECS so a pathological waitSecs near Long.MAX_VALUE cannot
     // overflow budgetMillis into a negative value (which would degrade the wait into a single
@@ -402,14 +424,14 @@ final class ResourceContext {
       Thread.sleep(d.toMillis());
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new HttpClientCore.TransportException(e);
+      throw new ApifyTransportException(e);
     }
   }
 
   // ---- URL / id helpers -----------------------------------------------------
 
   /** Reports whether an exception represents a "resource not found" API error. */
-  static boolean isNotFound(ApifyApiException e) {
+  public static boolean isNotFound(ApifyApiException e) {
     if (e.getStatusCode() != NOT_FOUND) {
       return false;
     }
@@ -432,7 +454,7 @@ final class ResourceContext {
    * Percent-encodes a single URL path segment, so that values interpolated into the path (record
    * keys, request IDs) cannot break out of the segment.
    */
-  static String encodePathSegment(String input) {
+  public static String encodePathSegment(String input) {
     return URLEncoder.encode(input, StandardCharsets.UTF_8).replace("+", "%20");
   }
 

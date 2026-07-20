@@ -9,14 +9,14 @@ import java.util.List;
  * An ordered collection of query parameters that omits absent ({@code null}) values and encodes
  * booleans as {@code 1}/{@code 0}, matching the Apify API conventions. Internal to the client.
  */
-final class QueryParams {
+public final class QueryParams {
 
   private final List<String[]> pairs = new ArrayList<>();
 
-  QueryParams() {}
+  public QueryParams() {}
 
   /** Adds a string parameter if the value is non-null. */
-  QueryParams addString(String key, String value) {
+  public QueryParams addString(String key, String value) {
     if (value != null) {
       pairs.add(new String[] {key, value});
     }
@@ -24,7 +24,7 @@ final class QueryParams {
   }
 
   /** Adds an integer parameter if the value is non-null. */
-  QueryParams addLong(String key, Long value) {
+  public QueryParams addLong(String key, Long value) {
     if (value != null) {
       pairs.add(new String[] {key, Long.toString(value)});
     }
@@ -32,7 +32,7 @@ final class QueryParams {
   }
 
   /** Adds a floating-point parameter if the value is non-null. */
-  QueryParams addDouble(String key, Double value) {
+  public QueryParams addDouble(String key, Double value) {
     if (value != null) {
       pairs.add(new String[] {key, Double.toString(value)});
     }
@@ -40,7 +40,7 @@ final class QueryParams {
   }
 
   /** Adds a boolean parameter, encoded as {@code 1}/{@code 0}, if the value is non-null. */
-  QueryParams addBool(String key, Boolean value) {
+  public QueryParams addBool(String key, Boolean value) {
     if (value != null) {
       pairs.add(new String[] {key, value ? "1" : "0"});
     }
@@ -48,7 +48,7 @@ final class QueryParams {
   }
 
   /** Adds a comma-joined list parameter if the list is non-null and non-empty. */
-  QueryParams addCsv(String key, List<String> values) {
+  public QueryParams addCsv(String key, List<String> values) {
     if (values != null && !values.isEmpty()) {
       pairs.add(new String[] {key, String.join(",", values)});
     }
@@ -56,7 +56,7 @@ final class QueryParams {
   }
 
   /** Appends an already-stringified key/value pair unconditionally. */
-  QueryParams addRaw(String key, String value) {
+  public QueryParams addRaw(String key, String value) {
     pairs.add(new String[] {key, value});
     return this;
   }
@@ -73,7 +73,7 @@ final class QueryParams {
   }
 
   /** Appends all pairs from {@code other} to this instance. */
-  QueryParams extend(QueryParams other) {
+  public QueryParams extend(QueryParams other) {
     if (other != null) {
       pairs.addAll(other.pairs);
     }
@@ -81,7 +81,7 @@ final class QueryParams {
   }
 
   /** Appends the parameters to {@code rawUrl} as a URL-encoded query string. */
-  String applyToUrl(String rawUrl) {
+  public String applyToUrl(String rawUrl) {
     if (pairs.isEmpty()) {
       return rawUrl;
     }
