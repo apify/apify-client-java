@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.apify.client.actor.Actor;
+import com.apify.client.user.User;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;

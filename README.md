@@ -1,8 +1,7 @@
 # Apify API client for Java
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
+> **Official, but experimental — AI-generated and AI-maintained.** Review the code before relying
+> on it in production and report issues on the repository.
 
 A resource-oriented Java client for the [Apify API](https://docs.apify.com/api/v2), mirroring the
 official [JavaScript](https://github.com/apify/apify-client-js) reference client: start from an
@@ -23,7 +22,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.3.1</version>
+  <version>0.4.0</version>
 </dependency>
 ```
 
@@ -35,40 +34,19 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.3.1'
+  implementation 'com.apify:apify-client:0.4.0'
 }
 ```
 
 ## Quick start
 
-A complete, copy-pasteable first program (save as `HelloApify.java`). First scaffold a minimal
-`pom.xml` next to it so Maven can resolve the client and its runtime dependencies:
-
-```xml
-<project xmlns="http://maven.apache.org/POM/4.0.0">
-  <modelVersion>4.0.0</modelVersion>
-  <groupId>com.example</groupId>
-  <artifactId>hello-apify</artifactId>
-  <version>1.0.0</version>
-  <properties>
-    <maven.compiler.release>17</maven.compiler.release>
-  </properties>
-  <dependencies>
-    <dependency>
-      <groupId>com.apify</groupId>
-      <artifactId>apify-client</artifactId>
-      <version>0.3.1</version>
-    </dependency>
-  </dependencies>
-</project>
-```
-
-Create `HelloApify.java`:
+A complete, copy-pasteable first program. Add the client as a dependency in your project (see
+Installation above), then run this as `HelloApify.java`:
 
 ```java
 import com.apify.client.ApifyClient;
-import com.apify.client.ActorRun;
-import com.apify.client.ActorStartOptions;
+import com.apify.client.actor.ActorStartOptions;
+import com.apify.client.run.ActorRun;
 
 class HelloApify {
   public static void main(String[] args) {
@@ -80,23 +58,21 @@ class HelloApify {
 }
 ```
 
-Then populate a `lib/` directory with the client and its runtime dependencies, and compile and run
-against the JVM's `lib/*` classpath wildcard — quote it so the shell does not expand it:
+The client is synchronous (each call blocks until the HTTP response arrives, there is no async or
+reactive variant) and, once built via [`ApifyClient.create`](#quick-start) or
+[`ApifyClient.builder()`](#configuration), safe for concurrent use from multiple threads: an
+`ApifyClient` and the resource clients it returns carry no mutable state after construction.
 
-```bash
-# 1. Collect apify-client and its runtime dependencies (Jackson, brotli4j codecs, …) into lib/.
-mvn dependency:copy-dependencies -DoutputDirectory=lib -DincludeScope=runtime
-
-# 2. Compile and run. '.' is for the compiled HelloApify.class; lib/* is the JVM classpath wildcard.
-javac -cp '.:lib/*' HelloApify.java   # Windows: javac -cp ".;lib/*" HelloApify.java
-java  -cp '.:lib/*' HelloApify        # Windows: java  -cp ".;lib/*" HelloApify
-```
-
-The remaining snippets below are fragments that assume a configured `client` and these imports: all
-public client types live in the `com.apify.client` package (e.g. `import com.apify.client.*;`); the
-snippets also use `com.fasterxml.jackson.databind.JsonNode` (from the Jackson dependency) for untyped
-data, `java.time.Duration` in the configuration examples, and standard JDK types such as
-`java.util.Optional` and `java.util.Map` (`import java.util.*;`).
+The remaining snippets below are fragments that assume a configured `client` and these imports: the
+client's types are organized by resource into sub-packages of `com.apify.client` (`actor`, `build`,
+`run`, `dataset`, `keyvalue`, `requestqueue`, `task`, `schedule`, `webhook`, `user`, `log`, `store`,
+and `http` for the replaceable transport), with `ApifyClient`, `Version`, `ApifyApiException` and the
+shared list/pagination types staying in the `com.apify.client` root package — see
+[`docs/`](docs/README.md) for the exact package of each type, or import every package with one
+wildcard each (`import com.apify.client.*; import com.apify.client.actor.*; …`). The snippets also
+use `com.fasterxml.jackson.databind.JsonNode` (from the Jackson dependency) for untyped data,
+`java.time.Duration` in the configuration examples, and standard JDK types such as `java.util.Optional`
+and `java.util.Map` (`import java.util.*;`).
 
 ```java
 ApifyClient client = ApifyClient.create("my-api-token");
@@ -137,12 +113,14 @@ ApifyClient configured =
 
 ### Replaceable HTTP transport
 
-The transport is a replaceable component. The default is `DefaultHttpBackend` (backed by the JDK's
-`java.net.http.HttpClient`); provide your own `HttpBackend` to share a connection pool or customize
-proxy/TLS:
+The transport is a replaceable component, defined by the `com.apify.client.http.HttpClient`
+interface (distinct from the JDK's own `java.net.http.HttpClient`, which the default implementation
+happens to use under the hood — always refer to the JDK one by its fully-qualified name to avoid
+ambiguity, as the snippet below does). The default is `DefaultApifyHttpClient`; provide your own
+`HttpClient` to share a connection pool or customize proxy/TLS:
 
 ```java
-HttpBackend backend = new DefaultHttpBackend(java.net.http.HttpClient.newHttpClient());
+HttpClient backend = new DefaultApifyHttpClient(java.net.http.HttpClient.newHttpClient());
 ApifyClient withBackend = ApifyClient.builder().token("t").httpBackend(backend).build();
 ```
 
@@ -150,16 +128,31 @@ Cross-cutting behaviour applied to every request lives in the client, not the ba
 bearer-token authentication, the mandated `User-Agent` header, and retries with exponential
 backoff and jitter on `429`, `5xx` and network errors.
 
+### Logging
+
+The client logs retry/backoff and give-up events through [SLF4J](https://www.slf4j.org/) (a facade
+only — no logging implementation is bundled). Add an SLF4J binding of your choice (e.g. Logback) to
+your own project's dependencies to see these logs; with no binding present, SLF4J silently discards
+them, so this is safe to leave unconfigured.
+
+### Request-body compression
+
+Request bodies of 1024 bytes or more are compressed before sending, preferring
+[brotli](https://github.com/hyperxpro/Brotli4j) (`Content-Encoding: br`) and falling back to gzip.
+The brotli native codec is **not** bundled by default (it is platform-specific, and forcing every
+consumer to pull down every OS/architecture's native binary is wasteful) — without it the client
+transparently uses gzip, which is fully functional on its own. To opt into brotli, add both
+`com.aayushatharva.brotli4j:brotli4j` and your platform's `com.aayushatharva.brotli4j:native-<os>-<arch>`
+artifact (matching the brotli4j version this client compiles against — see `pom.xml`) as
+dependencies of your own project.
+
 ## Fetching single resources
 
 Methods that fetch a single resource return an `Optional<T>`: a missing resource is reported by an
 empty `Optional` rather than an exception.
 
 ```java
-Optional<Actor> maybeActor = client.actor("apify/hello-world").get();
-if (maybeActor.isPresent()) {
-  System.out.println(maybeActor.get().getTitle());
-}
+client.actor("apify/hello-world").get().ifPresent(actor -> System.out.println(actor.getTitle()));
 ```
 
 ## Error handling
@@ -189,12 +182,16 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.3.1`).
-- `Version.API_SPEC_VERSION` — the Apify OpenAPI specification version this client was verified
-  against (`v2-2026-07-13T092445Z`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.4.0`).
+- `Version.API_SPEC_VERSION` — the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
+  (its `info.version`, e.g. `v2-2026-07-13T092445Z`) that this release of the client was last
+  checked and updated against. It is a point-in-time reference for maintainers, not a compatibility
+  guarantee: the client also works against other spec versions, since the Apify API is additive and
+  backwards-compatible in practice.
 
 Changes to the public interface other than additive ones are considered breaking changes and follow
-[Semantic Versioning](https://semver.org/).
+[Semantic Versioning](https://semver.org/). See [`CHANGELOG.md`](CHANGELOG.md) for the list of
+changes in each release, including breaking ones (e.g. `0.4.0`'s package reorganization).
 
 ### Releasing
 
@@ -234,21 +231,25 @@ Full documentation is in the [`docs/`](docs/README.md) directory, organized by r
 
 ## Resources
 
-| Accessor | Client | Description |
-|---|---|---|
-| `actors()` / `actor(id)` | `ActorCollectionClient` / `ActorClient` | Actors |
-| `builds()` / `build(id)` | `BuildCollectionClient` / `BuildClient` | Actor builds |
-| `runs()` / `run(id)` | `RunCollectionClient` / `RunClient` | Actor runs |
-| `datasets()` / `dataset(id)` | `DatasetCollectionClient` / `DatasetClient` | Datasets |
-| `keyValueStores()` / `keyValueStore(id)` | `KeyValueStoreCollectionClient` / `KeyValueStoreClient` | Key-value stores |
-| `requestQueues()` / `requestQueue(id)` | `RequestQueueCollectionClient` / `RequestQueueClient` | Request queues |
-| `tasks()` / `task(id)` | `TaskCollectionClient` / `TaskClient` | Actor tasks |
-| `schedules()` / `schedule(id)` | `ScheduleCollectionClient` / `ScheduleClient` | Schedules |
-| `webhooks()` / `webhook(id)` | `WebhookCollectionClient` / `WebhookClient` | Webhooks |
-| `webhookDispatches()` / `webhookDispatch(id)` | `WebhookDispatchCollectionClient` / `WebhookDispatchClient` | Webhook dispatches |
-| `store()` | `StoreCollectionClient` | Apify Store |
-| `me()` / `user(id)` | `UserClient` | Users |
-| `log(id)` | `LogClient` | Build/run logs |
+Each resource's classes live in their own sub-package of `com.apify.client` (see the Package
+column); `ApifyClient` itself, and the shared list/pagination types, stay in the root
+`com.apify.client` package.
+
+| Accessor | Client | Package | Description |
+|---|---|---|---|
+| `actors()` / `actor(id)` | `ActorCollectionClient` / `ActorClient` | `com.apify.client.actor` | Actors |
+| `builds()` / `build(id)` | `BuildCollectionClient` / `BuildClient` | `com.apify.client.build` | Actor builds |
+| `runs()` / `run(id)` | `RunCollectionClient` / `RunClient` | `com.apify.client.run` | Actor runs |
+| `datasets()` / `dataset(id)` | `DatasetCollectionClient` / `DatasetClient` | `com.apify.client.dataset` | Datasets |
+| `keyValueStores()` / `keyValueStore(id)` | `KeyValueStoreCollectionClient` / `KeyValueStoreClient` | `com.apify.client.keyvalue` | Key-value stores |
+| `requestQueues()` / `requestQueue(id)` | `RequestQueueCollectionClient` / `RequestQueueClient` | `com.apify.client.requestqueue` | Request queues |
+| `tasks()` / `task(id)` | `TaskCollectionClient` / `TaskClient` | `com.apify.client.task` | Actor tasks |
+| `schedules()` / `schedule(id)` | `ScheduleCollectionClient` / `ScheduleClient` | `com.apify.client.schedule` | Schedules |
+| `webhooks()` / `webhook(id)` | `WebhookCollectionClient` / `WebhookClient` | `com.apify.client.webhook` | Webhooks |
+| `webhookDispatches()` / `webhookDispatch(id)` | `WebhookDispatchCollectionClient` / `WebhookDispatchClient` | `com.apify.client.webhook` | Webhook dispatches |
+| `store()` | `StoreCollectionClient` | `com.apify.client.store` | Apify Store |
+| `me()` / `user(id)` | `UserClient` | `com.apify.client.user` | Users |
+| `log(id)` | `LogClient` | `com.apify.client.log` | Build/run logs |
 
 ## License
 

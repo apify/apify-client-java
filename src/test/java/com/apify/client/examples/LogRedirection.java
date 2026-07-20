@@ -1,10 +1,10 @@
 package com.apify.client.examples;
 
-import com.apify.client.ActorRun;
-import com.apify.client.ActorStartOptions;
 import com.apify.client.ApifyClient;
-import com.apify.client.RunClient;
-import com.apify.client.StreamedLog;
+import com.apify.client.actor.ActorStartOptions;
+import com.apify.client.log.StreamedLog;
+import com.apify.client.run.ActorRun;
+import com.apify.client.run.RunClient;
 
 /**
  * Starts an Actor without waiting, then redirects its live log to a logger in real time (log

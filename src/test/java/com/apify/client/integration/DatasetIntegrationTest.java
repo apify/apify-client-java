@@ -4,13 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.Dataset;
-import com.apify.client.DatasetClient;
-import com.apify.client.DatasetDownloadOptions;
-import com.apify.client.DatasetListItemsOptions;
-import com.apify.client.DownloadItemsFormat;
 import com.apify.client.PaginationList;
 import com.apify.client.StorageListOptions;
+import com.apify.client.dataset.Dataset;
+import com.apify.client.dataset.DatasetClient;
+import com.apify.client.dataset.DatasetDownloadOptions;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.dataset.DownloadItemsFormat;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.nio.charset.StandardCharsets;
 import java.util.List;

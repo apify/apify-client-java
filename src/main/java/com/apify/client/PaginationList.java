@@ -55,28 +55,42 @@ public final class PaginationList<T> {
     return Collections.unmodifiableList(items);
   }
 
-  // Package-private setters used by the dataset-items path, which builds pages from headers.
-  void setTotal(long total) {
+  // These setters are not intended for application use — the API always returns fully-populated
+  // pages. They are public only because com.apify.client.dataset.DatasetClient (a different
+  // package, post package-split) builds a page from response headers for the dataset-items
+  // endpoint, which reports pagination metadata via headers rather than a JSON envelope.
+
+  /** Not for application use; see the class-level note above. */
+  public void setTotal(long total) {
     this.total = total;
   }
 
-  void setOffset(long offset) {
+  /** Not for application use; see the class-level note above. */
+  public void setOffset(long offset) {
     this.offset = offset;
   }
 
-  void setLimit(long limit) {
+  /** Not for application use; see the class-level note above. */
+  public void setLimit(long limit) {
     this.limit = limit;
   }
 
-  void setCount(long count) {
+  /** Not for application use; see the class-level note above. */
+  public void setCount(long count) {
     this.count = count;
   }
 
-  void setDesc(boolean desc) {
+  /** Not for application use; see the class-level note above. */
+  public void setDesc(boolean desc) {
     this.desc = desc;
   }
 
-  void setItems(List<T> items) {
-    this.items = items;
+  /**
+   * Not for application use; see the class-level note above. Defensively copies {@code items} so a
+   * caller-held reference to the original list cannot mutate this page afterwards (the constructor
+   * is public only for the same cross-package-wiring reason as the other setters here).
+   */
+  public void setItems(List<T> items) {
+    this.items = items == null ? List.of() : List.copyOf(items);
   }
 }

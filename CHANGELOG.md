@@ -5,6 +5,52 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-20
+
+### Changed (breaking)
+
+- Reorganized `com.apify.client` into resource-oriented sub-packages: `actor`, `build`, `run`,
+  `dataset`, `keyvalue`, `requestqueue`, `task`, `schedule`, `webhook`, `user`, `log`, `store`, and
+  `http` (the replaceable transport). `ApifyClient`, `ApifyClientBuilder`, `ApifyApiException`,
+  `ApifyTransportException`, `Version`, and the shared list/pagination types (`ListOptions`,
+  `StorageListOptions`, `PaginationList`) remain in the root `com.apify.client` package.
+- Renamed `HttpBackend` to `HttpClient` and `DefaultHttpBackend` to `DefaultApifyHttpClient`, to
+  avoid confusion with the JDK's own `java.net.http.HttpClient`.
+- Renamed `HttpClient.sendStreaming` to `sendStreamingResponse` (it streams the response, not the
+  request).
+- `HttpClientCore.TransportException` is now the top-level, public `ApifyTransportException`
+  (previously a nested, internal-only type, despite already being thrown across the public API on
+  an exhausted transport-failure retry budget).
+- `ApifyClientBuilder.build()` now validates its configuration (a blank base URL, a negative retry
+  count, or a negative duration) and throws `IllegalArgumentException`, instead of failing later
+  with a confusing, indirect error.
+
+### Changed
+
+- `DatasetClient`/`KeyValueStoreClient` are now fully immutable after construction: the
+  public-base-URL override is resolved in the constructor instead of by a post-construction
+  mutator.
+- `HttpClientCore` deserializes the API's error envelope via a typed Jackson DTO instead of manual
+  `JsonNode` navigation, and parses the request path via `java.net.URI` instead of manual string
+  slicing.
+- Broadened transport-timeout detection (`doNotRetryTimeouts`) to also recognize
+  `SocketTimeoutException`, not just the default backend's `HttpTimeoutException`, so a custom
+  `HttpClient` implementation gets the same retry behavior.
+- Consolidated every resource's API path segment (`datasets`, `actor-builds`, `webhooks`, ...) into
+  a single internal `ResourcePaths` class instead of duplicating literals between `ApifyClient` and
+  each resource client.
+- Lowered `DefaultApifyHttpClient`'s connection-establishment timeout from 30s to 10s.
+- Bumped the Jackson dependency to 2.19.4.
+- The brotli4j native compression codec is no longer bundled by default; gzip remains the automatic
+  fallback, and brotli can be opted into by adding the platform-appropriate native artifact.
+- Added an SLF4J logging facade dependency (no implementation bundled); the client now logs
+  retry/backoff and give-up events.
+- Tightened the "official, but experimental" disclaimer wording (it repeated itself) across the
+  README, documentation, and Javadoc.
+- README: trimmed the quick-start example, clarified what `Version.API_SPEC_VERSION` means, used
+  `Optional.ifPresent` in the single-resource example, documented the client's synchronous and
+  thread-safe nature, and added a resource-to-package table.
+
 ## [0.3.1] - 2026-07-14
 
 ### Added

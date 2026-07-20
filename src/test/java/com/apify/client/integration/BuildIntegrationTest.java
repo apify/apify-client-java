@@ -3,11 +3,11 @@ package com.apify.client.integration;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.apify.client.Actor;
-import com.apify.client.ActorBuildOptions;
 import com.apify.client.ApifyClient;
-import com.apify.client.Build;
 import com.apify.client.ListOptions;
+import com.apify.client.actor.Actor;
+import com.apify.client.actor.ActorBuildOptions;
+import com.apify.client.build.Build;
 import org.junit.jupiter.api.Test;
 
 class BuildIntegrationTest extends IntegrationBase {

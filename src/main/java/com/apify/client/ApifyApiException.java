@@ -1,6 +1,7 @@
 package com.apify.client;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -25,7 +26,7 @@ public class ApifyApiException extends RuntimeException {
   private final String path;
   private final transient Map<String, Object> data;
 
-  ApifyApiException(
+  public ApifyApiException(
       int statusCode,
       String type,
       String message,
@@ -39,7 +40,10 @@ public class ApifyApiException extends RuntimeException {
     this.attempt = attempt;
     this.httpMethod = httpMethod;
     this.path = path;
-    this.data = data;
+    // Defensive copy: the constructor is now public (required for the internal HTTP layer, in a
+    // different package since the package split, to construct this exception), so a caller-held
+    // reference to the original map must not be able to mutate this exception's state afterwards.
+    this.data = data == null ? null : new LinkedHashMap<>(data);
   }
 
   /** The HTTP status code of the error response. */

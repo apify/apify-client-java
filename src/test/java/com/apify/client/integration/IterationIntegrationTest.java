@@ -3,26 +3,26 @@ package com.apify.client.integration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.apify.client.Actor;
-import com.apify.client.ActorEnvVar;
-import com.apify.client.ActorListOptions;
 import com.apify.client.ApifyClient;
-import com.apify.client.Build;
-import com.apify.client.Dataset;
-import com.apify.client.DatasetClient;
-import com.apify.client.DatasetListItemsOptions;
-import com.apify.client.KeyValueStore;
-import com.apify.client.KeyValueStoreClient;
-import com.apify.client.KeyValueStoreKey;
-import com.apify.client.ListKeysOptions;
 import com.apify.client.ListOptions;
-import com.apify.client.RequestQueue;
-import com.apify.client.RunListOptions;
-import com.apify.client.Schedule;
 import com.apify.client.StorageListOptions;
-import com.apify.client.Task;
-import com.apify.client.Webhook;
-import com.apify.client.WebhookDispatch;
+import com.apify.client.actor.Actor;
+import com.apify.client.actor.ActorEnvVar;
+import com.apify.client.actor.ActorListOptions;
+import com.apify.client.build.Build;
+import com.apify.client.dataset.Dataset;
+import com.apify.client.dataset.DatasetClient;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.keyvalue.KeyValueStore;
+import com.apify.client.keyvalue.KeyValueStoreClient;
+import com.apify.client.keyvalue.KeyValueStoreKey;
+import com.apify.client.keyvalue.ListKeysOptions;
+import com.apify.client.requestqueue.RequestQueue;
+import com.apify.client.run.RunListOptions;
+import com.apify.client.schedule.Schedule;
+import com.apify.client.task.Task;
+import com.apify.client.webhook.Webhook;
+import com.apify.client.webhook.WebhookDispatch;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -322,7 +322,7 @@ class IterationIntegrationTest extends IntegrationBase {
       // version 0.0, so iteration yields at least one version, each exactly once.
       Set<String> versionNumbers = new HashSet<>();
       int versionCount = 0;
-      Iterator<com.apify.client.ActorVersion> versions =
+      Iterator<com.apify.client.actor.ActorVersion> versions =
           actorClient.versions().iterate(new ListOptions());
       while (versions.hasNext()) {
         versionCount++;
@@ -363,7 +363,7 @@ class IterationIntegrationTest extends IntegrationBase {
   @Test
   void iterateRunsBounded() {
     ApifyClient client = requireClient();
-    Iterator<com.apify.client.ActorRun> it =
+    Iterator<com.apify.client.run.ActorRun> it =
         client.runs().iterate(new ListOptions().limit(5L), new RunListOptions(), 2L);
     int count = 0;
     while (it.hasNext()) {

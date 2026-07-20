@@ -1,8 +1,7 @@
 # Actors, versions & environment variables
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
+> **Official, but experimental — AI-generated and AI-maintained.** Review the code before relying
+> on it in production and report issues on the repository.
 
 Access the Actor collection with `client.actors()` and a single Actor with `client.actor(id)`,
 where `id` is an Actor ID or `username~name` (a `/` in the id is accepted and normalized).

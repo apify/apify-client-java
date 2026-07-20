@@ -3,6 +3,8 @@ package com.apify.client;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.apify.client.dataset.DatasetClient;
+import com.apify.client.dataset.DatasetListItemsOptions;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.ArrayList;

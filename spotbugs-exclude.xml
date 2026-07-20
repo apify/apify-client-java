@@ -1,26 +1,54 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  SpotBugs exclude filter. Two narrow, documented exclusions only — no category-wide rule is
+  SpotBugs exclude filter. Three narrow, documented exclusions only — no category-wide rule is
   disabled:
 
   1. EI_EXPOSE_REP/EI_EXPOSE_REP2 on the internal raw-bytes HTTP response body ({@code
      ApiResponse}). Carrying the actual bytes rather than a defensive copy is the intended contract;
      the payload can be large (dataset exports, records ZIPs) and copying it on every access would be
-     wasteful. {@code ApiResponse} is package-private (not user-facing). The user-facing {@code
-     KeyValueStoreRecord} value type does defensively copy its bytes. All other
+     wasteful. {@code ApiResponse} lives in the internal package (not user-facing). The user-facing
+     {@code KeyValueStoreRecord} value type does defensively copy its bytes. All other
      representation-exposure warnings are fixed in code (unmodifiable getters / copy-on-set).
 
-  2. UWF_UNWRITTEN_FIELD on KeyValueStoreKey: a Jackson-populated DTO whose fields are written by
-     the deserializer via reflection, which SpotBugs cannot see — a known false positive for
+  2. UWF_UNWRITTEN_FIELD / UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD on KeyValueStoreKey and
+     ApiErrorEnvelope (and its nested Body): Jackson-populated DTOs whose fields are written by the
+     deserializer via reflection, which SpotBugs cannot see — a known false positive for
      data-binding models.
+
+  3. EI_EXPOSE_REP2 on ActorClient/RunClient/TaskClient storing the {@code ApifyClient} passed to
+     their constructor (as {@code root}, used to reach sibling resources, e.g. a run's Actor). Since
+     the package split introduced by this change, these constructors are public (Java requires
+     cross-package visibility for ApifyClient, in the root package, to construct resource clients
+     that now live in their own sub-packages) — SpotBugs only flags representation exposure through
+     reachable (public) constructors, so this finding is new to this change, not a regression in
+     behavior. It is a false positive, not a real defect: `ApifyClient` is an effectively-immutable
+     facade (a final HTTP client plus two final base-URL strings, no mutator methods whatsoever), so
+     there is no caller-reachable way to mutate a `root` reference after construction, and defensively
+     copying it would be meaningless (it is not a value/data object) as well as wasteful.
 -->
 <FindBugsFilter>
   <Match>
-    <Class name="com.apify.client.ApiResponse"/>
+    <Class name="com.apify.client.internal.ApiResponse"/>
     <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
   </Match>
   <Match>
-    <Class name="com.apify.client.KeyValueStoreKey"/>
+    <Class name="com.apify.client.keyvalue.KeyValueStoreKey"/>
     <Bug pattern="UWF_UNWRITTEN_FIELD"/>
+  </Match>
+  <Match>
+    <Or>
+      <Class name="com.apify.client.internal.ApiErrorEnvelope"/>
+      <Class name="com.apify.client.internal.ApiErrorEnvelope$Body"/>
+    </Or>
+    <Bug pattern="UWF_UNWRITTEN_FIELD,UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD"/>
+  </Match>
+  <Match>
+    <Or>
+      <Class name="com.apify.client.actor.ActorClient"/>
+      <Class name="com.apify.client.run.RunClient"/>
+      <Class name="com.apify.client.task.TaskClient"/>
+    </Or>
+    <Field name="root"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
 </FindBugsFilter>

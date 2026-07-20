@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.apify.client.keyvalue.KeyValueStoreClient;
+import com.apify.client.keyvalue.KeyValueStoreKey;
+import com.apify.client.keyvalue.ListKeysOptions;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;

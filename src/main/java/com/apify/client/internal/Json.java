@@ -1,0 +1,99 @@
+package com.apify.client.internal;
+
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+
+/**
+ * Shared JSON (de)serialization for the client, centered on a single configured {@link
+ * ObjectMapper}. Internal to the client.
+ *
+ * <p>The mapper ignores unknown properties (models also collect them in an {@code extra} map for
+ * forward compatibility), renders dates as ISO-8601 strings, and omits {@code null} fields when
+ * serializing request bodies.
+ */
+public final class Json {
+
+  static final ObjectMapper MAPPER =
+      new ObjectMapper()
+          .registerModule(new JavaTimeModule())
+          .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+          .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
+          .setSerializationInclusion(JsonInclude.Include.NON_NULL)
+          // Bind directly to (private) fields so models need no setters — getters remain the
+          // public read surface. Any-getters/setters are still honored for the `extra` map.
+          .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY)
+          .setVisibility(PropertyAccessor.GETTER, JsonAutoDetect.Visibility.NONE)
+          .setVisibility(PropertyAccessor.IS_GETTER, JsonAutoDetect.Visibility.NONE);
+
+  private Json() {}
+
+  /** Serializes a value to JSON bytes. */
+  public static byte[] toBytes(Object value) {
+    try {
+      return MAPPER.writeValueAsBytes(value);
+    } catch (IOException e) {
+      throw new UncheckedIOException("failed to serialize request body", e);
+    }
+  }
+
+  /** Parses JSON bytes into the given type. */
+  public static <T> T parse(byte[] body, JavaType type) {
+    try {
+      return MAPPER.readValue(body, type);
+    } catch (IOException e) {
+      throw new UncheckedIOException("failed to parse API response", e);
+    }
+  }
+
+  /** Parses JSON bytes into the given class. */
+  public static <T> T parse(byte[] body, Class<T> type) {
+    try {
+      return MAPPER.readValue(body, type);
+    } catch (IOException e) {
+      throw new UncheckedIOException("failed to parse API response", e);
+    }
+  }
+
+  /** Parses JSON bytes into the given {@link TypeReference} (for generic types). */
+  public static <T> T parse(byte[] body, TypeReference<T> type) {
+    try {
+      return MAPPER.readValue(body, type);
+    } catch (IOException e) {
+      throw new UncheckedIOException("failed to parse API response", e);
+    }
+  }
+
+  /** Constructs a {@link JavaType} for a raw class. */
+  public static JavaType type(Class<?> raw) {
+    return MAPPER.getTypeFactory().constructType(raw);
+  }
+
+  /** Constructs a parametric {@link JavaType}, e.g. {@code PaginationList<Actor>}. */
+  public static JavaType parametric(Class<?> raw, JavaType... params) {
+    return MAPPER.getTypeFactory().constructParametricType(raw, params);
+  }
+
+  /**
+   * Parses a JSON response body wrapped in a {@code {"data": ...}} envelope, returning the
+   * unwrapped {@code data} value of the given type.
+   */
+  public static <T> T parseData(byte[] body, JavaType dataType) {
+    JavaType envelopeType = parametric(DataEnvelope.class, dataType);
+    DataEnvelope<T> envelope = parse(body, envelopeType);
+    return envelope.data;
+  }
+
+  /** Parses a data-envelope whose {@code data} is of the given class. */
+  public static <T> T parseData(byte[] body, Class<T> dataClass) {
+    return parseData(body, type(dataClass));
+  }
+}

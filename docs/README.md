@@ -1,8 +1,7 @@
 # Apify Java client documentation
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
+> **Official, but experimental — AI-generated and AI-maintained.** Review the code before relying
+> on it in production and report issues on the repository.
 
 This directory documents the public API of the Apify Java client, organized by resource. Each page
 lists the available methods with their parameters and short snippets. The snippets are code
@@ -31,10 +30,18 @@ empty `Optional` rather than an exception. API failures are thrown as `ApifyApiE
 
 ## Imports and dependencies
 
-Snippets in these docs assume the client types are imported from `com.apify.client` (e.g.
-`import com.apify.client.*;`) plus standard-library types (`java.util.List`, `java.util.ArrayList`,
-`java.util.Map`, `java.util.Optional`, `java.util.Iterator`, `java.util.function.Consumer`,
-`java.time.Duration`, `java.io.InputStream`).
+The client's classes are organized by resource into sub-packages of `com.apify.client`: `actor`,
+`build`, `run`, `dataset`, `keyvalue`, `requestqueue`, `task`, `schedule`, `webhook`, `user`, `log`,
+`store`, and `http` (the replaceable transport). `ApifyClient`, `ApifyClientBuilder`,
+`ApifyApiException`, `Version`, and the shared list/pagination types (`ListOptions`,
+`StorageListOptions`, `PaginationList`) stay in the `com.apify.client` root package. See each
+resource page for its exact package, or import every sub-package's classes with one wildcard
+per package (e.g. `import com.apify.client.*; import com.apify.client.actor.*; import
+com.apify.client.dataset.*; …`).
+
+Snippets in these docs additionally assume standard-library types (`java.util.List`,
+`java.util.ArrayList`, `java.util.Map`, `java.util.Optional`, `java.util.Iterator`,
+`java.util.function.Consumer`, `java.time.Duration`, `java.io.InputStream`).
 
 Raw-JSON return values use Jackson's `com.fasterxml.jackson.databind.JsonNode`. Jackson is a
 transitive dependency of this client, so it is already on your classpath.

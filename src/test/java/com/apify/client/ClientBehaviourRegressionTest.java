@@ -5,6 +5,26 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.apify.client.actor.Actor;
+import com.apify.client.actor.ActorListOptions;
+import com.apify.client.actor.ActorVersion;
+import com.apify.client.dataset.DatasetDownloadOptions;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.dataset.DownloadItemsFormat;
+import com.apify.client.keyvalue.KeyValueStore;
+import com.apify.client.keyvalue.KeyValueStoreRecord;
+import com.apify.client.keyvalue.ListKeysOptions;
+import com.apify.client.keyvalue.SetRecordOptions;
+import com.apify.client.requestqueue.BatchAddRequestsOptions;
+import com.apify.client.requestqueue.BatchAddResult;
+import com.apify.client.requestqueue.RequestQueueRequest;
+import com.apify.client.run.ActorRun;
+import com.apify.client.run.LastRunOptions;
+import com.apify.client.run.RunChargeOptions;
+import com.apify.client.store.ActorStoreListItem;
+import com.apify.client.store.StoreListOptions;
+import com.apify.client.webhook.NestedWebhookCollectionClient;
+import com.apify.client.webhook.Webhook;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -115,7 +135,7 @@ class ClientBehaviourRegressionTest {
   void setRecordDoesNotRetryTimeoutsWhenOptedOut() {
     MockBackend timeouts = new MockBackend(List.of(MockBackend.timeoutError()));
     assertThrows(
-        HttpClientCore.TransportException.class,
+        ApifyTransportException.class,
         () ->
             client(timeouts, 3)
                 .keyValueStore("s")
@@ -131,7 +151,7 @@ class ClientBehaviourRegressionTest {
   void setRecordRetriesTimeoutsByDefault() {
     MockBackend timeouts = new MockBackend(List.of(MockBackend.timeoutError()));
     assertThrows(
-        HttpClientCore.TransportException.class,
+        ApifyTransportException.class,
         () -> client(timeouts, 3).keyValueStore("s").setRecord("k", new byte[] {1}, "text/plain"));
     assertEquals(4, timeouts.calls, "timeouts should be retried (maxRetries + 1 attempts)");
   }

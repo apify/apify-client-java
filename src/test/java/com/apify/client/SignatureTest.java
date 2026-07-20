@@ -2,6 +2,7 @@ package com.apify.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.apify.client.internal.Signatures;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;

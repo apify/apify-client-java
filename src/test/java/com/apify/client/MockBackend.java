@@ -1,10 +1,10 @@
 package com.apify.client;
 
+import com.apify.client.http.HttpClient;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -19,11 +19,15 @@ import java.util.concurrent.Flow;
 import javax.net.ssl.SSLSession;
 
 /**
- * A deterministic {@link HttpBackend} for offline unit tests. It serves a queue of scripted
+ * A deterministic {@link HttpClient} for offline unit tests. It serves a queue of scripted
  * responses/errors, records how many times it was called, and captures the last request's headers,
  * URL and body.
+ *
+ * <p>The JDK's own {@code java.net.http.HttpClient} is referenced by its fully-qualified name below
+ * (never imported unqualified): an unqualified single-type import would clash with this package's
+ * own {@link HttpClient} interface of the same simple name.
  */
-final class MockBackend implements HttpBackend {
+final class MockBackend implements HttpClient {
 
   /** One scripted response: an HTTP status + body, or a transport error. */
   static final class Scripted {
@@ -47,8 +51,8 @@ final class MockBackend implements HttpBackend {
   final List<String> bodies = new ArrayList<>();
 
   /**
-   * Optional scripted response for {@link #sendStreaming}; defaults to the first {@code send}
-   * entry.
+   * Optional scripted response for {@link #sendStreamingResponse}; defaults to the first {@code
+   * send} entry.
    */
   private Scripted streamResponse;
 
@@ -98,17 +102,17 @@ final class MockBackend implements HttpBackend {
     return new FakeResponse(request.uri(), r.status, r.body);
   }
 
-  /** Scripts the next {@link #sendStreaming} call to return the given status and body. */
+  /** Scripts the next {@link #sendStreamingResponse} call to return the given status and body. */
   void scriptStream(int status, String body) {
     this.streamResponse = new Scripted(status, body, null);
     this.streamBody = null;
   }
 
   /**
-   * Scripts the next {@link #sendStreaming} call to return the given status and an arbitrary,
-   * possibly blocking, {@link InputStream}. Unlike {@link #scriptStream(int, String)}, the body is
-   * not a finite in-memory buffer, so {@code read()} does not naturally reach end-of-stream; this
-   * models a live log that only ends when the stream is closed.
+   * Scripts the next {@link #sendStreamingResponse} call to return the given status and an
+   * arbitrary, possibly blocking, {@link InputStream}. Unlike {@link #scriptStream(int, String)},
+   * the body is not a finite in-memory buffer, so {@code read()} does not naturally reach
+   * end-of-stream; this models a live log that only ends when the stream is closed.
    */
   void scriptStream(int status, InputStream body) {
     this.streamBodyStatus = status;
@@ -117,7 +121,7 @@ final class MockBackend implements HttpBackend {
   }
 
   @Override
-  public synchronized HttpResponse<InputStream> sendStreaming(HttpRequest request) {
+  public synchronized HttpResponse<InputStream> sendStreamingResponse(HttpRequest request) {
     calls++;
     lastUrl = request.uri().toString();
     if (streamBody != null) {
@@ -217,8 +221,8 @@ final class MockBackend implements HttpBackend {
     }
 
     @Override
-    public HttpClient.Version version() {
-      return HttpClient.Version.HTTP_1_1;
+    public java.net.http.HttpClient.Version version() {
+      return java.net.http.HttpClient.Version.HTTP_1_1;
     }
   }
 
@@ -270,8 +274,8 @@ final class MockBackend implements HttpBackend {
     }
 
     @Override
-    public HttpClient.Version version() {
-      return HttpClient.Version.HTTP_1_1;
+    public java.net.http.HttpClient.Version version() {
+      return java.net.http.HttpClient.Version.HTTP_1_1;
     }
   }
 }

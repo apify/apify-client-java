@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import com.aayushatharva.brotli4j.Brotli4jLoader;
 import com.aayushatharva.brotli4j.decoder.Decoder;
 import com.aayushatharva.brotli4j.decoder.DirectDecompress;
+import com.apify.client.internal.HttpClientCore;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -54,21 +55,21 @@ class CompressionTest {
   }
 
   /**
-   * Whether a brotli native codec is expected to load here. brotli4j bundles glibc x86_64/aarch64
-   * binaries (what CI's ubuntu-latest and typical server runtimes use); on musl (Alpine), 32-bit,
-   * or other CPU arches none ships and the client falls back to gzip. Tests that force the brotli
-   * codec are gated on this so they run where brotli is expected and skip (not error) where gzip
-   * applies.
+   * Whether a brotli native codec is expected to load here. The native codec is test-scoped only
+   * (see {@code pom.xml}: {@code native-linux-x86_64}, {@code test} scope) — the published artifact
+   * deliberately ships no native by default, so a consumer gets gzip unless they opt in by adding
+   * their platform's brotli4j native themselves. This test-only native targets glibc linux x86_64
+   * (this project's CI and typical containers); on musl (Alpine), 32-bit, other CPU arches, or when
+   * the test native is absent, the client falls back to gzip. Tests that force the brotli codec are
+   * gated on this so they run where brotli is expected and skip (not error) where gzip applies.
    */
   private static boolean nativeBrotliExpected() {
     String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
     String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
     boolean linux = os.contains("nux");
-    boolean commonArch =
-        arch.equals("amd64")
-            || arch.equals("x86_64")
-            || arch.equals("aarch64")
-            || arch.equals("arm64");
+    // Only x86_64/amd64: the test-scoped native dependency is native-linux-x86_64 only (see the
+    // class javadoc above), so aarch64/arm64 hosts have no test native and must not expect brotli.
+    boolean commonArch = arch.equals("amd64") || arch.equals("x86_64");
     boolean musl =
         Files.exists(Path.of("/lib/ld-musl-x86_64.so.1"))
             || Files.exists(Path.of("/lib/ld-musl-aarch64.so.1"));
@@ -99,14 +100,16 @@ class CompressionTest {
     assertArrayEquals(payload, gunzip(c.body), "server must recover the original body from gzip");
   }
 
-  // --- Brotli native codec must load where a native is bundled (CI/runtime), so brotli runs. ---
+  // --- Brotli native codec must load where the test-scoped native applies, so brotli runs. ---
 
   @Test
-  void brotliNativeCodecLoadsWhereBundled() {
-    assumeTrue(nativeBrotliExpected(), "no brotli native bundled for this platform; gzip fallback");
+  void brotliNativeCodecLoadsWhereTestNativeApplies() {
+    assumeTrue(
+        nativeBrotliExpected(), "no test-scoped brotli native for this platform; gzip fallback");
     assertTrue(
         HttpClientCore.brotliAvailable(),
-        "brotli native codec must load on glibc x86_64/aarch64 so the preferred brotli path runs");
+        "brotli native codec must load on glibc linux x86_64 (this project's test-scoped native) so"
+            + " the preferred brotli path runs");
   }
 
   // --- Live client path: uses the preferred coding and round-trips through the backend. ---
