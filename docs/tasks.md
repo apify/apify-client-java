@@ -54,4 +54,6 @@ ActorRun streamed = client.task("TASK_ID").call(null, new TaskCallOptions().memo
 `getBuild()`, `getTimeoutSecs()`, `getMemoryMbytes()`, `getRestartOnError()`), `getInput()` (a
 `JsonNode` snapshot of the stored input, from whichever response last returned this `Task` object;
 prefer `TaskClient.getInput()` above to fetch it fresh on-demand), and `getActorStandby()`
-(`ActorStandby`, standby-mode configuration overrides for this task, if any).
+(`ActorStandby`, standby-mode configuration overrides for this task, if any). Any field not covered
+by a typed getter is still available via the inherited `getExtra()` (see
+[the docs index](README.md#model-fields-and-unmodeled-data-getextra)).

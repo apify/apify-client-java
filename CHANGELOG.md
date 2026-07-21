@@ -50,6 +50,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `KeyValueStoreCollectionClient`, `RequestQueueCollectionClient`, `ActorCollectionClient`,
   `ScheduleCollectionClient`, `TaskCollectionClient`, `BuildCollectionClient` and
   `RunCollectionClient`; behavior is unchanged.
+- Extracted shared `StartOptionsLike`/`CallOptionsLike` interfaces (internal) and a
+  `RunStartSupport` helper backing `ActorClient`/`TaskClient`'s `start`/`call`, removing the
+  duplicated implementation between the two; behavior is unchanged.
+- Tightened `spotbugs-exclude.xml` to only the entries that currently reproduce a real finding.
+- `java-integration-tests.yml` now declares an explicit, least-privilege `permissions: contents:
+  read` block.
 
 ### Added
 
@@ -67,9 +73,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Typed getters replacing several `getExtra()`-only fields: `Schedule` (`title`, `timezone`,
   `isExclusive`, `description`, `createdAt`, `modifiedAt`, `nextRunAt`, `lastRunAt`, `actions`,
   `notifications`), `Webhook` (`condition`, `ignoreSslErrors`, `doNotRetry`, `payloadTemplate`,
-  `headersTemplate`, `isAdHoc`, `stats`, `description`, `createdAt`, `modifiedAt`), `Task`
-  (`description`, `stats`, `options`, `input`, `actorStandby`), `ActorRun` (`generalAccess`,
-  `chargedEventCounts`, `pricingInfo`, `usage`, `usageUsd`, `stats`, `options`, `meta`).
+  `headersTemplate`, `isAdHoc`, `stats`, `description`, `createdAt`, `modifiedAt`,
+  `shouldInterpolateStrings`, `lastDispatch`), `Task` (`description`, `stats`, `options`, `input`,
+  `actorStandby`), `ActorRun` (`generalAccess`, `chargedEventCounts`, `pricingInfo`, `usage`,
+  `usageUsd`, `stats`, `options`, `meta`, `usageTotalUsd`, `buildNumber`, `exitCode`,
+  `isContainerServerReady`, `gitBranchName`, `storageIds`).
 
 ### Fixed
 
@@ -77,11 +85,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   byte size (matching the reference client's `MAX_PAYLOAD_SIZE_BYTES`), not just the 25-request
   count limit, so a batch of individually large requests (e.g. sizeable `userData`) can no longer
   413.
+- `RequestQueueClient.batchAddRequests` no longer throws on a non-retryable 4xx; the affected
+  requests are now reported via `BatchAddResult.getUnprocessedRequests()`, matching the reference
+  client's never-throws contract.
 - `ApifyApiException` now extends `ApifyClientException` (previously `RuntimeException` directly),
   so `catch (ApifyClientException)` catches API errors as documented.
 - `PaginationList.getItems()` no longer throws `NullPointerException` when the API response
   contains an explicit `"items": null`.
 - `PaginationList.setItems` now defensively copies its input.
+- `ApifyClient`'s class javadoc no longer duplicates the "official, but experimental" disclaimer;
+  it appears only once, in the top-level README, as required.
+- `ApifyClientBuilder.timeout(Duration)` now rejects `Duration.ZERO`/a negative duration at build
+  time instead of building a client whose first request fails deep inside the transport.
+- `RequestQueueRequest.getUserData()`/`setUserData()` now defensively deep-copy the `JsonNode`,
+  matching `getHeaders()`/`getErrorMessages()`, so external mutation of the passed-in/returned value
+  can no longer corrupt the request's stored state.
+- `RequestQueueClient.paginateRequests(...)` no longer yields more than the requested `totalLimit`
+  when a single page overshoots it, matching `PaginatedIterator`'s equivalent guard.
+
+### Documentation
+
+- Documented the newly added `ActorRun`/`Webhook` fields above, `ActorRunOptions`/`ActorRunUsage`'s
+  getters, and the per-scope support for `RunListOptions.startedAfter`/`startedBefore`; added a
+  request-queue lock/unlock worked example (`withClientKey`/`listAndLockHead`/
+  `prolongRequestLock`/`deleteRequestLock`/`unlockRequests`); added the missing
+  `DownloadItemsFormat` import to the package table and fixed the Quick Start "fragment"
+  contradiction; documented `ApifyApiException`'s accessor return types and the
+  `HttpTimeoutException` naming collision with `java.net.http.HttpTimeoutException`; added
+  `setStatusMessage` to the README resources table; noted `getExtra()` on every thin response model.
 
 ## [0.3.1] - 2026-07-14
 
@@ -202,8 +233,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.1.0] - 2026-07-03
 
-Initial release of the official (experimental, AI-generated and AI-maintained) Java client for the
-Apify API, verified against OpenAPI specification version `v2-2026-07-02T131926Z`.
+Initial release of the Java client for the Apify API, targeting OpenAPI specification version
+`v2-2026-07-02T131926Z`.
 
 ### Added
 

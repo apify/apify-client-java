@@ -35,10 +35,6 @@ import java.util.Map;
 /**
  * The entry point for interacting with the Apify API.
  *
- * <p><b>Official, but experimental — AI-generated and AI-maintained.</b> This is an official Apify
- * client, but it is experimental: it is generated and maintained by AI. Review the code before
- * relying on it in production and report issues on the repository.
- *
  * <p>Construct it with {@link #create(String)} (token-only) or {@link #builder()}, then obtain
  * resource clients via the accessor methods, e.g. {@link #actor(String)}, {@link #dataset(String)},
  * {@link #run(String)}. It is safe for concurrent use.
@@ -61,6 +57,14 @@ import java.util.Map;
  *   <li>Cross-cutting behaviour (auth, User-Agent, retries with exponential backoff, timeouts)
  *       lives in the internal HTTP client and is applied to every request.
  * </ul>
+ *
+ * <p>Every resource client's constructor is public, but that is an artifact of each living in its
+ * own resource-scoped package (e.g. {@link ActorClient} in {@code com.apify.client.actor}) rather
+ * than an invitation to call it directly: they are not meant to be constructed by user code. Always
+ * obtain one from {@link ApifyClient} or from another resource client's own accessor methods (e.g.
+ * {@link ActorClient#lastRun}, {@link ActorClient#builds}), which supply the internal wiring (the
+ * shared HTTP client, base URL, inherited query filters) a direct constructor call would otherwise
+ * have to reconstruct by hand.
  */
 public final class ApifyClient {
 

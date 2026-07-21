@@ -115,6 +115,31 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void metamorphSendsTargetActorIdBuildAndInputBody() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"run123\"}}");
+    client(backend)
+        .run("run123")
+        .metamorph(
+            "apify/other-actor",
+            java.util.Map.of("foo", "bar"),
+            new com.apify.client.run.MetamorphOptions().build("1.2.3"));
+    assertTrue(backend.lastUrl.contains("actor-runs/run123/metamorph"), backend.lastUrl);
+    assertTrue(backend.lastUrl.contains("targetActorId=apify%2Fother-actor"), backend.lastUrl);
+    assertTrue(backend.lastUrl.contains("build=1.2.3"), backend.lastUrl);
+    assertTrue(backend.lastBody.contains("\"foo\":\"bar\""), backend.lastBody);
+    assertEquals("POST", backend.lastMethod);
+  }
+
+  @Test
+  void rebootSendsPostToRebootWithNoBody() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"run123\"}}");
+    ActorRun run = client(backend).run("run123").reboot();
+    assertEquals("run123", run.getId());
+    assertTrue(backend.lastUrl.contains("actor-runs/run123/reboot"), backend.lastUrl);
+    assertEquals("POST", backend.lastMethod);
+  }
+
+  @Test
   void getRecordDefaultsAttachment() {
     MockTransport backend = MockTransport.ofConstant(200, "raw-bytes");
     client(backend).keyValueStore("store1").getRecord("OUTPUT");
@@ -239,6 +264,30 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void paginateRequestsTrimsPageToTotalLimitWhenServerOvershoots() {
+    // If the server ignores (or overshoots) the requested per-page `limit` and returns more items
+    // than the caller's totalLimit cap allows, the iterator must still yield exactly totalLimit
+    // items, mirroring PaginatedIterator's own defensive trim.
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200,
+            "{\"data\":{\"items\":["
+                + "{\"id\":\"1\",\"url\":\"https://example.com/1\",\"uniqueKey\":\"k1\"},"
+                + "{\"id\":\"2\",\"url\":\"https://example.com/2\",\"uniqueKey\":\"k2\"},"
+                + "{\"id\":\"3\",\"url\":\"https://example.com/3\",\"uniqueKey\":\"k3\"},"
+                + "{\"id\":\"4\",\"url\":\"https://example.com/4\",\"uniqueKey\":\"k4\"},"
+                + "{\"id\":\"5\",\"url\":\"https://example.com/5\",\"uniqueKey\":\"k5\"}"
+                + "],\"limit\":3,\"nextCursor\":null}}");
+    java.util.Iterator<RequestQueueRequest> it =
+        client(backend).requestQueue("q1").paginateRequests(3L, null, null);
+    List<String> ids = new ArrayList<>();
+    while (it.hasNext()) {
+      ids.add(it.next().getId());
+    }
+    assertEquals(List.of("1", "2", "3"), ids);
+  }
+
+  @Test
   void batchAddRequestsRetriesUnprocessed() {
     MockTransport backend =
         new MockTransport(
@@ -311,6 +360,18 @@ class ClientBehaviourRegressionTest {
     client.run("r1").waitForFinish(120L);
     // 20s timeout - 5s margin = 15s server wait cap (below the 60s API cap and the 120s budget).
     assertTrue(backend.lastUrl.contains("waitForFinish=15"), backend.lastUrl);
+  }
+
+  @Test
+  void builderRejectsZeroOrNegativeTimeout() {
+    // Unlike the delay params (where zero legitimately means "no delay"), a zero/negative timeout
+    // must be rejected at build time: it would otherwise build a client whose first request fails
+    // deep inside the transport (HttpRequest.Builder#timeout rejects a non-positive duration).
+    assertThrows(
+        IllegalArgumentException.class, () -> ApifyClient.builder().timeout(Duration.ZERO));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ApifyClient.builder().timeout(Duration.ofSeconds(-1)));
   }
 
   @Test
@@ -436,23 +497,24 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
-  void batchAddRequestsThrowsOnNonRetryableClientError() {
-    // A hard 4xx (e.g. bad token / insufficient permissions) must surface, not be masked as
-    // "unprocessed" — otherwise a caller cannot tell it apart from ordinary rate-limiting.
+  void batchAddRequestsNeverThrowsOnNonRetryableClientError() {
+    // Matches the reference client's `_batchAddRequestsWithRetries`: even a hard 4xx (e.g. bad
+    // token / insufficient permissions) must NOT be thrown. It is reported as unprocessed instead,
+    // keeping batchAddRequests' never-throws contract regardless of the failure cause.
     MockTransport backend =
         MockTransport.ofConstant(
             403, "{\"error\":{\"type\":\"insufficient-permissions\",\"message\":\"no\"}}");
-    ApifyApiException ex =
-        assertThrows(
-            ApifyApiException.class,
-            () ->
-                client(backend)
-                    .requestQueue("q1")
-                    .batchAddRequests(
-                        List.of(new RequestQueueRequest("https://example.com", "k0")),
-                        false,
-                        new BatchAddRequestsOptions().maxUnprocessedRequestsRetries(0)));
-    assertEquals(403, ex.getStatusCode());
+    RequestQueueRequest request = new RequestQueueRequest("https://example.com", "k0");
+    BatchAddResult result =
+        client(backend)
+            .requestQueue("q1")
+            .batchAddRequests(
+                List.of(request),
+                false,
+                new BatchAddRequestsOptions().maxUnprocessedRequestsRetries(0));
+    assertEquals(0, result.getProcessedRequests().size());
+    assertEquals(1, result.getUnprocessedRequests().size());
+    assertEquals("k0", result.getUnprocessedRequests().get(0).getUniqueKey());
   }
 
   @Test

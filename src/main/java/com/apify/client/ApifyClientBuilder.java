@@ -5,6 +5,7 @@ import com.apify.client.http.HttpTransport;
 import com.apify.client.http.RetryConfig;
 import com.apify.client.internal.HttpClientCore;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -85,7 +86,7 @@ public final class ApifyClientBuilder {
    * (see {@link DefaultHttpTransport#DefaultHttpTransport(Duration)}).
    */
   public ApifyClientBuilder timeout(Duration timeout) {
-    this.timeout = requireNonNegative(timeout, "timeout");
+    this.timeout = requirePositive(timeout, "timeout");
     return this;
   }
 
@@ -124,6 +125,21 @@ public final class ApifyClientBuilder {
   private static Duration requireNonNegative(Duration value, String argName) {
     if (value == null || value.isNegative()) {
       throw new IllegalArgumentException(argName + " must not be null or negative");
+    }
+    return value;
+  }
+
+  /**
+   * Validates a non-null, strictly-positive {@link Duration} argument, returning it unchanged.
+   * Unlike the delay parameters (where zero legitimately means "retry immediately"), a zero {@code
+   * timeout} is not tolerated: it is passed straight through to {@code HttpRequest.Builder#timeout}
+   * deep inside {@link DefaultHttpTransport}, which rejects a zero/negative duration at
+   * request-send time — so a zero value here would build a client that fails on its very first call
+   * rather than at construction time.
+   */
+  private static Duration requirePositive(Duration value, String argName) {
+    if (value == null || value.isZero() || value.isNegative()) {
+      throw new IllegalArgumentException(argName + " must be strictly positive");
     }
     return value;
   }
@@ -214,11 +230,11 @@ public final class ApifyClientBuilder {
    */
   static String platformToken(String osName, String vmName) {
     // Android runs on a Linux kernel (os.name == "Linux"); detect it via its VM name ("Dalvik").
-    String vm = vmName.toLowerCase(java.util.Locale.ROOT);
+    String vm = vmName.toLowerCase(Locale.ROOT);
     if (vm.contains("dalvik")) {
       return "android";
     }
-    String os = osName.toLowerCase(java.util.Locale.ROOT);
+    String os = osName.toLowerCase(Locale.ROOT);
     // macOS/Darwin is checked before Windows because the literal "darwin" contains "win"; the
     // reverse order would misclassify a "Darwin" os.name as "win32".
     if (os.contains("mac") || os.contains("darwin")) {

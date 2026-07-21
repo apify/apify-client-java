@@ -30,7 +30,10 @@ class ActorRunIntegrationTest extends IntegrationBase {
   // suite (hello-world) finishes in ~1-2s, so a live reboot test would be either flaky-by-
   // construction or need a bespoke slow-running test Actor this suite doesn't otherwise need.
   // `charge` only applies to pay-per-event Actors, which none of this suite's fixtures are. All
-  // three remain covered offline by ClientBehaviourRegressionTest.
+  // three are covered offline instead, against a mock backend, by
+  // ClientBehaviourRegressionTest#metamorphSendsTargetActorIdBuildAndInputBody,
+  // #rebootSendsPostToRebootWithNoBody, and #chargeSendsIdempotencyKey (+ its sibling charge*
+  // tests) respectively.
 
   @Test
   void listRuns() {

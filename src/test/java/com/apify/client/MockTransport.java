@@ -44,6 +44,7 @@ final class MockTransport implements HttpTransport {
   int calls = 0;
   HttpHeaders lastHeaders;
   String lastUrl;
+  String lastMethod;
   String lastBody;
   byte[] lastBodyBytes;
   final List<String> bodies = new ArrayList<>();
@@ -88,6 +89,7 @@ final class MockTransport implements HttpTransport {
     int idx = calls++;
     lastHeaders = request.headers();
     lastUrl = request.uri().toString();
+    lastMethod = request.method();
     lastBodyBytes = readBody(request);
     lastBody = lastBodyBytes == null ? null : new String(lastBodyBytes, StandardCharsets.UTF_8);
     if (lastBody != null) {
@@ -125,6 +127,7 @@ final class MockTransport implements HttpTransport {
   public synchronized HttpResponse<InputStream> sendStreamingResponse(HttpRequest request) {
     calls++;
     lastUrl = request.uri().toString();
+    lastMethod = request.method();
     if (streamBody != null) {
       return new FakeStreamResponse(request.uri(), streamBodyStatus, streamBody);
     }

@@ -9,6 +9,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -238,6 +239,18 @@ public final class ResourceContext {
   /** POST that gets-or-creates a named resource ({@code POST {collection}?name=...}). */
   public <T> T getOrCreateNamed(String name, Class<T> dataClass) {
     return getOrCreateNamed(name, null, dataClass);
+  }
+
+  /**
+   * As {@link #getOrCreateNamed(String, Object, Class)}, wrapping a nullable {@code schema} value
+   * into the {@code {"schema": ...}} request body shape every storage collection's {@code
+   * getOrCreate(name, schema)} sends (a {@code null} schema sends no body, same as {@link
+   * #getOrCreateNamed(String, Class)}). Shared by {@code DatasetCollectionClient}/{@code
+   * KeyValueStoreCollectionClient} so neither duplicates the wrapping (DRY).
+   */
+  public <T> T getOrCreateNamedWithSchema(String name, Object schema, Class<T> dataClass) {
+    Object body = schema == null ? null : Map.of("schema", schema);
+    return getOrCreateNamed(name, body, dataClass);
   }
 
   /**

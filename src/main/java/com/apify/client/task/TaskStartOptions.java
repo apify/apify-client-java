@@ -2,6 +2,8 @@ package com.apify.client.task;
 
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.internal.QueryParams;
+import com.apify.client.internal.ResourceContext;
+import com.apify.client.internal.StartOptionsLike;
 import java.util.List;
 
 /**
@@ -11,7 +13,7 @@ import java.util.List;
  * accept (the Actor-only {@code contentType} and {@code forcePermissionLevel}), matching the
  * reference client.
  */
-public final class TaskStartOptions {
+public final class TaskStartOptions implements StartOptionsLike {
   private String build;
   private Long memoryMbytes;
   private Long timeoutSecs;
@@ -69,7 +71,8 @@ public final class TaskStartOptions {
     return this;
   }
 
-  void apply(QueryParams q) {
+  @Override
+  public void apply(QueryParams q) {
     q.addString("build", build)
         .addLong("memory", memoryMbytes)
         .addLong("timeout", timeoutSecs)
@@ -78,5 +81,15 @@ public final class TaskStartOptions {
         .addDouble("maxTotalChargeUsd", maxTotalChargeUsd)
         .addBool("restartOnError", restartOnError);
     q.addString("webhooks", ActorStartOptions.encodeWebhooks(webhooks));
+  }
+
+  /**
+   * The task run endpoint does not accept a content-type override (unlike the Actor run endpoint),
+   * so this always returns the JSON default; present only to satisfy {@link StartOptionsLike} so
+   * {@code start}/{@code call} can be driven generically for both Actor and task runs.
+   */
+  @Override
+  public String contentTypeOrDefault() {
+    return ResourceContext.CONTENT_TYPE_JSON;
   }
 }

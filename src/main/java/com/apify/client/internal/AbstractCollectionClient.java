@@ -2,6 +2,7 @@ package com.apify.client.internal;
 
 import com.apify.client.PaginationList;
 import java.util.Iterator;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -68,10 +69,7 @@ public abstract class AbstractCollectionClient<T, O extends ListOptionsLike> {
    * except {@code offset}/{@code limit}, which the iterator drives per page.
    */
   protected final Iterator<T> iterateWithFilters(
-      Long limit,
-      Long chunkSize,
-      Long offset,
-      java.util.function.Consumer<QueryParams> applyFilters) {
+      Long limit, Long chunkSize, Long offset, Consumer<QueryParams> applyFilters) {
     return ctx.iterateResource("", limit, chunkSize, offset, applyFilters, itemClass);
   }
 

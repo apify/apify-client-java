@@ -53,10 +53,15 @@ System.out.println(dispatch.getId());
 `Webhook` fields: `getId()`, `getUserId()`, `getRequestUrl()`, `getEventTypes()`, `getCreatedAt()`
 / `getModifiedAt()` (`Instant`), `isAdHoc()` (a one-off webhook attached to a single run, e.g. via
 `ActorStartOptions.webhooks(...)`, rather than a persistent account-level webhook),
+`isShouldInterpolateStrings()` (`Boolean`; whether `{{...}}` placeholders in `getPayloadTemplate()`/
+`getHeadersTemplate()` are interpolated with values from the triggering event before dispatch),
 `getCondition()` (`JsonNode`; one of an Actor ID, a task ID or a specific run ID, depending on how
 the webhook was configured), `isIgnoreSslErrors()`, `isDoNotRetry()`, `getPayloadTemplate()`,
-`getHeadersTemplate()`, `getDescription()`, and `getStats()` (`WebhookStats`, exposing
-`getTotalDispatches()`).
+`getHeadersTemplate()`, `getDescription()`, `getLastDispatch()` (`WebhookLastDispatch`, nullable —
+a summary of the most recent dispatch: `getStatus()` one of `"ACTIVE"`/`"SUCCEEDED"`/`"FAILED"`,
+`getFinishedAt()`/`getRemovedAt()` as `Instant`), and `getStats()` (`WebhookStats`, exposing
+`getTotalDispatches()`). Any field not covered by a typed getter is still available via the
+inherited `getExtra()` (see [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
 
 ## `WebhookDispatchCollectionClient` and `WebhookDispatchClient`
 

@@ -40,6 +40,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return id;
   }
 
+  /** Sets the unique request ID. */
   public RequestQueueRequest setId(String id) {
     this.id = id;
     return this;
@@ -50,6 +51,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return url;
   }
 
+  /** Sets the request URL. */
   public RequestQueueRequest setUrl(String url) {
     this.url = url;
     return this;
@@ -60,6 +62,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return uniqueKey;
   }
 
+  /** Sets the deduplication key for the request. */
   public RequestQueueRequest setUniqueKey(String uniqueKey) {
     this.uniqueKey = uniqueKey;
     return this;
@@ -70,18 +73,25 @@ public final class RequestQueueRequest extends ApifyResource {
     return method;
   }
 
+  /** Sets the HTTP method. */
   public RequestQueueRequest setMethod(String method) {
     this.method = method;
     return this;
   }
 
-  /** Arbitrary user-attached metadata. */
+  /**
+   * Arbitrary user-attached metadata ({@code null} if unset). Returns a defensive deep copy, so
+   * mutating the returned {@link JsonNode} (if it is a container type such as {@code ObjectNode})
+   * cannot affect this request's own state, matching {@link #getHeaders()}/{@link
+   * #getErrorMessages()}.
+   */
   public JsonNode getUserData() {
-    return userData;
+    return userData == null ? null : userData.deepCopy();
   }
 
+  /** Sets the user-attached metadata (defensively deep-copied; see {@link #getUserData()}). */
   public RequestQueueRequest setUserData(JsonNode userData) {
-    this.userData = userData;
+    this.userData = userData == null ? null : userData.deepCopy();
     return this;
   }
 
@@ -90,6 +100,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return payload;
   }
 
+  /** Sets the HTTP request body. */
   public RequestQueueRequest setPayload(String payload) {
     this.payload = payload;
     return this;
@@ -100,6 +111,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return headers == null ? null : Collections.unmodifiableMap(headers);
   }
 
+  /** Sets the custom HTTP headers to send with the request (defensively copied). */
   public RequestQueueRequest setHeaders(Map<String, String> headers) {
     this.headers = headers == null ? null : new LinkedHashMap<>(headers);
     return this;
@@ -110,6 +122,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return noRetry;
   }
 
+  /** Sets whether the request is retried on failure. */
   public RequestQueueRequest setNoRetry(Boolean noRetry) {
     this.noRetry = noRetry;
     return this;
@@ -120,6 +133,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return handledAt;
   }
 
+  /** Sets when the request was marked as handled. */
   public RequestQueueRequest setHandledAt(Instant handledAt) {
     this.handledAt = handledAt;
     return this;
@@ -130,6 +144,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return retryCount;
   }
 
+  /** Sets the number of times processing this request has already been retried. */
   public RequestQueueRequest setRetryCount(Integer retryCount) {
     this.retryCount = retryCount;
     return this;
@@ -140,6 +155,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return loadedUrl;
   }
 
+  /** Sets the URL actually loaded, after following redirects. */
   public RequestQueueRequest setLoadedUrl(String loadedUrl) {
     this.loadedUrl = loadedUrl;
     return this;
@@ -153,6 +169,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return errorMessages == null ? null : Collections.unmodifiableList(errorMessages);
   }
 
+  /** Sets the error messages recorded from previous failed processing attempts. */
   public RequestQueueRequest setErrorMessages(List<String> errorMessages) {
     this.errorMessages = errorMessages == null ? null : List.copyOf(errorMessages);
     return this;

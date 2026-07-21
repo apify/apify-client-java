@@ -27,9 +27,15 @@ public final class ActorRun extends ApifyResource {
   private JsonNode pricingInfo;
   private ActorRunUsage usage;
   private ActorRunUsage usageUsd;
+  private Double usageTotalUsd;
   private ActorRunStats stats;
   private ActorRunOptions options;
   private ActorRunMeta meta;
+  private String buildNumber;
+  private Integer exitCode;
+  private Boolean isContainerServerReady;
+  private String gitBranchName;
+  private JsonNode storageIds;
 
   /** The unique run ID. */
   public String getId() {
@@ -134,6 +140,15 @@ public final class ActorRun extends ApifyResource {
     return usageUsd;
   }
 
+  /**
+   * Total cost in USD for this run (what the caller actually pays): platform usage and/or event
+   * costs, depending on the Actor's pricing model. For a run the caller does not own, only
+   * available (non-{@code null}) for pay-per-event Actors, and only covers event costs.
+   */
+  public Double getUsageTotalUsd() {
+    return usageTotalUsd;
+  }
+
   /** Runtime resource-consumption and performance statistics for the run. */
   public ActorRunStats getStats() {
     return stats;
@@ -147,6 +162,37 @@ public final class ActorRun extends ApifyResource {
   /** Metadata about how the run was initiated. */
   public ActorRunMeta getMeta() {
     return meta;
+  }
+
+  /** The build number (semver-like, e.g. {@code "0.0.36"}) of the build used for this run. */
+  public String getBuildNumber() {
+    return buildNumber;
+  }
+
+  /** The exit code of the run's process, once it has finished; {@code null} while running. */
+  public Integer getExitCode() {
+    return exitCode;
+  }
+
+  /** Whether the run container's HTTP server is ready to accept requests. */
+  public Boolean isContainerServerReady() {
+    return isContainerServerReady;
+  }
+
+  /** The name of the git branch the Actor build was built from, if applicable. */
+  public String getGitBranchName() {
+    return gitBranchName;
+  }
+
+  /**
+   * A map of aliased storage IDs associated with this run, grouped by storage type ({@code
+   * datasets}/{@code keyValueStores}/{@code requestQueues}), each with at least a {@code "default"}
+   * entry matching {@link #getDefaultDatasetId()}/{@link #getDefaultKeyValueStoreId()}/{@link
+   * #getDefaultRequestQueueId()}. Returned as raw JSON since the set of aliases beyond {@code
+   * "default"} is open-ended.
+   */
+  public JsonNode getStorageIds() {
+    return storageIds;
   }
 
   /** Whether the run has reached a terminal (finished) status. */

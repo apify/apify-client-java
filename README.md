@@ -65,10 +65,11 @@ any other environment variable) automatically. Read it yourself if you want that
 All public client types live under `com.apify.client`, split by resource into sub-packages (e.g.
 `com.apify.client.run.ActorRun`, `com.apify.client.dataset.DatasetListItemsOptions`) — see
 [Resources](#resources) below for the full list; [`docs/README.md`](docs/README.md#imports-and-dependencies)
-enumerates the model/option-type packages. The remaining snippets in this file (like the Quick
-start one above) are fragments that assume a configured `client` and the correct imports for the
-types they use — they are not, by themselves, complete programs; the [resource pages](docs/README.md)
-show the same kind of fragment per method. Reading items from a run's default dataset:
+enumerates the model/option-type packages. The Quick start example above is a complete, runnable
+program (imports, class, `main`); every other snippet in this file, from here on, is a fragment
+that assumes a configured `client` and the correct imports for the types it uses — not, by itself,
+a complete program — the [resource pages](docs/README.md) show the same kind of fragment per
+method. Reading items from a run's default dataset:
 
 ```java
 ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
@@ -132,8 +133,11 @@ It has two concrete subtypes, both also in `com.apify.client.http`:
 - `ApifyTransportException` — the request never produced an API response at all (connection
   failure, DNS, timeout, or a local failure preparing the request/response, e.g. compression).
   `isTimeout()` reports whether the underlying cause was specifically a timeout (backed by
-  `HttpTimeoutException`, part of the `HttpTransport` contract, not any specific transport
-  implementation's own exception type).
+  `com.apify.client.http.HttpTimeoutException`, part of the `HttpTransport` contract, not any
+  specific transport implementation's own exception type). Note the name collision: this is a
+  distinct type from the JDK's own `java.net.http.HttpTimeoutException` (which
+  `DefaultHttpTransport` catches internally and translates into this one) — use an explicit,
+  fully-qualified import or a clear alias if a file needs both.
 
 Catch `ApifyClientException` to handle both failure modes uniformly, or catch a specific subtype to
 handle one of them differently. `ApifyApiException` is imported from `com.apify.client.http`:
@@ -148,14 +152,15 @@ try {
 
 `ApifyApiException` exposes the parsed error details:
 
-| Accessor | Meaning |
-|---|---|
-| `getStatusCode()` | HTTP status code of the error response. |
-| `getType()` | Machine-readable error type (e.g. `record-not-found`). |
-| `getMessage()` | Human-readable description. |
-| `getAttempt()` | The (1-based) attempt number that produced the error. |
-| `getHttpMethod()` / `getPath()` | The request method and path. |
-| `getData()` | Additional structured error data, if any. |
+| Accessor | Type | Meaning |
+|---|---|---|
+| `getStatusCode()` | `int` | HTTP status code of the error response. |
+| `getType()` | `String` (nullable) | Machine-readable error type (e.g. `record-not-found`). |
+| `getMessage()` | `String` | Human-readable description (also `Throwable.getMessage()`). |
+| `getAttempt()` | `int` | The (1-based) attempt number that produced the error. |
+| `getHttpMethod()` | `String` | The request's HTTP method. |
+| `getPath()` | `String` | The request's URL path. |
+| `getData()` | `Map<String, Object>` (nullable, unmodifiable) | Additional structured error data, if any. |
 
 ## Versioning
 
@@ -229,6 +234,7 @@ Every resource client lives in its own sub-package of `com.apify.client`, named 
 | `store()` | `StoreCollectionClient` | `com.apify.client.store` | Apify Store |
 | `me()` / `user(id)` | `UserClient` | `com.apify.client.user` | Users |
 | `log(id)` | `LogClient` | `com.apify.client.log` | Build/run logs |
+| `setStatusMessage(message, options)` | — (direct `ApifyClient` method, no resource client) | `com.apify.client.run` (for `SetStatusMessageOptions`) | Sets the status message of the current Actor run (see [docs/README.md](docs/README.md#setting-the-current-runs-status-message)) |
 
 The HTTP transport contract (`HttpTransport`, `DefaultHttpTransport`) and the exceptions thrown for
 transport-level failures (`ApifyTransportException`, `HttpTimeoutException`) live in

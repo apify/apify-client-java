@@ -13,6 +13,7 @@ public final class Webhook extends ApifyResource {
   private Instant createdAt;
   private Instant modifiedAt;
   private boolean isAdHoc;
+  private Boolean shouldInterpolateStrings;
   private List<String> eventTypes = List.of();
   private JsonNode condition;
   private boolean ignoreSslErrors;
@@ -21,6 +22,7 @@ public final class Webhook extends ApifyResource {
   private String payloadTemplate;
   private String headersTemplate;
   private String description;
+  private WebhookLastDispatch lastDispatch;
   private WebhookStats stats;
 
   /** The unique webhook ID. */
@@ -49,6 +51,15 @@ public final class Webhook extends ApifyResource {
    */
   public boolean isAdHoc() {
     return isAdHoc;
+  }
+
+  /**
+   * Whether {@code {{...}}} placeholders in {@link #getPayloadTemplate()}/{@link
+   * #getHeadersTemplate()} are interpolated with values from the triggering event before the
+   * webhook is dispatched.
+   */
+  public Boolean isShouldInterpolateStrings() {
+    return shouldInterpolateStrings;
   }
 
   /** The events that trigger the webhook. */
@@ -92,6 +103,11 @@ public final class Webhook extends ApifyResource {
   /** A description of what the webhook does. */
   public String getDescription() {
     return description;
+  }
+
+  /** A summary of this webhook's most recent dispatch, if it has ever fired. */
+  public WebhookLastDispatch getLastDispatch() {
+    return lastDispatch;
   }
 
   /** Usage statistics for this webhook. */

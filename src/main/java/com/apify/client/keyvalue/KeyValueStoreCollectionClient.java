@@ -31,7 +31,6 @@ public final class KeyValueStoreCollectionClient
    * {@code null} schema behaves like {@link #getOrCreate(String)}.
    */
   public KeyValueStore getOrCreate(String name, Object schema) {
-    Object body = schema == null ? null : java.util.Collections.singletonMap("schema", schema);
-    return ctx.getOrCreateNamed(name, body, KeyValueStore.class);
+    return ctx.getOrCreateNamedWithSchema(name, schema, KeyValueStore.class);
   }
 }

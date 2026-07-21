@@ -51,15 +51,6 @@ public final class RequestQueueClient {
    */
   private static final int MAX_BACKOFF_EXPONENT = 10;
 
-  /** Lowest client-error status; statuses in {@code [400, 500)} are client errors. */
-  private static final int MIN_CLIENT_ERROR_STATUS = 400;
-
-  /** Lowest server-error status; statuses at or above this are server errors. */
-  private static final int MIN_SERVER_ERROR_STATUS = 500;
-
-  /** Rate-limit status; retryable, so it is not treated as a hard client error. */
-  private static final int RATE_LIMIT_STATUS = 429;
-
   private final HttpClientCore http;
   private final ResourceContext ctx;
   private final String clientKey;
@@ -214,14 +205,12 @@ public final class RequestQueueClient {
    * BatchAddRequestsOptions#maxUnprocessedRequestsRetries} times. The per-chunk results are merged
    * into a single {@link BatchAddResult}.
    *
-   * <p>Requests that remain unprocessed after all retries (typically due to persistent
-   * rate-limiting or server errors) are returned in {@link BatchAddResult#getUnprocessedRequests()}
-   * rather than raising an exception. A non-retryable client error (a 4xx other than 429, such as
-   * an invalid token or insufficient permissions) is instead thrown as an {@link
-   * ApifyApiException}, since it will not succeed on retry and should not be silently hidden as
-   * "unprocessed". A single request whose own JSON encoding already exceeds the payload-size limit
-   * is rejected up front with {@link IllegalArgumentException}, since no chunk size could ever fit
-   * it.
+   * <p>This method never throws for an API error, matching the reference client's contract: any
+   * request that could not be confirmed processed — whether due to persistent rate-limiting, server
+   * errors, or a non-retryable client error (e.g. an invalid token or insufficient permissions) —
+   * is returned in {@link BatchAddResult#getUnprocessedRequests()} instead. A single request whose
+   * own JSON encoding already exceeds the payload-size limit is rejected up front with {@link
+   * IllegalArgumentException}, since no chunk size could ever fit it.
    */
   public BatchAddResult batchAddRequests(
       List<RequestQueueRequest> requests, boolean forefront, BatchAddRequestsOptions options) {
@@ -332,8 +321,10 @@ public final class RequestQueueClient {
 
   /**
    * Adds one chunk (already sized to the API limit), retrying requests the API leaves unprocessed
-   * with exponential backoff. Never throws for an API error: on a non-retryable failure the
-   * remaining requests are returned as unprocessed, matching the reference client's contract.
+   * with exponential backoff. Never throws for an API error, matching the reference client's {@code
+   * _batchAddRequestsWithRetries}: on any failure (including a non-retryable 4xx) the remaining
+   * requests in the chunk are simply returned as unprocessed rather than surfaced as an exception,
+   * so the method keeps a single, uniform never-throws contract regardless of the failure cause.
    */
   private BatchAddResult batchAddChunkWithRetries(
       List<RequestQueueRequest> chunk, boolean forefront, BatchAddRequestsOptions options) {
@@ -352,14 +343,9 @@ public final class RequestQueueClient {
           break;
         }
       } catch (ApifyApiException e) {
-        // A non-retryable client error (bad token, insufficient permissions, invalid request) is a
-        // hard failure, not a transient one — surface it rather than hiding it as "unprocessed",
-        // where a caller could not tell it apart from ordinary rate-limiting. Rate-limit (429) and
-        // server (5xx) errors have already exhausted the transport's retries by this point, so for
-        // those we keep the non-throwing contract and report the remainder as unprocessed.
-        if (isNonRetryableClientError(e)) {
-          throw e;
-        }
+        // Any API error (rate-limit, server error, or a hard client error such as a bad token)
+        // stops retrying this chunk immediately; whatever has not been confirmed processed is
+        // reported as unprocessed below, never thrown — matching the reference client's contract.
         break;
       }
       if (attempt < maxRetries) {
@@ -373,18 +359,6 @@ public final class RequestQueueClient {
     // (instead of trusting the last response) stays correct even if the API returns fewer entries.
     result.setUnprocessedRequests(requestsNotYetProcessed(chunk, processed));
     return result;
-  }
-
-  /**
-   * Reports whether an API error is a non-retryable client error (a 4xx other than 429). Such
-   * errors (e.g. bad token, insufficient permissions, invalid request) will not succeed on retry,
-   * so the batch helper surfaces them instead of masking them as unprocessed requests.
-   */
-  private static boolean isNonRetryableClientError(ApifyApiException e) {
-    int status = e.getStatusCode();
-    return status >= MIN_CLIENT_ERROR_STATUS
-        && status < MIN_SERVER_ERROR_STATUS
-        && status != RATE_LIMIT_STATUS;
   }
 
   private static List<RequestQueueRequest> requestsNotYetProcessed(
@@ -580,6 +554,12 @@ public final class RequestQueueClient {
       buffer = page.getItems();
       pos = 0;
       nextCursor = page.getNextCursor();
+      // Defensively trim to the cap in case the server returned more than requested, matching
+      // PaginatedIterator's same guard, so a caller never sees more than `totalLimit` items even
+      // if the server ignores (or overshoots) the requested per-page `limit`.
+      if (capRemaining != null && buffer.size() > capRemaining) {
+        buffer = buffer.subList(0, capRemaining.intValue());
+      }
       if (buffer.isEmpty() && (nextCursor == null || nextCursor.isEmpty())) {
         exhausted = true;
       }

@@ -10,8 +10,13 @@ Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 | `list(ListOptions, RunListOptions)` | List runs. Returns `PaginationList<ActorRun>`. |
 | `iterate(ListOptions, RunListOptions, Long chunkSize)` | Lazy `Iterator<ActorRun>` over all matching runs; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 
-`RunListOptions` adds `status(List<String>)` (e.g. `SUCCEEDED`, `RUNNING`; sent comma-separated) and,
-for Actor/task-scoped collections, `startedAfter(String)` / `startedBefore(String)` (ISO-8601).
+`RunListOptions` adds `status(List<String>)` (e.g. `SUCCEEDED`, `RUNNING`; sent comma-separated),
+declared by every scope's endpoint (`client.runs()`, `client.actor(id).runs()`,
+`client.task(id).runs()`), and `startedAfter(String)` / `startedBefore(String)` (ISO-8601), declared
+only by the account-wide `client.runs()` and the Actor-scoped `client.actor(id).runs()` endpoints —
+the task-scoped `client.task(id).runs()` endpoint's spec does not declare these two parameters at
+all, so set them only when listing at one of the other two scopes. All parameters a given scope
+declares compose (e.g. a status filter combined with a start-time window on `client.runs()`).
 
 ```java
 PaginationList<ActorRun> runs = client.runs().list(
@@ -96,10 +101,29 @@ owning it, e.g. `"ANYONE_WITH_ID_CAN_READ"`, `"RESTRICTED"`, or `null` to follow
 default), `getChargedEventCounts()` (`Map<String, Long>`; per-event-type charge counts for
 pay-per-event Actors, `null` otherwise), `getPricingInfo()` (`JsonNode`; shape depends on the
 Actor's pricing model), `getUsage()` / `getUsageUsd()` (`ActorRunUsage`; per-billable-unit resource
-consumption, the latter as its USD cost), `getStats()` (`ActorRunStats`; runtime metrics like
-`getDurationMillis()`, `getMemAvgBytes()`, `getCpuAvgUsage()`), `getOptions()` (`ActorRunOptions`;
-the run configuration actually applied, which may differ from what was requested), and `getMeta()`
-(`ActorRunMeta`; `getOrigin()`, `getClientIp()`, `getUserAgent()` — how the run was initiated).
+consumption, the latter as its USD cost — see below), `getUsageTotalUsd()` (`Double`; the run's
+total cost in USD, combining platform usage and/or event costs depending on pricing model),
+`getStats()` (`ActorRunStats`; runtime metrics like `getDurationMillis()`, `getMemAvgBytes()`,
+`getCpuAvgUsage()`), `getOptions()` (`ActorRunOptions`; the run configuration actually applied,
+which may differ from what was requested — see below), `getMeta()` (`ActorRunMeta`; `getOrigin()`,
+`getClientIp()`, `getUserAgent()` — how the run was initiated), `getBuildNumber()` (`String`; the
+build's semver-like number, e.g. `"0.0.36"`), `getExitCode()` (`Integer`; the process exit code once
+finished), `isContainerServerReady()` (`Boolean`; whether the container's HTTP server can accept
+requests), `getGitBranchName()` (`String`; the git branch the build was built from, if any), and
+`getStorageIds()` (`JsonNode`; a `{datasets, keyValueStores, requestQueues}` map of aliased storage
+IDs for the run, each with at least a `"default"` entry). Any field not covered by a typed getter is
+still available via the inherited `getExtra()` (see [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
+
+`ActorRunUsage` (`getUsage()`/`getUsageUsd()`) exposes one nullable `Double` getter per billable
+unit: `getActorComputeUnits()`, `getDatasetReads()`, `getDatasetWrites()`,
+`getKeyValueStoreReads()`, `getKeyValueStoreWrites()`, `getKeyValueStoreLists()`,
+`getRequestQueueReads()`, `getRequestQueueWrites()`, `getDataTransferInternalGbytes()`,
+`getDataTransferExternalGbytes()`, `getProxyResidentialTransferGbytes()`, `getProxySerps()`. Each is
+`null` when the run's Actor did not incur that kind of usage.
+
+`ActorRunOptions` (`getOptions()`) exposes: `getBuild()` (`String`), `getTimeoutSecs()` (`long`),
+`getMemoryMbytes()` (`long`), `getDiskMbytes()` (`long`), `getMaxItems()` (`Long`, nullable),
+`getMaxTotalChargeUsd()` (`Double`, nullable), `getRestartOnError()` (`Boolean`, nullable).
 
 `RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)` and
 `idempotencyKey(String)` — the latter is auto-generated when unset so a transport-retried charge is

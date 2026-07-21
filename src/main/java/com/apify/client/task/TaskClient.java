@@ -7,7 +7,7 @@ import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import com.apify.client.log.StreamedLog;
+import com.apify.client.internal.RunStartSupport;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
@@ -53,11 +53,7 @@ public final class TaskClient {
    * overrides the task's stored input ({@code null} to use the stored input).
    */
   public ActorRun start(Object input, TaskStartOptions options) {
-    QueryParams params = new QueryParams();
-    options.apply(params);
-    byte[] body = input == null ? null : Json.toBytes(input);
-    return ctx.postWithBody(
-        "runs", params, body, ResourceContext.CONTENT_TYPE_JSON, ActorRun.class);
+    return RunStartSupport.start(ctx, input, options);
   }
 
   /**
@@ -68,8 +64,7 @@ public final class TaskClient {
    * Long)} for that (matching the reference client's default {@code call} behavior).
    */
   public ActorRun call(Object input, TaskStartOptions options, Long waitSecs) {
-    ActorRun run = start(input, options);
-    return root.run(run.getId()).waitForFinish(waitSecs);
+    return RunStartSupport.call(root, ctx, input, options, waitSecs);
   }
 
   /**
@@ -85,37 +80,7 @@ public final class TaskClient {
    */
   public ActorRun call(Object input, TaskCallOptions options, Long waitSecs) {
     TaskCallOptions opts = options != null ? options : new TaskCallOptions();
-    ActorRun run = start(input, opts.toStartOptions());
-    RunClient runClient = root.run(run.getId());
-
-    StreamedLog streamedLog = null;
-    if (opts.logStreamingEnabledValue()) {
-      streamedLog = startStreamedLogQuietly(runClient, opts);
-    }
-    try {
-      return runClient.waitForFinish(waitSecs);
-    } finally {
-      if (streamedLog != null) {
-        streamedLog.close();
-      }
-    }
-  }
-
-  /**
-   * Starts {@code call}'s default log streaming, swallowing (rather than propagating) any failure
-   * to open the live log stream, so a transient log-endpoint issue cannot abort the run itself.
-   */
-  private static StreamedLog startStreamedLogQuietly(RunClient runClient, TaskCallOptions opts) {
-    try {
-      StreamedLog streamedLog =
-          opts.logOptionsValue() != null
-              ? runClient.getStreamedLog(opts.logOptionsValue())
-              : runClient.getStreamedLog();
-      streamedLog.start();
-      return streamedLog;
-    } catch (RuntimeException e) {
-      return null;
-    }
+    return RunStartSupport.callWithLogStreaming(root, ctx, input, opts, waitSecs);
   }
 
   /** Fetches the task's stored input, or empty if none is set. */

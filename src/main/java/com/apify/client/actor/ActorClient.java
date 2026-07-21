@@ -9,7 +9,7 @@ import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import com.apify.client.log.StreamedLog;
+import com.apify.client.internal.RunStartSupport;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
@@ -65,10 +65,7 @@ public final class ActorClient {
    * JSON-serializable value (or {@code null} for no input).
    */
   public ActorRun start(Object input, ActorStartOptions options) {
-    QueryParams params = new QueryParams();
-    options.apply(params);
-    byte[] body = input == null ? null : Json.toBytes(input);
-    return ctx.postWithBody("runs", params, body, options.contentTypeOrDefault(), ActorRun.class);
+    return RunStartSupport.start(ctx, input, options);
   }
 
   /**
@@ -80,8 +77,7 @@ public final class ActorClient {
    * Long)} for that (matching the reference client's default {@code call} behavior).
    */
   public ActorRun call(Object input, ActorStartOptions options, Long waitSecs) {
-    ActorRun run = start(input, options);
-    return root.run(run.getId()).waitForFinish(waitSecs);
+    return RunStartSupport.call(root, ctx, input, options, waitSecs);
   }
 
   /**
@@ -98,37 +94,7 @@ public final class ActorClient {
    */
   public ActorRun call(Object input, ActorCallOptions options, Long waitSecs) {
     ActorCallOptions opts = options != null ? options : new ActorCallOptions();
-    ActorRun run = start(input, opts.toStartOptions());
-    RunClient runClient = root.run(run.getId());
-
-    StreamedLog streamedLog = null;
-    if (opts.logStreamingEnabledValue()) {
-      streamedLog = startStreamedLogQuietly(runClient, opts);
-    }
-    try {
-      return runClient.waitForFinish(waitSecs);
-    } finally {
-      if (streamedLog != null) {
-        streamedLog.close();
-      }
-    }
-  }
-
-  /**
-   * Starts {@code call}'s default log streaming, swallowing (rather than propagating) any failure
-   * to open the live log stream, so a transient log-endpoint issue cannot abort the run itself.
-   */
-  private static StreamedLog startStreamedLogQuietly(RunClient runClient, ActorCallOptions opts) {
-    try {
-      StreamedLog streamedLog =
-          opts.logOptionsValue() != null
-              ? runClient.getStreamedLog(opts.logOptionsValue())
-              : runClient.getStreamedLog();
-      streamedLog.start();
-      return streamedLog;
-    } catch (RuntimeException e) {
-      return null;
-    }
+    return RunStartSupport.callWithLogStreaming(root, ctx, input, opts, waitSecs);
   }
 
   /** Validates the given input against the Actor's default-build input schema. */

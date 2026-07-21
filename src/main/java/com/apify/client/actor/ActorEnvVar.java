@@ -20,6 +20,7 @@ public final class ActorEnvVar extends ApifyResource {
     return name;
   }
 
+  /** Sets the environment variable name. */
   public ActorEnvVar setName(String name) {
     this.name = name;
     return this;
@@ -30,6 +31,7 @@ public final class ActorEnvVar extends ApifyResource {
     return value;
   }
 
+  /** Sets the environment variable value. */
   public ActorEnvVar setValue(String value) {
     this.value = value;
     return this;
@@ -40,6 +42,7 @@ public final class ActorEnvVar extends ApifyResource {
     return isSecret;
   }
 
+  /** Sets whether the value is stored as a secret. */
   public ActorEnvVar setIsSecret(Boolean isSecret) {
     this.isSecret = isSecret;
     return this;

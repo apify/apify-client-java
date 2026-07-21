@@ -41,4 +41,6 @@ s.ifPresent(sched -> System.out.println(sched.getCronExpression()));
 (skip a new run while a previous one is still active), `getCreatedAt()` / `getModifiedAt()`
 (`Instant`), `getNextRunAt()` / `getLastRunAt()` (`Instant`, may be `null`), `getActions()`
 (`List<JsonNode>`, each entry's shape depends on its `type`), and `getNotifications()`
-(`ScheduleNotifications`, exposing `isEmail()`).
+(`ScheduleNotifications`, exposing `isEmail()`). Any field not covered by a typed getter is still
+available via the inherited `getExtra()` (see
+[the docs index](README.md#model-fields-and-unmodeled-data-getextra)).

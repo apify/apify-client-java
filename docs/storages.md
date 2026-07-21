@@ -17,6 +17,10 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 | `KeyValueStore` | `getId`, `getName`, `getUserId`, `getCreatedAt`, `getModifiedAt` | — |
 | `RequestQueue` | `getId`, `getName`, `getUserId`, `getCreatedAt`, `getModifiedAt` | `getTotalRequestCount()` (`long`) |
 
+`Dataset`, `KeyValueStore`, `RequestQueue` and `RequestQueueRequest` all extend `ApifyResource`, so
+any field not covered by a typed getter above is still available via the inherited `getExtra()`
+(see [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
+
 ## Datasets
 
 ### `DatasetCollectionClient` — `client.datasets()`
@@ -192,6 +196,35 @@ Iterator<RequestQueueRequest> it = queue.paginateRequests(100L);
 while (it.hasNext()) {
   System.out.println(it.next().getUrl());
 }
+```
+
+> **Lock lifecycle for distributed crawling.** `withClientKey(String)` returns a copy of the client
+> that stamps every request with a stable identifier, so the queue can tell which client holds which
+> lock; use the *same* `RequestQueueClient` instance (or another built with the same client key) for
+> the whole lock/unlock cycle below. `listAndLockHead` atomically reserves requests so other workers
+> using a different client key cannot receive them until the lock expires or is explicitly released.
+
+```java
+RequestQueueClient queue = client.requestQueue("QUEUE_ID").withClientKey("worker-1");
+
+// Atomically reserve up to 10 requests from the head, locked for 60s.
+LockedRequestQueueHead locked = queue.listAndLockHead(60L, 10L);
+for (RequestQueueRequest request : locked.getItems()) {
+  boolean handledSuccessfully = true; // replace with your own processing logic/result
+  if (handledSuccessfully) {
+    queue.deleteRequest(request.getId());
+  } else {
+    // Give up on this one: release its lock so another worker can pick it up instead.
+    queue.deleteRequestLock(request.getId(), false);
+  }
+}
+
+// Still working on a request past its lock's expiry? Extend it instead of losing it mid-process.
+queue.prolongRequestLock(locked.getItems().get(0).getId(), 60L, false);
+
+// On shutdown, release every lock this client still holds so other workers are not blocked
+// waiting for locks this worker will never finish processing.
+queue.unlockRequests();
 ```
 
 `ListRequestsOptions` fields: `limit`, `exclusiveStartId`, `cursor` (mutually exclusive with
