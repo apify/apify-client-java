@@ -22,9 +22,14 @@ builds) and a single build with `client.build(id)`.
 | `getOpenApiDefinition()` | The build's OpenAPI definition. Returns `Optional<JsonNode>`. |
 | `log()` | A `LogClient` for the build's log. |
 
-`Build` fields: `getId()`, `getActId()`, `getStatus()`, `getStartedAt()`, `getFinishedAt()`,
-`getBuildNumber()`, plus `isTerminal()` and `getExtra()`. The status is one of `READY`, `RUNNING`,
-`SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`, `ABORTING`, `ABORTED`.
+`Build` fields: `getId()`, `getActId()`, `getUserId()`, `getStatus()`, `getStartedAt()`,
+`getFinishedAt()`, `getBuildNumber()`, `getMeta()` (`BuildMeta` — `getOrigin()`, `getClientIp()`,
+`getUserAgent()`), `getStats()` (`BuildStats` — `getDurationMillis()`/`getRunTimeSecs()` as `Long`,
+`getComputeUnits()` as `Double`), `getOptions()` (`BuildOptions` — `getUseCache()`/
+`getBetaPackages()` as `Boolean`, `getMemoryMbytes()`/`getDiskMbytes()` as `Long`), `getUsage()` /
+`getUsageUsd()` (`BuildUsage` — `getActorComputeUnits()` as `Double`, the latter as its USD cost),
+`getUsageTotalUsd()` (`Double`), plus `isTerminal()` and `getExtra()`. The status is one of
+`READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`, `ABORTING`, `ABORTED`.
 
 ```java
 Build build = client.actor("me/my-actor").build("0.0", new ActorBuildOptions().tag("latest"));

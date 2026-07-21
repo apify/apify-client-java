@@ -71,6 +71,13 @@ inherited `getExtra()` (see [the docs index](README.md#model-fields-and-unmodele
 | `webhookDispatches().iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<WebhookDispatch>` over all dispatches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `webhookDispatch(id).get()` | Fetch a dispatch. Returns `Optional<WebhookDispatch>`. |
 
-`WebhookDispatch` fields: `getId()`, `getWebhookId()`. Any field not covered by a typed getter is
-still available via the inherited `getExtra()` (see
+`WebhookDispatch` fields: `getId()`, `getUserId()`, `getWebhookId()`, `getCreatedAt()` (`Instant`),
+`getStatus()` (one of `"ACTIVE"`/`"SUCCEEDED"`/`"FAILED"`), `getEventType()` (the event that
+triggered the dispatch), `getCalls()` (unmodifiable `List<WebhookDispatchCall>` — each exposing
+`getStartedAt()`/`getFinishedAt()` as `Instant`, `getErrorMessage()`, `getResponseStatus()`
+(`Integer`), `getResponseBody()`), `getWebhook()` (`WebhookDispatchWebhookInfo`, nullable — a
+`getRequestUrl()`/`isAdHoc()` summary of the webhook that produced the dispatch), and
+`getEventData()` (`WebhookDispatchEventData`, nullable — `getActorRunId()`/`getActorId()`/
+`getActorTaskId()`/`getActorBuildId()`, whichever apply to the triggering event). Any field not
+covered by a typed getter is still available via the inherited `getExtra()` (see
 [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).

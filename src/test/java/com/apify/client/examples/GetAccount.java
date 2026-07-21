@@ -20,8 +20,8 @@ public final class GetAccount {
     }
     System.out.println("Account ID: " + user.get().getId());
     System.out.println("Username:   " + user.get().getUsername());
-    // Fields not modelled on User (email, plan, ...) live in the untyped extras map that
-    // getExtra() returns as a Map<String, Object>.
-    System.out.println("Email:      " + user.get().getExtra().get("email"));
+    // email/plan/proxy/... are only populated for me() (not user(id)); any remaining unmodelled
+    // account field is still available via the untyped extras map that getExtra() returns.
+    System.out.println("Email:      " + user.get().getEmail());
   }
 }

@@ -91,7 +91,17 @@ System.out.println(run.getStatus());
 ```
 
 `Actor` fields: `getId()`, `getUserId()`, `getName()`, `getUsername()`, `getTitle()`,
-`getDescription()`, `isPublic()`, `getCreatedAt()`, `getModifiedAt()`, plus `getExtra()` for any
+`getDescription()`, `isPublic()`, `getCreatedAt()`, `getModifiedAt()`, `getStats()` (`ActorStats` —
+`getTotalBuilds()`/`getTotalRuns()`/`getTotalUsers()`/`getTotalUsers7Days()`/
+`getTotalUsers30Days()`/`getTotalUsers90Days()`/`getTotalMetamorphs()` as `Long`,
+`getLastRunStartedAt()` as `Instant`), `getVersions()` (`List<ActorVersion>`),
+`getPricingInfos()` (`List<JsonNode>`; shape depends on pricing model), `getDefaultRunOptions()`
+(`ActorDefaultRunOptions` — `getBuild()`, `getTimeoutSecs()`/`getMemoryMbytes()` as `Long`,
+`getRestartOnError()` as `Boolean`), `getTaggedBuilds()` (`JsonNode`; dynamic tag-name keys),
+`getIsDeprecated()` (`Boolean`), `getDeploymentKey()`, `getSeoTitle()`, `getSeoDescription()`,
+`getCategories()` (`List<String>`), `getActorStandby()` (`ActorStandby`, nullable — see
+[Tasks](tasks.md) for its field list; only on `Actor` does it additionally expose
+`getIsEnabled()`), `getActorPermissionLevel()` (e.g. `"OWNER"`), plus `getExtra()` for any
 unmodelled fields.
 
 ## `ActorVersionClient` and `ActorVersionCollectionClient`

@@ -18,19 +18,18 @@
 
   2. UWF_UNWRITTEN_FIELD / UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD on Jackson-populated DTOs/response
      shapes ({@code KeyValueStoreKey}, {@code DeletedRequestInfo}, {@code ActorRunMeta}, {@code
-     TaskOptions}, {@code WebhookLastDispatch}, the internal error-response mapping in {@code
-     HttpClientCore}): their fields are written by the deserializer via reflection, which SpotBugs
-     cannot see - a known false positive for data-binding models.
+     TaskOptions}, {@code WebhookLastDispatch}, {@code ActorDefaultRunOptions}, {@code BuildMeta},
+     {@code BuildOptions}, {@code BuildStats}, {@code PricingInfo}, {@code ProxyGroup}, {@code
+     UserProxy}, {@code WebhookDispatchEventData}, {@code WebhookDispatchWebhookInfo}, the internal
+     error-response mapping in {@code HttpClientCore}): their fields are written by the
+     deserializer via reflection, which SpotBugs cannot see - a known false positive for
+     data-binding models.
 
-  Historical note: an EI_EXPOSE_REP/EI_EXPOSE_REP2 exclusion for {@code ApiResponse} (its {@code
-  body} field is the raw response bytes, intentionally stored/returned without a defensive copy -
-  the payload can be large, e.g. dataset exports, and copying it on every access would be wasteful)
-  was carried here through loop 3 and dropped in loop 4 once it stopped reproducing. To be precise
-  about why, since "no longer reproduces" could otherwise be misread as "the exposure was fixed":
-  the no-copy contract itself never changed; SpotBugs simply stopped flagging that pattern on this
-  class. {@code ApiResponse} is still a plain public-field carrier with no copying anywhere in its
-  constructor or fields - the finding's disappearance reflects the tool's static-analysis coverage
-  of the pattern, not a code change that defensively fixed anything.
+  Note: {@code ApiResponse}'s {@code body} field intentionally holds the raw response bytes
+  without a defensive copy (the payload can be large, e.g. dataset exports, so copying it on every
+  access would be wasteful). It has no entry in this filter: per this file's own rule of dropping
+  exclusions that no longer reproduce anything, {@code ApiResponse} is not currently flagged by
+  SpotBugs for this field, even though the no-copy contract itself is deliberate and unchanged.
 -->
 <FindBugsFilter>
   <Match>
@@ -47,6 +46,15 @@
       <Class name="com.apify.client.run.ActorRunMeta"/>
       <Class name="com.apify.client.task.TaskOptions"/>
       <Class name="com.apify.client.webhook.WebhookLastDispatch"/>
+      <Class name="com.apify.client.actor.ActorDefaultRunOptions"/>
+      <Class name="com.apify.client.build.BuildMeta"/>
+      <Class name="com.apify.client.build.BuildOptions"/>
+      <Class name="com.apify.client.build.BuildStats"/>
+      <Class name="com.apify.client.store.PricingInfo"/>
+      <Class name="com.apify.client.user.ProxyGroup"/>
+      <Class name="com.apify.client.user.UserProxy"/>
+      <Class name="com.apify.client.webhook.WebhookDispatchEventData"/>
+      <Class name="com.apify.client.webhook.WebhookDispatchWebhookInfo"/>
     </Or>
     <Bug pattern="UWF_UNWRITTEN_FIELD"/>
   </Match>

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 /** Standby-mode configuration for an Actor, or for a task that overrides its Actor's defaults. */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public final class ActorStandby {
+  private Boolean isEnabled;
   private String build;
   private Long desiredRequestsPerActorRun;
   private Boolean disableStandbyFieldsOverride;
@@ -12,6 +13,16 @@ public final class ActorStandby {
   private Long maxRequestsPerActorRun;
   private Long memoryMbytes;
   private Boolean shouldPassActorInput;
+
+  /**
+   * Whether standby mode is enabled. Only present on {@link Actor#getActorStandby()} (the API
+   * models it as an intersection type there); always {@code null} on {@link
+   * com.apify.client.task.Task#getActorStandby()}, which reuses the same shape for its per-task
+   * override without this field.
+   */
+  public Boolean getIsEnabled() {
+    return isEnabled;
+  }
 
   /** The tag or number of the build used to serve standby requests. */
   public String getBuild() {

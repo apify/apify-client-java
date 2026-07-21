@@ -63,8 +63,8 @@ Optional<User> user = client.me().get();
 user.ifPresent(u -> {
   System.out.println("Account ID: " + u.getId());
   System.out.println("Username:   " + u.getUsername());
-  // Fields not modelled on User (email, plan, ...) live in the untyped extras map.
-  System.out.println("Email:      " + u.getExtra().get("email"));
+  // email/plan/proxy/... are only populated for me() (not user(id)).
+  System.out.println("Email:      " + u.getEmail());
 });
 ```
 
