@@ -147,7 +147,10 @@ class ClientBehaviourRegressionTest {
             java.util.Map.of("foo", "bar"),
             new MetamorphOptions().build("1.2.3"));
     assertTrue(backend.lastUrl.contains("actor-runs/run123/metamorph"), backend.lastUrl);
-    assertTrue(backend.lastUrl.contains("targetActorId=apify%2Fother-actor"), backend.lastUrl);
+    // targetActorId is normalized to the URL-safe username~actor-name form before sending
+    // (ResourceContext.toSafeId), matching the reference client's _toSafeId; '~' is then
+    // percent-encoded like any other query value.
+    assertTrue(backend.lastUrl.contains("targetActorId=apify%7Eother-actor"), backend.lastUrl);
     assertTrue(backend.lastUrl.contains("build=1.2.3"), backend.lastUrl);
     assertTrue(backend.lastBody.contains("\"foo\":\"bar\""), backend.lastBody);
     assertEquals("POST", backend.lastMethod);
@@ -165,6 +168,24 @@ class ClientBehaviourRegressionTest {
         IllegalArgumentException.class,
         () -> client.run("run123").metamorph("", null, new MetamorphOptions()));
     assertEquals(0, backend.calls, "no request should be sent for an invalid metamorph");
+  }
+
+  @Test
+  void requiredOptionsArgumentsRejectNullWithClearException() {
+    // metamorph/resurrect/build all use their options argument unconditionally, so a null would
+    // otherwise surface as a raw NullPointerException deep inside the method; guard it with a
+    // clear IllegalArgumentException instead, matching call()/validateInput()'s own null-defaulting
+    // (those default to an empty options instance because they are single-purpose convenience
+    // overloads; these three take options as their only way to configure a required action, so a
+    // missing options object is a caller error worth surfacing rather than silently defaulting).
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"run123\"}}");
+    ApifyClient client = client(backend);
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> client.run("run123").metamorph("apify/other-actor", null, null));
+    assertThrows(IllegalArgumentException.class, () -> client.run("run123").resurrect(null));
+    assertThrows(IllegalArgumentException.class, () -> client.actor("actor123").build("0.0", null));
+    assertEquals(0, backend.calls, "no request should be sent for a null required options arg");
   }
 
   @Test

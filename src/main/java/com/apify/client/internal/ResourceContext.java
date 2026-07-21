@@ -497,8 +497,15 @@ public final class ResourceContext {
   /**
    * Encodes a resource id so it is safe to embed in a URL path. Apify uses the {@code
    * username~resourcename} form, so the first {@code /} of an id is replaced with {@code ~}.
+   *
+   * <p>Public (not just intra-package) because {@code RunClient#metamorph} in the {@code .run}
+   * package needs to apply the same normalization to a resource id supplied as an argument value
+   * (as opposed to the id embedded in this client's own URL path, which {@link #single} already
+   * normalizes internally) — a cross-package caller of internal plumbing, same pattern as every
+   * other member here promoted narrowly for a specific caller (see the package-split rationale in
+   * this class's other narrowly-public members).
    */
-  static String toSafeId(String id) {
+  public static String toSafeId(String id) {
     int slash = id.indexOf('/');
     return slash < 0 ? id : id.substring(0, slash) + "~" + id.substring(slash + 1);
   }

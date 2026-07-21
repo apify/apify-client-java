@@ -135,9 +135,10 @@ unit: `getActorComputeUnits()`, `getDatasetReads()`, `getDatasetWrites()`,
 `getDataTransferExternalGbytes()`, `getProxyResidentialTransferGbytes()`, `getProxySerps()`. Each is
 `null` when the run's Actor did not incur that kind of usage.
 
-`ActorRunOptions` (`getOptions()`) exposes: `getBuild()` (`String`), `getTimeoutSecs()` (`long`),
-`getMemoryMbytes()` (`long`), `getDiskMbytes()` (`long`), `getMaxItems()` (`Long`, nullable),
-`getMaxTotalChargeUsd()` (`Double`, nullable), `getRestartOnError()` (`Boolean`, nullable).
+`ActorRunOptions` (`getOptions()`) exposes: `getBuild()` (`String`), `getTimeoutSecs()` (`Long`,
+nullable), `getMemoryMbytes()` (`Long`, nullable), `getDiskMbytes()` (`Long`, nullable),
+`getMaxItems()` (`Long`, nullable), `getMaxTotalChargeUsd()` (`Double`, nullable),
+`getRestartOnError()` (`Boolean`, nullable).
 
 `RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)` and
 `idempotencyKey(String)` — the latter is auto-generated when unset so a transport-retried charge is

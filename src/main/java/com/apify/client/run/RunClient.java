@@ -115,14 +115,19 @@ public final class RunClient {
 
   /**
    * Transforms the run into a run of another Actor with a new input. {@code targetActorId} is the
-   * Actor to metamorph into; {@code input} is the new input ({@code null} for none).
+   * Actor to metamorph into ({@code username/actor-name} or the plain Actor id; normalized to the
+   * URL-safe {@code username~actor-name} form before sending, matching the reference client's
+   * {@code _toSafeId}); {@code input} is the new input ({@code null} for none).
    */
   public ActorRun metamorph(String targetActorId, Object input, MetamorphOptions options) {
     if (targetActorId == null || targetActorId.isEmpty()) {
       throw new IllegalArgumentException("targetActorId is required and must not be empty");
     }
+    if (options == null) {
+      throw new IllegalArgumentException("options is required and must not be null");
+    }
     QueryParams params = new QueryParams();
-    params.addString("targetActorId", targetActorId);
+    params.addString("targetActorId", ResourceContext.toSafeId(targetActorId));
     if (options.buildValue() != null && !options.buildValue().isEmpty()) {
       params.addString("build", options.buildValue());
     }
@@ -138,6 +143,9 @@ public final class RunClient {
 
   /** Resurrects a finished run, starting it again from the beginning. */
   public ActorRun resurrect(RunResurrectOptions options) {
+    if (options == null) {
+      throw new IllegalArgumentException("options is required and must not be null");
+    }
     QueryParams params = new QueryParams();
     options.apply(params);
     return ctx.postWithBody("resurrect", params, null, "", ActorRun.class);
@@ -267,22 +275,30 @@ public final class RunClient {
    * followed by {@code " -> "}. Falls back to just the run id when the Actor name is unavailable.
    */
   private String buildDefaultLogPrefix() {
-    String runPart = "runId:" + id;
+    // Fall back to the field `id`: correct for a direct run client, but it is the literal string
+    // "last" for a `runs/last` accessor (see #lastRun) — replaced with the resolved run's real id
+    // below as soon as the fetch succeeds.
+    String resolvedId = id;
     String actorName = "";
     try {
       Optional<ActorRun> run = get();
-      if (run.isPresent() && run.get().getActId() != null && !run.get().getActId().isEmpty()) {
-        Optional<Actor> actor = root.actor(run.get().getActId()).get();
-        if (actor.isPresent() && actor.get().getName() != null) {
-          actorName = actor.get().getName();
+      if (run.isPresent()) {
+        resolvedId = run.get().getId();
+        if (run.get().getActId() != null && !run.get().getActId().isEmpty()) {
+          Optional<Actor> actor = root.actor(run.get().getActId()).get();
+          if (actor.isPresent() && actor.get().getName() != null) {
+            actorName = actor.get().getName();
+          }
         }
       }
     } catch (RuntimeException e) {
       // The Actor-name lookup is cosmetic. The getters swallow 404, but an auth (401/403),
       // transport, or 5xx-after-retries failure would otherwise throw out of getStreamedLog() and
       // abort helper creation even though streaming itself might have worked. Fall back to the
-      // runId-only prefix (actorName stays "") so the helper is always created.
+      // runId-only prefix (actorName stays "", resolvedId stays the unresolved field) so the helper
+      // is always created.
     }
+    String runPart = "runId:" + resolvedId;
     String name = actorName.isEmpty() ? runPart : actorName + " " + runPart;
     return name + " -> ";
   }

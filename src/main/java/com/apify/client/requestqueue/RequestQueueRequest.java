@@ -170,10 +170,10 @@ public final class RequestQueueRequest extends ApifyResource {
 
   /**
    * Error messages recorded from previous failed processing attempts, oldest first (unmodifiable;
-   * {@code null} if unset).
+   * empty if unset).
    */
   public List<String> getErrorMessages() {
-    return errorMessages == null ? null : Collections.unmodifiableList(errorMessages);
+    return errorMessages == null ? List.of() : Collections.unmodifiableList(errorMessages);
   }
 
   /** Sets the error messages recorded from previous failed processing attempts. */

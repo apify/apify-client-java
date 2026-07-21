@@ -132,6 +132,9 @@ public final class ActorClient {
 
   /** Builds the given version of the Actor and returns the created build. */
   public Build build(String versionNumber, ActorBuildOptions options) {
+    if (options == null) {
+      throw new IllegalArgumentException("options is required and must not be null");
+    }
     QueryParams params = new QueryParams();
     params.addString("version", versionNumber);
     options.apply(params);

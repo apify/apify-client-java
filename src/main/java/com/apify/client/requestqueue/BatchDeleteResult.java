@@ -12,11 +12,12 @@ public final class BatchDeleteResult {
 
   /** The requests the API successfully deleted (unmodifiable). */
   public List<DeletedRequestInfo> getProcessedRequests() {
-    return Collections.unmodifiableList(processedRequests);
+    return Collections.unmodifiableList(processedRequests == null ? List.of() : processedRequests);
   }
 
   /** The requests the API did not delete, e.g. due to rate limiting (unmodifiable). */
   public List<RequestQueueRequest> getUnprocessedRequests() {
-    return Collections.unmodifiableList(unprocessedRequests);
+    return Collections.unmodifiableList(
+        unprocessedRequests == null ? List.of() : unprocessedRequests);
   }
 }

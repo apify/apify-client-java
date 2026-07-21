@@ -10,9 +10,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public final class ActorRunOptions {
   private String build;
-  private long timeoutSecs;
-  private long memoryMbytes;
-  private long diskMbytes;
+  private Long timeoutSecs;
+  private Long memoryMbytes;
+  private Long diskMbytes;
   private Long maxItems;
   private Double maxTotalChargeUsd;
   private Boolean restartOnError;
@@ -22,18 +22,18 @@ public final class ActorRunOptions {
     return build;
   }
 
-  /** The applied run timeout, in seconds. */
-  public long getTimeoutSecs() {
+  /** The applied run timeout, in seconds ({@code null} if not reported). */
+  public Long getTimeoutSecs() {
     return timeoutSecs;
   }
 
-  /** The applied memory allocation, in megabytes. */
-  public long getMemoryMbytes() {
+  /** The applied memory allocation, in megabytes ({@code null} if not reported). */
+  public Long getMemoryMbytes() {
     return memoryMbytes;
   }
 
-  /** The applied disk allocation, in megabytes. */
-  public long getDiskMbytes() {
+  /** The applied disk allocation, in megabytes ({@code null} if not reported). */
+  public Long getDiskMbytes() {
     return diskMbytes;
   }
 
