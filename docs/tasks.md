@@ -57,3 +57,8 @@ prefer `TaskClient.getInput()` above to fetch it fresh on-demand), and `getActor
 (`ActorStandby`, standby-mode configuration overrides for this task, if any). Any field not covered
 by a typed getter is still available via the inherited `getExtra()` (see
 [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
+
+`ActorStandby` fields (all optional; `null` when unset): `getBuild()` (tag/number of the build
+serving standby requests), `getDesiredRequestsPerActorRun()`, `getDisableStandbyFieldsOverride()`,
+`getIdleTimeoutSecs()`, `getMaxRequestsPerActorRun()`, `getMemoryMbytes()`,
+`getShouldPassActorInput()`.

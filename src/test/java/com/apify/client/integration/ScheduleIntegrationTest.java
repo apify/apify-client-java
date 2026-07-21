@@ -69,6 +69,8 @@ class ScheduleIntegrationTest extends IntegrationBase {
       Schedule updated = schedule.update(Map.of("cronExpression", "0 12 * * *"));
       assertEquals("0 12 * * *", updated.getCronExpression());
       schedule.getLog();
+      // list() step of the create/get/modify/list/delete flow.
+      assertTrue(client.schedules().list(new ListOptions().limit(5L)).getTotal() >= 0);
 
       // Typed getters (previously only reachable via getExtra()): verify the API's response
       // actually deserializes into them, not just that the code compiles.

@@ -98,6 +98,17 @@ public final class ResourceContext {
     return new ResourceContext(http, baseUrl + "/" + resourcePath, baseUrl);
   }
 
+  /**
+   * {@link #collection} plus {@link #seedParams}, in one call. Every resource client's {@code
+   * nested(...)} factory (dataset/key-value-store/request-queue/log, each reached at a run's or
+   * task's {@code .../{resourcePath}} path with no ID of its own) builds its context this same way
+   * - sharing it here keeps that one line in exactly one place instead of duplicated four times.
+   */
+  public static ResourceContext nestedCollection(
+      HttpClientCore http, String baseUrl, String resourcePath, QueryParams inherited) {
+    return collection(http, baseUrl, resourcePath).seedParams(inherited);
+  }
+
   /** Creates a context for a single resource: {@code {base}/{resourcePath}/{safeId}}. */
   public static ResourceContext single(
       HttpClientCore http, String baseUrl, String resourcePath, String id) {

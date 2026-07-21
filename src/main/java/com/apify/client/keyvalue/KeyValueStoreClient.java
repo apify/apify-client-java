@@ -47,7 +47,7 @@ public final class KeyValueStoreClient {
   public static KeyValueStoreClient nested(
       HttpClientCore http, String base, String subPath, QueryParams inherited) {
     return new KeyValueStoreClient(
-        ResourceContext.collection(http, base, subPath).seedParams(inherited));
+        ResourceContext.nestedCollection(http, base, subPath, inherited));
   }
 
   /** Fetches the store metadata, or empty if it does not exist. */

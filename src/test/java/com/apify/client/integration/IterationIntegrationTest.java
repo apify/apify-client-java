@@ -69,28 +69,18 @@ class IterationIntegrationTest extends IntegrationBase {
    * resource created through a write endpoint is not always immediately reflected in its
    * collection's LIST response — the write and the list index converge asynchronously on the
    * server, so a create-then-iterate assertion that scans exactly once races that convergence and
-   * flakes when the just-created entity has not yet propagated. This helper rebuilds a fresh
-   * iterator via {@code newIterator} and re-scans up to {@link #ITER_FIND_ATTEMPTS} times, sleeping
-   * {@link #ITER_FIND_BACKOFF_MILLIS} between attempts, returning as soon as every target id is
-   * seen. An already-consistent account matches on the first pass with no sleeping. Mirrors the
-   * sibling Go and Rust clients' tolerance for this exact intermittent failure.
+   * flakes when the just-created entity has not yet propagated. Delegates the retry/backoff shape
+   * to {@link IntegrationBase#pollUntil}, rebuilding a fresh iterator via {@code newIterator} on
+   * every attempt (up to {@link #ITER_FIND_ATTEMPTS} times, sleeping {@link
+   * #ITER_FIND_BACKOFF_MILLIS} between attempts) and returning as soon as every target id is seen.
+   * An already-consistent account matches on the first pass with no sleeping.
    */
   private static <T> boolean findsAllEventually(
       Supplier<Iterator<T>> newIterator, Function<T, String> idOf, Set<String> targets) {
-    for (int attempt = 0; attempt < ITER_FIND_ATTEMPTS; attempt++) {
-      if (findsAll(newIterator.get(), idOf, targets)) {
-        return true;
-      }
-      if (attempt + 1 < ITER_FIND_ATTEMPTS) {
-        try {
-          Thread.sleep(ITER_FIND_BACKOFF_MILLIS);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          break;
-        }
-      }
-    }
-    return false;
+    return pollUntil(
+        ITER_FIND_ATTEMPTS,
+        ITER_FIND_BACKOFF_MILLIS,
+        () -> findsAll(newIterator.get(), idOf, targets));
   }
 
   @Test

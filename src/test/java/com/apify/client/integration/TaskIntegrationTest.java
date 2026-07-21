@@ -5,13 +5,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.log.StreamedLogOptions;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.RunListOptions;
 import com.apify.client.task.Task;
 import com.apify.client.task.TaskCallOptions;
 import com.apify.client.task.TaskClient;
 import com.apify.client.task.TaskStartOptions;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
 
 class TaskIntegrationTest extends IntegrationBase {
@@ -78,7 +82,7 @@ class TaskIntegrationTest extends IntegrationBase {
     Task task = client.tasks().create(taskDef(uniqueName("task-lastrun")));
     try {
       TaskClient tc = client.task(task.getId());
-      ActorRun run = tc.call(null, new TaskStartOptions(), 120L);
+      ActorRun run = tc.call(null, new TaskStartOptions(), TEST_ACTOR_WAIT_SECS);
       assertEquals("SUCCEEDED", run.getStatus());
       assertTrue(run.getStats() != null);
       assertTrue(run.getOptions() != null);
@@ -87,6 +91,13 @@ class TaskIntegrationTest extends IntegrationBase {
       var lastRun = tc.lastRun("SUCCEEDED").get();
       assertTrue(lastRun.isPresent());
       assertEquals(run.getId(), lastRun.get().getId());
+
+      // Last-run-scoped nested storage GETs (previously untested — only `lastRun().get()` itself
+      // was). This task is exclusively owned by this test, so `lastRun` is deterministically the
+      // run started above and its default storages are guaranteed to exist.
+      tc.lastRun("SUCCEEDED").dataset().listItems(new DatasetListItemsOptions());
+      tc.lastRun("SUCCEEDED").keyValueStore().getRecord("OUTPUT");
+      assertTrue(tc.lastRun("SUCCEEDED").log().get().isPresent());
 
       // Read-only nested webhook collection (GET + iterate); no webhooks are registered for this
       // fresh task, so this just exercises both calls succeeding against an empty result.
@@ -103,16 +114,15 @@ class TaskIntegrationTest extends IntegrationBase {
     Task task = client.tasks().create(taskDef(uniqueName("task-call-log")));
     try {
       TaskClient tc = client.task(task.getId());
-      java.util.List<String> collected = new java.util.concurrent.CopyOnWriteArrayList<>();
+      List<String> collected = new CopyOnWriteArrayList<>();
       // The log-streaming call() overload (TaskCallOptions), matching the reference client's
       // default call(options.log='default') behavior: the run's log is streamed for the duration
       // of the wait without any explicit opt-in.
       ActorRun run =
           tc.call(
               null,
-              new TaskCallOptions()
-                  .logOptions(new com.apify.client.log.StreamedLogOptions().toLog(collected::add)),
-              120L);
+              new TaskCallOptions().logOptions(new StreamedLogOptions().toLog(collected::add)),
+              TEST_ACTOR_WAIT_SECS);
       assertEquals("SUCCEEDED", run.getStatus());
       // As in ActorRunIntegrationTest#streamedLogRedirection: a fast run can finish (and call()'s
       // finally-block close the stream) before the background reader's first read completes, even

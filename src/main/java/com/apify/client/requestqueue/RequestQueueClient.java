@@ -1,6 +1,7 @@
 package com.apify.client.requestqueue;
 
 import com.apify.client.http.ApifyApiException;
+import com.apify.client.http.ApifyClientException;
 import com.apify.client.http.ApifyTransportException;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
@@ -74,7 +75,7 @@ public final class RequestQueueClient {
   public static RequestQueueClient nested(
       HttpClientCore http, String base, String subPath, QueryParams inherited) {
     return new RequestQueueClient(
-        http, ResourceContext.collection(http, base, subPath).seedParams(inherited), null);
+        http, ResourceContext.nestedCollection(http, base, subPath, inherited), null);
   }
 
   /**
@@ -291,10 +292,15 @@ public final class RequestQueueClient {
                 + maxByteLength
                 + " bytes)");
       }
-      if (byteLength + itemBytes >= maxByteLength) {
+      // Every element but the first is preceded by a comma in the serialized array (`[a,b,c]` has
+      // count-1 commas); account for it here so this incremental estimate agrees exactly with
+      // jsonByteLength(requests)'s full-array measurement above, rather than relying on being
+      // slightly under it.
+      long commaBytes = sliced.isEmpty() ? 0 : 1;
+      if (byteLength + commaBytes + itemBytes >= maxByteLength) {
         break;
       }
-      byteLength += itemBytes;
+      byteLength += commaBytes + itemBytes;
       sliced.add(request);
     }
 
@@ -328,10 +334,12 @@ public final class RequestQueueClient {
 
   /**
    * Adds one chunk (already sized to the API limit), retrying requests the API leaves unprocessed
-   * with exponential backoff. Never throws for an API error, matching the reference client's {@code
-   * _batchAddRequestsWithRetries}: on any failure (including a non-retryable 4xx) the remaining
-   * requests in the chunk are simply returned as unprocessed rather than surfaced as an exception,
-   * so the method keeps a single, uniform never-throws contract regardless of the failure cause.
+   * with exponential backoff. Never throws regardless of the failure cause, matching the reference
+   * client's {@code _batchAddRequestsWithRetries}: on any failure — a non-retryable 4xx/5xx API
+   * response, or a transport-level failure (connection error, timeout) that never produced a
+   * response at all — the remaining requests in the chunk are simply returned as unprocessed rather
+   * than surfaced as an exception, so the method keeps a single, uniform never-throws contract
+   * across both {@link ApifyApiException} and {@link ApifyTransportException}.
    */
   private BatchAddResult batchAddChunkWithRetries(
       List<RequestQueueRequest> chunk, boolean forefront, BatchAddRequestsOptions options) {
@@ -349,10 +357,12 @@ public final class RequestQueueClient {
         if (remaining.isEmpty()) {
           break;
         }
-      } catch (ApifyApiException ignored) {
-        // Any API error (rate-limit, server error, or a hard client error such as a bad token)
-        // stops retrying this chunk immediately; whatever has not been confirmed processed is
-        // reported as unprocessed below, never thrown — matching the reference client's contract.
+      } catch (ApifyClientException ignored) {
+        // Any client-level failure — an API error response (rate-limit, server error, or a hard
+        // client error such as a bad token) or a transport failure that never reached the API at
+        // all (timeout, connection reset) — stops retrying this chunk immediately; whatever has
+        // not been confirmed processed is reported as unprocessed below, never thrown — matching
+        // the reference client's contract.
         break;
       }
       if (attempt < maxRetries) {

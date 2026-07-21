@@ -75,10 +75,6 @@ server-side while the run finishes, which is redundant with (and wastes a reques
 reference client's `log: null`) and `logOptions(StreamedLogOptions)` (a custom destination/prefix,
 matching a custom `Log` instance) — see [Streamed log redirection](runs.md#streamed-log-redirection).
 
-`ValidateInputOptions` is a `com.apify.client.task` type (see the package table in
-[`README.md`](README.md)), even though `validateInput` is an `ActorClient` method — import it from
-`com.apify.client.task`, not `com.apify.client.actor`.
-
 `lastRun(String status)` filters only by status; `lastRun(LastRunOptions)` also accepts an origin
 filter. `LastRunOptions` has fluent setters `status(String)` (e.g. `SUCCEEDED`, `RUNNING`) and
 `origin(String)` (e.g. `API`, `WEB`, `SCHEDULER`); leave a setter uncalled to omit that filter.

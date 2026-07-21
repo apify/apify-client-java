@@ -27,7 +27,9 @@ while (shown < 5 && it.hasNext()) {
 }
 ```
 
-`ActorStoreListItem` fields: `getId()`, `getName()`, `getUsername()`, `getTitle()`.
+`ActorStoreListItem` fields: `getId()`, `getName()`, `getUsername()`, `getTitle()`. Any field not
+covered by a typed getter is still available via the inherited `getExtra()` (see
+[the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
 
 ## Users — `client.me()` / `client.user(id)`
 

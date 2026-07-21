@@ -22,6 +22,7 @@ import com.apify.client.requestqueue.BatchAddResult;
 import com.apify.client.requestqueue.RequestQueueRequest;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.LastRunOptions;
+import com.apify.client.run.MetamorphOptions;
 import com.apify.client.run.RunChargeOptions;
 import com.apify.client.run.SetStatusMessageOptions;
 import com.apify.client.store.ActorStoreListItem;
@@ -144,12 +145,26 @@ class ClientBehaviourRegressionTest {
         .metamorph(
             "apify/other-actor",
             java.util.Map.of("foo", "bar"),
-            new com.apify.client.run.MetamorphOptions().build("1.2.3"));
+            new MetamorphOptions().build("1.2.3"));
     assertTrue(backend.lastUrl.contains("actor-runs/run123/metamorph"), backend.lastUrl);
     assertTrue(backend.lastUrl.contains("targetActorId=apify%2Fother-actor"), backend.lastUrl);
     assertTrue(backend.lastUrl.contains("build=1.2.3"), backend.lastUrl);
     assertTrue(backend.lastBody.contains("\"foo\":\"bar\""), backend.lastBody);
     assertEquals("POST", backend.lastMethod);
+  }
+
+  @Test
+  void metamorphRejectsMissingTargetActorId() {
+    // Mirrors chargeRejectsMissingEventName's validation of RunChargeOptions.eventName.
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"run123\"}}");
+    ApifyClient client = client(backend);
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> client.run("run123").metamorph(null, null, new MetamorphOptions()));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> client.run("run123").metamorph("", null, new MetamorphOptions()));
+    assertEquals(0, backend.calls, "no request should be sent for an invalid metamorph");
   }
 
   @Test
@@ -555,6 +570,51 @@ class ClientBehaviourRegressionTest {
             false,
             new BatchAddRequestsOptions().maxParallel(3).maxUnprocessedRequestsRetries(0));
     assertEquals(3, backend.calls, "60 requests must be sent as 3 parallel chunks of 25/25/10");
+  }
+
+  @Test
+  void batchAddRequestsNeverThrowsOnPersistentTransportFailure() {
+    // Sibling of `batchAddRequestsNeverThrowsOnNonRetryableClientError`: a transport-level failure
+    // (ApifyTransportException, e.g. connection refused/timeout — the request never reached the
+    // API at all) must be treated the same as an API-level failure (ApifyApiException). Both are
+    // ApifyClientException subtypes, and batchAddRequests' never-throws contract must hold across
+    // both, matching the reference client's `_batchAddRequestsWithRetries`. Sequential path
+    // (single chunk, default maxParallel).
+    MockTransport backend = new MockTransport(List.of(MockTransport.networkError()));
+    RequestQueueRequest request = new RequestQueueRequest("https://example.com", "k0");
+    BatchAddResult result =
+        client(backend)
+            .requestQueue("q1")
+            .batchAddRequests(
+                List.of(request),
+                false,
+                new BatchAddRequestsOptions().maxUnprocessedRequestsRetries(0));
+    assertEquals(0, result.getProcessedRequests().size());
+    assertEquals(1, result.getUnprocessedRequests().size());
+    assertEquals("k0", result.getUnprocessedRequests().get(0).getUniqueKey());
+  }
+
+  @Test
+  void batchAddRequestsNeverThrowsOnPersistentTransportFailureWithParallelChunks() {
+    // Same as above but exercising the `maxParallel > 1` path, where each chunk fails on its own
+    // executor thread — the never-throws contract must hold there too, and every request across
+    // every chunk must come back via getUnprocessedRequests().
+    MockTransport backend = new MockTransport(List.of(MockTransport.networkError()));
+    List<RequestQueueRequest> requests = new ArrayList<>();
+    for (int i = 0; i < 60; i++) {
+      requests.add(new RequestQueueRequest("https://example.com", "k" + i));
+    }
+    BatchAddResult result =
+        client(backend)
+            .requestQueue("q1")
+            .batchAddRequests(
+                requests,
+                false,
+                new BatchAddRequestsOptions().maxParallel(3).maxUnprocessedRequestsRetries(0));
+    assertEquals(0, result.getProcessedRequests().size());
+    assertEquals(60, result.getUnprocessedRequests().size());
+    assertEquals(
+        3, backend.calls, "60 requests must be sent as 3 parallel chunks, each failing once");
   }
 
   @Test

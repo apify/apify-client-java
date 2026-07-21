@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.apify.client.ApifyClient;
 import java.security.SecureRandom;
+import java.util.function.BooleanSupplier;
 
 /**
  * Shared setup for the integration test suite.
@@ -19,6 +20,14 @@ abstract class IntegrationBase {
 
   /** The integration-test contract fallback base URL. */
   static final String DEFAULT_API_URL = "https://api.apify.com/v2";
+
+  /**
+   * The {@code waitSecs} budget used across this suite for a live {@code apify/hello-world} run (a
+   * "store Actor finishes in a couple of seconds" test fixture): generous enough to absorb
+   * queueing/build delays on the shared test account without making a genuinely stuck run block the
+   * suite indefinitely.
+   */
+  static final long TEST_ACTOR_WAIT_SECS = 120L;
 
   private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -63,5 +72,31 @@ abstract class IntegrationBase {
       hex.append(String.format("%02x", b));
     }
     return "java-test-" + prefix + "-" + hex;
+  }
+
+  /**
+   * Polls {@code check} up to {@code maxAttempts} times, sleeping {@code backoffMillis} between
+   * attempts, returning as soon as it reports success (or once attempts are exhausted). Shared by
+   * every eventual-consistency wait in this suite (a write and a LIST/iterate endpoint's index can
+   * converge asynchronously, so a single-pass check right after a write can race that convergence)
+   * so the retry/backoff shape lives in exactly one place. Swallows {@link InterruptedException} by
+   * restoring the interrupt flag and returning {@code false} early, so callers don't need to
+   * declare a checked exception just for this bounded, best-effort wait.
+   */
+  static boolean pollUntil(int maxAttempts, long backoffMillis, BooleanSupplier check) {
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      if (check.getAsBoolean()) {
+        return true;
+      }
+      if (attempt + 1 < maxAttempts) {
+        try {
+          Thread.sleep(backoffMillis);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          return false;
+        }
+      }
+    }
+    return false;
   }
 }

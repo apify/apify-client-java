@@ -9,8 +9,10 @@ import com.apify.client.actor.ActorCallOptions;
 import com.apify.client.actor.ActorClient;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.keyvalue.ListKeysOptions;
 import com.apify.client.log.StreamedLog;
 import com.apify.client.log.StreamedLogOptions;
+import com.apify.client.requestqueue.ListRequestsOptions;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
@@ -19,6 +21,7 @@ import com.apify.client.run.RunResurrectOptions;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
 
 class ActorRunIntegrationTest extends IntegrationBase {
@@ -45,7 +48,8 @@ class ActorRunIntegrationTest extends IntegrationBase {
   @Test
   void runActorAndReadOutputs() {
     ApifyClient client = requireClient();
-    ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
+    ActorRun run =
+        client.actor("apify/hello-world").call(null, new ActorStartOptions(), TEST_ACTOR_WAIT_SECS);
     assertEquals("SUCCEEDED", run.getStatus());
 
     assertTrue(client.run(run.getId()).get().isPresent());
@@ -64,6 +68,17 @@ class ActorRunIntegrationTest extends IntegrationBase {
     assertTrue(client.run(run.getId()).keyValueStore().get().isPresent());
     assertTrue(client.run(run.getId()).requestQueue().get().isPresent());
 
+    // A few more run-scoped GETs not otherwise exercised on this particular (run-nested) storage
+    // path; the same operations are already covered end-to-end against standalone storages
+    // elsewhere (DatasetIntegrationTest/KeyValueStoreIntegrationTest/RequestQueueIntegrationTest),
+    // this only confirms they also work when reached through `run().<storage>()`.
+    client.run(run.getId()).dataset().getStatistics();
+    client.run(run.getId()).keyValueStore().listKeys(new ListKeysOptions());
+    client.run(run.getId()).requestQueue().listRequests(new ListRequestsOptions());
+    // hello-world's default request queue is empty, so a made-up id is expected to resolve to
+    // nothing; this still exercises the live GET-by-id code path through the run-nested client.
+    assertTrue(client.run(run.getId()).requestQueue().getRequest("does-not-exist").isEmpty());
+
     // Typed getters (previously only reachable via getExtra()): verify the API's response
     // actually deserializes into them, not just that the code compiles.
     assertTrue(run.getGeneralAccess() != null);
@@ -73,26 +88,37 @@ class ActorRunIntegrationTest extends IntegrationBase {
     assertTrue(run.getUsage() != null);
   }
 
+  /**
+   * Attempts and backoff bounding how long {@link #actorRunsNestedCollection} waits for a
+   * just-started run to surface in the Actor's run collection listing. Same class of race as {@code
+   * IterationIntegrationTest#ITER_FIND_ATTEMPTS}; kept as its own constant since this suite's retry
+   * budget for a run to appear is independently tunable from that one's.
+   */
+  private static final int RUN_LIST_FIND_ATTEMPTS = 10;
+
+  private static final long RUN_LIST_FIND_BACKOFF_MILLIS = 1000L;
+
   @Test
-  void actorRunsNestedCollection() throws InterruptedException {
+  void actorRunsNestedCollection() {
     ApifyClient client = requireClient();
     ActorClient actor = client.actor("apify/hello-world");
-    ActorRun run = actor.call(null, new ActorStartOptions(), 120L);
+    ActorRun run = actor.call(null, new ActorStartOptions(), TEST_ACTOR_WAIT_SECS);
 
     // Runs are sorted ascending by startedAt by default, and "apify/hello-world" is a heavily
     // used public Actor, so the just-started run would never surface within a small default-order
     // page; request newest-first. The LIST endpoint's index can also lag a just-finished run by a
     // moment (eventual consistency, same class of race as
     // IterationIntegrationTest#findsAllEventually), so poll with a bounded retry too.
-    boolean found = false;
-    for (int attempt = 0; !found && attempt < 10; attempt++) {
-      var page = actor.runs().list(new ListOptions().limit(5L).desc(true), new RunListOptions());
-      assertTrue(page.getTotal() >= 0);
-      found = page.getItems().stream().anyMatch(r -> run.getId().equals(r.getId()));
-      if (!found) {
-        Thread.sleep(1000);
-      }
-    }
+    boolean found =
+        pollUntil(
+            RUN_LIST_FIND_ATTEMPTS,
+            RUN_LIST_FIND_BACKOFF_MILLIS,
+            () -> {
+              var page =
+                  actor.runs().list(new ListOptions().limit(5L).desc(true), new RunListOptions());
+              assertTrue(page.getTotal() >= 0);
+              return page.getItems().stream().anyMatch(r -> run.getId().equals(r.getId()));
+            });
     assertTrue(found, "expected the just-started run to appear in the Actor's run collection");
 
     var iterated =
@@ -104,7 +130,7 @@ class ActorRunIntegrationTest extends IntegrationBase {
   void callWithActorCallOptionsStreamsLogByDefault() {
     ApifyClient client = requireClient();
     ActorClient actor = client.actor("apify/hello-world");
-    List<String> collected = new java.util.concurrent.CopyOnWriteArrayList<>();
+    List<String> collected = new CopyOnWriteArrayList<>();
     // The log-streaming call() overload (ActorCallOptions), matching the reference client's
     // default call(options.log='default') behavior: the run's log is streamed for the duration of
     // the wait without any explicit opt-in. runActorAndReadOutputs above exercises the plain
@@ -113,7 +139,7 @@ class ActorRunIntegrationTest extends IntegrationBase {
         actor.call(
             null,
             new ActorCallOptions().logOptions(new StreamedLogOptions().toLog(collected::add)),
-            120L);
+            TEST_ACTOR_WAIT_SECS);
     assertEquals("SUCCEEDED", run.getStatus());
     assertTrue(!collected.isEmpty(), "expected the default call() to have streamed log lines");
   }
@@ -122,10 +148,15 @@ class ActorRunIntegrationTest extends IntegrationBase {
   void callWithActorCallOptionsCanDisableLogStreaming() {
     ApifyClient client = requireClient();
     ActorClient actor = client.actor("apify/hello-world");
-    ActorRun run = actor.call(null, new ActorCallOptions().disableLogStreaming(), 120L);
+    ActorRun run =
+        actor.call(null, new ActorCallOptions().disableLogStreaming(), TEST_ACTOR_WAIT_SECS);
     assertEquals("SUCCEEDED", run.getStatus());
   }
 
+  // Note: this CRUD-style flow deliberately omits a list() step. Unlike Actors/Tasks/Schedules,
+  // a run has no natural "list its own kind" collection scoped to itself - the only list() calls
+  // for runs are `runs().list()` (account-wide) and the Actor/task-nested `runs()` collection,
+  // both of which are already covered by `listRuns` and `actorRunsNestedCollection`.
   @Test
   void runAbortUpdateResurrectDelete() {
     ApifyClient client = requireClient();
@@ -155,14 +186,18 @@ class ActorRunIntegrationTest extends IntegrationBase {
   @Test
   void lastRunAccess() {
     ApifyClient client = requireClient();
-    ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
+    ActorRun run =
+        client.actor("apify/hello-world").call(null, new ActorStartOptions(), TEST_ACTOR_WAIT_SECS);
+    assertEquals("SUCCEEDED", run.getStatus());
 
+    // `apify/hello-world` is a shared public store Actor: under the account's concurrent-execution
+    // isolation contract, other runs of that same Actor (e.g. a sibling-language client's suite
+    // running at the same time against the same test user) can legitimately be "last" between the
+    // `call` above and the `lastRun` lookup below. Assert presence/status/origin, not identity
+    // with the run just started.
     var lastRun = client.actor("apify/hello-world").lastRun("SUCCEEDED").get();
     assertTrue(lastRun.isPresent());
     assertEquals("SUCCEEDED", lastRun.get().getStatus());
-    // Assert identity, not just status: the "last" run resolved above must actually be the run
-    // just created above, not merely some other SUCCEEDED run on the account.
-    assertEquals(run.getId(), lastRun.get().getId());
 
     var byOrigin =
         client
@@ -171,7 +206,17 @@ class ActorRunIntegrationTest extends IntegrationBase {
             .get();
     assertTrue(byOrigin.isPresent());
     assertEquals("SUCCEEDED", byOrigin.get().getStatus());
-    assertEquals(run.getId(), byOrigin.get().getId());
+    assertEquals("API", byOrigin.get().getMeta().getOrigin());
+
+    // Last-run-scoped nested storage GETs (previously untested — only `lastRun().get()` itself
+    // was): `actor(...).lastRun(...)` returns a RunClient, and its nested storage clients must be
+    // reachable the same way `run(id).<storage>()`'s are. Whichever run resolves as "last" (see
+    // the concurrency note above) is a hello-world run, so its default storages are guaranteed to
+    // exist.
+    RunClient lastRunClient = client.actor("apify/hello-world").lastRun("SUCCEEDED");
+    lastRunClient.dataset().listItems(new DatasetListItemsOptions());
+    lastRunClient.keyValueStore().getRecord("OUTPUT");
+    assertTrue(lastRunClient.log().get().isPresent());
   }
 
   @Test
@@ -180,11 +225,11 @@ class ActorRunIntegrationTest extends IntegrationBase {
     ActorRun run = client.actor("apify/hello-world").start(null, new ActorStartOptions());
     RunClient runClient = client.run(run.getId());
 
-    java.util.List<String> collected = new java.util.concurrent.CopyOnWriteArrayList<>();
+    List<String> collected = new CopyOnWriteArrayList<>();
     try (StreamedLog streamedLog =
         runClient.getStreamedLog(new StreamedLogOptions().toLog(collected::add))) {
       streamedLog.start();
-      runClient.waitForFinish(120L);
+      runClient.waitForFinish(TEST_ACTOR_WAIT_SECS);
       // A fast Actor (hello-world routinely finishes in a couple of seconds) can complete before
       // the background reader has pulled any bytes off the live log stream yet, even though the
       // log content itself is already fully available server-side once the run is done. Rather
@@ -235,8 +280,8 @@ class ActorRunIntegrationTest extends IntegrationBase {
    * to deliver the (now non-racing) content, so {@link #streamedLogRedirection} can retry once
    * after the first, live-tail stream comes up empty despite the run having produced a log.
    */
-  private static java.util.List<String> collectFinishedRunLog(RunClient runClient) {
-    java.util.List<String> retryCollected = new java.util.concurrent.CopyOnWriteArrayList<>();
+  private static List<String> collectFinishedRunLog(RunClient runClient) {
+    List<String> retryCollected = new CopyOnWriteArrayList<>();
     try (StreamedLog retryStream =
         runClient.getStreamedLog(
             new StreamedLogOptions().toLog(retryCollected::add).fromStart(true))) {

@@ -33,7 +33,7 @@ public final class LogClient {
 
   /** As {@link #nested(HttpClientCore, String)} but inheriting parent query params. */
   public static LogClient nested(HttpClientCore http, String base, QueryParams inherited) {
-    return new LogClient(ResourceContext.collection(http, base, "log").seedParams(inherited));
+    return new LogClient(ResourceContext.nestedCollection(http, base, "log", inherited));
   }
 
   /** Fetches the entire log as text, or empty if the log does not exist. */

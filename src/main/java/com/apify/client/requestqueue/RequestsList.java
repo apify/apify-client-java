@@ -21,9 +21,12 @@ public final class RequestsList {
   private String cursor;
   private String nextCursor;
 
-  /** The requests in this page (unmodifiable). */
+  /** The requests in this page (never {@code null}; unmodifiable). */
   public List<RequestQueueRequest> getItems() {
-    return Collections.unmodifiableList(items);
+    // Null-coalesce: Jackson binds directly to the (private) `items` field for deserialization,
+    // which bypasses the `= List.of()` field initializer whenever the API response contains an
+    // explicit `"items": null`.
+    return items == null ? List.of() : Collections.unmodifiableList(items);
   }
 
   /** The maximum number of requests requested for this page. */

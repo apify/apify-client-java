@@ -118,6 +118,9 @@ public final class RunClient {
    * Actor to metamorph into; {@code input} is the new input ({@code null} for none).
    */
   public ActorRun metamorph(String targetActorId, Object input, MetamorphOptions options) {
+    if (targetActorId == null || targetActorId.isEmpty()) {
+      throw new IllegalArgumentException("targetActorId is required and must not be empty");
+    }
     QueryParams params = new QueryParams();
     params.addString("targetActorId", targetActorId);
     if (options.buildValue() != null && !options.buildValue().isEmpty()) {

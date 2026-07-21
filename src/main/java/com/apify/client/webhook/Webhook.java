@@ -62,9 +62,12 @@ public final class Webhook extends ApifyResource {
     return shouldInterpolateStrings;
   }
 
-  /** The events that trigger the webhook. */
+  /** The events that trigger the webhook (never {@code null}; unmodifiable). */
   public List<String> getEventTypes() {
-    return Collections.unmodifiableList(eventTypes);
+    // Null-coalesce: Jackson binds directly to the (private) `eventTypes` field for
+    // deserialization, which bypasses the `= List.of()` field initializer whenever the API
+    // response contains an explicit `"eventTypes": null`.
+    return eventTypes == null ? List.of() : Collections.unmodifiableList(eventTypes);
   }
 
   /**

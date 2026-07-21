@@ -37,13 +37,13 @@ option types, so import each resource you use from its own package:
 |---|---|
 | `com.apify.client` (root) | `ApifyClient`, `ApifyClientBuilder`, `Version`, `PaginationList<T>`, `ListOptions`, `StorageListOptions`, `ApifyResource` |
 | `com.apify.client.http` | `ApifyClientException`, `ApifyApiException`, `ApifyTransportException`, `HttpTransport`, `DefaultHttpTransport`, `HttpTimeoutException` |
-| `com.apify.client.actor` | `Actor`, `ActorClient`, `ActorCollectionClient`, `ActorListOptions`, `ActorStartOptions`, `ActorCallOptions`, `ActorBuildOptions`, `ActorStandby`, `ActorVersion`, `ActorVersionClient`, `ActorVersionCollectionClient`, `ActorEnvVar`, `ActorEnvVarClient`, `ActorEnvVarCollectionClient` |
+| `com.apify.client.actor` | `Actor`, `ActorClient`, `ActorCollectionClient`, `ActorListOptions`, `ActorStartOptions`, `ActorCallOptions`, `ActorBuildOptions`, `ActorStandby`, `ActorVersion`, `ActorVersionClient`, `ActorVersionCollectionClient`, `ActorEnvVar`, `ActorEnvVarClient`, `ActorEnvVarCollectionClient`, `ValidateInputOptions` |
 | `com.apify.client.build` | `Build`, `BuildClient`, `BuildCollectionClient` |
 | `com.apify.client.run` | `ActorRun`, `ActorRunStats`, `ActorRunOptions`, `ActorRunMeta`, `ActorRunUsage`, `RunClient`, `RunCollectionClient`, `RunListOptions`, `LastRunOptions`, `MetamorphOptions`, `RunChargeOptions`, `RunResurrectOptions`, `SetStatusMessageOptions` |
 | `com.apify.client.dataset` | `Dataset`, `DatasetClient`, `DatasetCollectionClient`, `DatasetListItemsOptions`, `DatasetDownloadOptions`, `DownloadItemsFormat` |
 | `com.apify.client.keyvalue` | `KeyValueStore`, `KeyValueStoreClient`, `KeyValueStoreCollectionClient`, `KeyValueStoreRecord`, `KeyValueStoreKeysPage`, `KeyValueStoreKey`, `GetRecordOptions`, `SetRecordOptions`, `ListKeysOptions` |
 | `com.apify.client.requestqueue` | `RequestQueue`, `RequestQueueClient`, `RequestQueueCollectionClient`, `RequestQueueRequest`, `RequestQueueHead`, `LockedRequestQueueHead`, `RequestQueueOperationInfo`, `RequestLockInfo`, `UnlockRequestsResult`, `RequestsList`, `BatchAddResult`, `BatchDeleteResult`, `DeletedRequestInfo`, `ListRequestsOptions`, `BatchAddRequestsOptions` |
-| `com.apify.client.task` | `Task`, `TaskStats`, `TaskOptions`, `TaskClient`, `TaskCollectionClient`, `TaskStartOptions`, `TaskCallOptions`, `ValidateInputOptions` |
+| `com.apify.client.task` | `Task`, `TaskStats`, `TaskOptions`, `TaskClient`, `TaskCollectionClient`, `TaskStartOptions`, `TaskCallOptions` |
 | `com.apify.client.schedule` | `Schedule`, `ScheduleNotifications`, `ScheduleClient`, `ScheduleCollectionClient` |
 | `com.apify.client.webhook` | `Webhook`, `WebhookStats`, `WebhookLastDispatch`, `WebhookClient`, `WebhookCollectionClient`, `WebhookDispatchCollectionClient`, `NestedWebhookCollectionClient`, `WebhookDispatch`, `WebhookDispatchClient` |
 | `com.apify.client.user` | `User`, `UserClient` |

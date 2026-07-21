@@ -61,7 +61,7 @@ public final class DatasetClient {
   public static DatasetClient nested(
       HttpClientCore http, String base, String subPath, QueryParams inherited) {
     return new DatasetClient(
-        http, ResourceContext.collection(http, base, subPath).seedParams(inherited));
+        http, ResourceContext.nestedCollection(http, base, subPath, inherited));
   }
 
   /** Fetches the dataset metadata, or empty if it does not exist. */

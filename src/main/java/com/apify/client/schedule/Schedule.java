@@ -93,10 +93,14 @@ public final class Schedule extends ApifyResource {
 
   /**
    * The Actor/task-run actions this schedule triggers, as raw JSON (each action's shape depends on
-   * its {@code type}, {@code RUN_ACTOR} or {@code RUN_ACTOR_TASK}; unmodifiable).
+   * its {@code type}, {@code RUN_ACTOR} or {@code RUN_ACTOR_TASK}; never {@code null};
+   * unmodifiable).
    */
   public List<JsonNode> getActions() {
-    return Collections.unmodifiableList(actions);
+    // Null-coalesce: Jackson binds directly to the (private) `actions` field for deserialization,
+    // which bypasses the `= List.of()` field initializer whenever the API response contains an
+    // explicit `"actions": null`.
+    return actions == null ? List.of() : Collections.unmodifiableList(actions);
   }
 
   /** Notification settings for this schedule. */

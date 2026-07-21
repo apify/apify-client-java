@@ -118,6 +118,11 @@ datasets.
 | `createKeysPublicUrl(Long expiresInSecs)` | A public (optionally signed) key-list URL. |
 | `createKeysPublicUrl(ListKeysOptions, Long expiresInSecs)` | As above, forwarding key-listing filters (`limit`, `prefix`, `collection`, `exclusiveStartKey`). |
 
+`ListKeysOptions` fields (all optional): `limit(Long)`, `exclusiveStartKey(String)`,
+`prefix(String)` (restrict to keys with this prefix), `collection(String)` (a named collection of
+keys), `signature(String)` (a pre-shared URL signature granting access without an API token, used
+by `createKeysPublicUrl`).
+
 ```java
 KeyValueStore store = client.keyValueStores().getOrCreate("my-store");
 client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42));

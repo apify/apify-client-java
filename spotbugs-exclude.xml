@@ -21,6 +21,16 @@
      TaskOptions}, {@code WebhookLastDispatch}, the internal error-response mapping in {@code
      HttpClientCore}): their fields are written by the deserializer via reflection, which SpotBugs
      cannot see - a known false positive for data-binding models.
+
+  Historical note: an EI_EXPOSE_REP/EI_EXPOSE_REP2 exclusion for {@code ApiResponse} (its {@code
+  body} field is the raw response bytes, intentionally stored/returned without a defensive copy -
+  the payload can be large, e.g. dataset exports, and copying it on every access would be wasteful)
+  was carried here through loop 3 and dropped in loop 4 once it stopped reproducing. To be precise
+  about why, since "no longer reproduces" could otherwise be misread as "the exposure was fixed":
+  the no-copy contract itself never changed; SpotBugs simply stopped flagging that pattern on this
+  class. {@code ApiResponse} is still a plain public-field carrier with no copying anywhere in its
+  constructor or fields - the finding's disappearance reflects the tool's static-analysis coverage
+  of the pattern, not a code change that defensively fixed anything.
 -->
 <FindBugsFilter>
   <Match>

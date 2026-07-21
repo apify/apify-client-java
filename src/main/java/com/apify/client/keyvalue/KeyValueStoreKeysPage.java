@@ -33,8 +33,11 @@ public final class KeyValueStoreKeysPage {
     return nextExclusiveStartKey;
   }
 
-  /** The listed keys. */
+  /** The listed keys (never {@code null}; unmodifiable). */
   public List<KeyValueStoreKey> getItems() {
-    return Collections.unmodifiableList(items);
+    // Null-coalesce: Jackson binds directly to the (private) `items` field for deserialization,
+    // which bypasses the `= List.of()` field initializer whenever the API response contains an
+    // explicit `"items": null`.
+    return items == null ? List.of() : Collections.unmodifiableList(items);
   }
 }

@@ -58,6 +58,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Tightened `spotbugs-exclude.xml` to only the entries that currently reproduce a real finding.
 - `java-integration-tests.yml` now declares an explicit, least-privilege `permissions: contents:
   read` block.
+- **Breaking:** moved `ValidateInputOptions` from `com.apify.client.task` to
+  `com.apify.client.actor` (its only consumer is `ActorClient.validateInput`); its internal
+  `apply`/`contentTypeOrDefault` are package-private again now that it's same-package with that
+  consumer.
 
 ### Added
 
@@ -108,6 +112,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   JavaBeans convention for a boxed `Boolean` accessor (`is`-prefixed getters are for primitive
   `boolean`). The underlying field name, `shouldInterpolateStrings`, is unchanged, so this has no
   effect on the JSON wire format.
+- `AbstractCollectionClient.list(options)` no longer throws `NullPointerException` on a `null`
+  `options` argument (now defaults it, matching `iterate(options)`'s existing tolerance).
+- `BatchAddResult.getProcessedRequests()`/`getUnprocessedRequests()` no longer throw
+  `NullPointerException` on an explicit JSON `null` for either field.
+- `RequestQueueClient.batchAddChunkWithRetries` now also catches `ApifyTransportException` (not
+  just `ApifyApiException`), so a persistent transport failure (connection error, timeout) is
+  reported via `BatchAddResult.getUnprocessedRequests()` instead of escaping as an exception,
+  matching `batchAddRequests`' documented never-throws contract.
+- `RunClient.metamorph` now rejects a `null`/empty `targetActorId` with
+  `IllegalArgumentException`, matching `charge`'s `eventName` validation.
+- `RequestsList.getItems()`, `RequestQueueHead.getItems()`, `LockedRequestQueueHead.getItems()`,
+  `KeyValueStoreKeysPage.getItems()`, `Schedule.getActions()` and `Webhook.getEventTypes()` no
+  longer throw `NullPointerException` when the API response contains an explicit `null` for that
+  field.
+- `RequestQueueClient`'s chunk-by-byte-size slicing now accounts for the inter-element commas in
+  its incremental size estimate, matching the exact full-array measurement.
 
 ### Documentation
 
@@ -137,6 +157,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `RequestQueueClient.batchAddRequests`/`RequestQueueRequest.getUniqueKey()`: retry reconciliation
   matches by `uniqueKey`, so a request that omits it can be falsely reported unprocessed after
   retries even though it succeeded server-side.
+- Removed a stale `docs/actors.md` cross-package import note for `ValidateInputOptions`, now moot
+  since it moved to `com.apify.client.actor`; updated `docs/README.md`'s package table to match.
+  Documented `ActorStandby`'s fields in `docs/tasks.md`, added the standard `getExtra()` note to
+  `WebhookDispatch` (`docs/webhooks.md`) and `ActorStoreListItem` (`docs/misc.md`), added a
+  `ListKeysOptions` field list to `docs/storages.md`, and made `ActorRunStats`'s field list in
+  `docs/runs.md` exhaustive while noting it has no `getExtra()` fallback. Reworded `ApiResponse`'s
+  javadoc (it is a plain public data carrier used across resource clients, not internal plumbing)
+  and corrected `spotbugs-exclude.xml`'s header to accurately explain why its former `ApiResponse`
+  EI_EXPOSE exclusion stopped reproducing (the no-copy contract never changed; the tool simply
+  stopped flagging it) rather than implying the exposure was defensively fixed.
 
 ## [0.3.1] - 2026-07-14
 

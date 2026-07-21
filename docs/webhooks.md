@@ -71,4 +71,6 @@ inherited `getExtra()` (see [the docs index](README.md#model-fields-and-unmodele
 | `webhookDispatches().iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<WebhookDispatch>` over all dispatches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `webhookDispatch(id).get()` | Fetch a dispatch. Returns `Optional<WebhookDispatch>`. |
 
-`WebhookDispatch` fields: `getId()`, `getWebhookId()`.
+`WebhookDispatch` fields: `getId()`, `getWebhookId()`. Any field not covered by a typed getter is
+still available via the inherited `getExtra()` (see
+[the docs index](README.md#model-fields-and-unmodeled-data-getextra)).

@@ -1,6 +1,5 @@
-package com.apify.client.task;
+package com.apify.client.actor;
 
-import com.apify.client.actor.ActorClient;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 
@@ -24,13 +23,13 @@ public final class ValidateInputOptions {
     return this;
   }
 
-  public String contentTypeOrDefault() {
+  String contentTypeOrDefault() {
     return (contentType != null && !contentType.isEmpty())
         ? contentType
         : ResourceContext.CONTENT_TYPE_JSON;
   }
 
-  public void apply(QueryParams q) {
+  void apply(QueryParams q) {
     q.addString("build", build);
   }
 }

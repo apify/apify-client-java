@@ -14,7 +14,6 @@ import com.apify.client.run.ActorRun;
 import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
 import com.apify.client.run.RunCollectionClient;
-import com.apify.client.task.ValidateInputOptions;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Optional;

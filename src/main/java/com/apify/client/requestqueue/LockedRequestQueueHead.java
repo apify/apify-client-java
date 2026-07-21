@@ -49,8 +49,11 @@ public final class LockedRequestQueueHead extends ApifyResource {
     return lockSecs;
   }
 
-  /** The locked requests at the head of the queue. */
+  /** The locked requests at the head of the queue (never {@code null}; unmodifiable). */
   public List<RequestQueueRequest> getItems() {
-    return Collections.unmodifiableList(items);
+    // Null-coalesce: Jackson binds directly to the (private) `items` field for deserialization,
+    // which bypasses the `= List.of()` field initializer whenever the API response contains an
+    // explicit `"items": null`.
+    return items == null ? List.of() : Collections.unmodifiableList(items);
   }
 }
