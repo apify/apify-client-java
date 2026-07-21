@@ -1,5 +1,6 @@
 package com.apify.client;
 
+import static com.apify.client.integration.IntegrationBase.pollUntil;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -27,6 +28,16 @@ import org.junit.jupiter.api.Test;
  * fromStart} is false, flush a final unterminated line, and enforce its start/stop lifecycle.
  */
 class StreamedLogTest {
+
+  /** Poll interval used while waiting for a background reader to redirect expected messages. */
+  private static final long REDIRECT_POLL_MILLIS = 5;
+
+  /**
+   * {@link #pollUntil} attempt count giving a 5-second total budget at {@link
+   * #REDIRECT_POLL_MILLIS} per attempt, used by every "wait for N messages to be redirected" check
+   * in this suite.
+   */
+  private static final int REDIRECT_POLL_ATTEMPTS = (int) (5_000 / REDIRECT_POLL_MILLIS);
 
   private static ApifyClient client(MockTransport backend) {
     return ApifyClient.builder().token("test-token").httpTransport(backend).maxRetries(0).build();
@@ -177,7 +188,7 @@ class StreamedLogTest {
   }
 
   @Test
-  void deliversLastMessageWhenStoppingLiveStream() throws InterruptedException {
+  void deliversLastMessageWhenStoppingLiveStream() {
     // Regression test for a live stream that never reaches end-of-stream on its own. The reader
     // buffers three complete lines (a, b, c): a and b are emitted immediately while c is retained
     // as the possibly-still-growing last message. Then the read blocks. stop() closes the stream,
@@ -199,10 +210,7 @@ class StreamedLogTest {
     streamedLog.start();
     // Wait until a and b have been redirected, which proves the reader has consumed the body and is
     // now blocked with c held back as the pending last message.
-    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
-    while (collected.size() < 2 && System.nanoTime() < deadline) {
-      Thread.sleep(5);
-    }
+    pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> collected.size() >= 2);
     assertEquals(2, collected.size(), "a and b should be redirected before stop()");
     streamedLog.stop();
     assertEquals(
@@ -301,7 +309,7 @@ class StreamedLogTest {
   }
 
   @Test
-  void stopFromInsideConsumerDoesNotDeadlock() throws InterruptedException {
+  void stopFromInsideConsumerDoesNotDeadlock() {
     // The destination consumer runs on the background reader thread. A user may stop redirection
     // from inside it ("stop once I see line X"). Because that calls stopStreaming() on the reader
     // thread itself, an unguarded streamingThread.join() would join the thread on itself and hang
@@ -332,10 +340,7 @@ class StreamedLogTest {
                         }));
     ref.set(streamedLog);
     streamedLog.start();
-    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
-    while (collected.size() < 2 && System.nanoTime() < deadline) {
-      Thread.sleep(5);
-    }
+    pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> collected.size() >= 2);
     assertEquals(
         List.of("2999-01-01T00:00:00.000Z a", "2999-01-01T00:00:01.000Z b"),
         collected,
@@ -343,7 +348,7 @@ class StreamedLogTest {
   }
 
   @Test
-  void closeFromInsideConsumerDoesNotDeadlock() throws InterruptedException {
+  void closeFromInsideConsumerDoesNotDeadlock() {
     // Same self-join hazard as stopFromInsideConsumerDoesNotDeadlock, via close() (which routes
     // through the same stopStreaming()). close() is idempotent, so the consumer can call it on
     // every
@@ -365,10 +370,7 @@ class StreamedLogTest {
                         }));
     ref.set(streamedLog);
     streamedLog.start();
-    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
-    while (collected.size() < 2 && System.nanoTime() < deadline) {
-      Thread.sleep(5);
-    }
+    pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> collected.size() >= 2);
     assertEquals(
         List.of("2999-01-01T00:00:00.000Z a", "2999-01-01T00:00:01.000Z b"),
         collected,

@@ -109,7 +109,7 @@ class TaskIntegrationTest extends IntegrationBase {
   }
 
   @Test
-  void taskCallStreamsLogByDefault() throws InterruptedException {
+  void taskCallStreamsLogByDefault() {
     ApifyClient client = requireClient();
     Task task = client.tasks().create(taskDef(uniqueName("task-call-log")));
     try {
@@ -128,10 +128,7 @@ class TaskIntegrationTest extends IntegrationBase {
       // finally-block close the stream) before the background reader's first read completes, even
       // though the log content is already fully available server-side. Give it a bounded window to
       // catch up rather than asserting immediately.
-      long deadline = System.currentTimeMillis() + 15_000;
-      while (collected.isEmpty() && System.currentTimeMillis() < deadline) {
-        Thread.sleep(250);
-      }
+      pollUntil(STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !collected.isEmpty());
       assertTrue(!collected.isEmpty(), "expected the default call() to have streamed log lines");
     } finally {
       client.task(task.getId()).delete();

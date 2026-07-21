@@ -237,15 +237,7 @@ class ActorRunIntegrationTest extends IntegrationBase {
       // right away (which would cut the reader off before its first read), give it a bounded
       // window to catch up and flush; the log is static at this point, so waiting longer never
       // helps once it is genuinely empty.
-      long deadline = System.currentTimeMillis() + STREAM_CATCH_UP_TIMEOUT_MILLIS;
-      while (collected.isEmpty() && System.currentTimeMillis() < deadline) {
-        try {
-          Thread.sleep(STREAM_CATCH_UP_POLL_MILLIS);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          break;
-        }
-      }
+      pollUntil(STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !collected.isEmpty());
     }
 
     // The catch-up window above closes an eventual-consistency race, but not a genuine one: the
@@ -286,22 +278,9 @@ class ActorRunIntegrationTest extends IntegrationBase {
         runClient.getStreamedLog(
             new StreamedLogOptions().toLog(retryCollected::add).fromStart(true))) {
       retryStream.start();
-      long deadline = System.currentTimeMillis() + STREAM_CATCH_UP_TIMEOUT_MILLIS;
-      while (retryCollected.isEmpty() && System.currentTimeMillis() < deadline) {
-        try {
-          Thread.sleep(STREAM_CATCH_UP_POLL_MILLIS);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          break;
-        }
-      }
+      pollUntil(
+          STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !retryCollected.isEmpty());
     }
     return retryCollected;
   }
-
-  /** Bounded window given to {@link #streamedLogRedirection} for the log to catch up. */
-  private static final long STREAM_CATCH_UP_TIMEOUT_MILLIS = 15_000;
-
-  /** Poll interval while waiting for the log to catch up in {@link #streamedLogRedirection}. */
-  private static final long STREAM_CATCH_UP_POLL_MILLIS = 250;
 }

@@ -1,9 +1,10 @@
 package com.apify.client.store;
 
+import com.apify.client.internal.ListOptionsLike;
 import com.apify.client.internal.QueryParams;
 
 /** Options for listing/iterating the Apify Store ({@code GET /v2/store}). */
-public final class StoreListOptions {
+public final class StoreListOptions implements ListOptionsLike {
   private Long offset;
   private Long limit;
   private String search;
@@ -81,15 +82,18 @@ public final class StoreListOptions {
     return this;
   }
 
-  Long limitValue() {
+  @Override
+  public Long limitValue() {
     return limit;
   }
 
+  @Override
   public Long offsetValue() {
     return offset;
   }
 
-  void apply(QueryParams q) {
+  @Override
+  public void apply(QueryParams q) {
     q.addLong("offset", offset).addLong("limit", limit);
     applyFilters(q);
   }
@@ -97,7 +101,8 @@ public final class StoreListOptions {
   /**
    * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
    */
-  void applyFilters(QueryParams q) {
+  @Override
+  public void applyFilters(QueryParams q) {
     q.addString("search", search)
         .addString("sortBy", sortBy)
         .addString("category", category)

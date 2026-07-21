@@ -16,7 +16,7 @@ import java.util.function.BooleanSupplier;
  * <p>Tests are designed to run concurrently — including against the same test account from several
  * language clients at once — so every test creates uniquely-named resources and cleans them up.
  */
-abstract class IntegrationBase {
+public abstract class IntegrationBase {
 
   /** The integration-test contract fallback base URL. */
   static final String DEFAULT_API_URL = "https://api.apify.com/v2";
@@ -28,6 +28,23 @@ abstract class IntegrationBase {
    * suite indefinitely.
    */
   static final long TEST_ACTOR_WAIT_SECS = 120L;
+
+  /**
+   * Bounded window given to a just-finished run's live log stream to catch up and flush its last
+   * bytes: {@code streamedLogRedirection}-style assertions can otherwise race the background reader
+   * thread, which may not have pulled any bytes off the stream yet even though the log content
+   * itself is already fully available server-side (see {@code
+   * ActorRunIntegrationTest#streamedLogRedirection}). Shared by every test that needs the same
+   * catch-up wait, via {@link #STREAM_CATCH_UP_ATTEMPTS} + {@link #pollUntil}.
+   */
+  static final long STREAM_CATCH_UP_TIMEOUT_MILLIS = 15_000;
+
+  /** Poll interval used while waiting out {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS}. */
+  static final long STREAM_CATCH_UP_POLL_MILLIS = 250;
+
+  /** {@link #pollUntil} attempt count equivalent to {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS}. */
+  static final int STREAM_CATCH_UP_ATTEMPTS =
+      (int) (STREAM_CATCH_UP_TIMEOUT_MILLIS / STREAM_CATCH_UP_POLL_MILLIS);
 
   private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -83,7 +100,7 @@ abstract class IntegrationBase {
    * restoring the interrupt flag and returning {@code false} early, so callers don't need to
    * declare a checked exception just for this bounded, best-effort wait.
    */
-  static boolean pollUntil(int maxAttempts, long backoffMillis, BooleanSupplier check) {
+  public static boolean pollUntil(int maxAttempts, long backoffMillis, BooleanSupplier check) {
     for (int attempt = 0; attempt < maxAttempts; attempt++) {
       if (check.getAsBoolean()) {
         return true;

@@ -53,12 +53,19 @@ class IterationIntegrationTest extends IntegrationBase {
 
   private static final long ITER_FIND_BACKOFF_MILLIS = 1000L;
 
+  /**
+   * Upper bound on items scanned by {@link #findsAll}, purely as a safety net against an infinite
+   * loop if a collection endpoint's iterator ever misbehaves (e.g. never terminates); no assertion
+   * in this suite iterates anywhere near this many items.
+   */
+  private static final int FIND_ALL_SAFETY_LIMIT = 10_000;
+
   /** Iterates until every target id is seen (lazily; stops early) or the iterator is exhausted. */
   private static <T> boolean findsAll(
       Iterator<T> it, Function<T, String> idOf, Set<String> targets) {
     Set<String> remaining = new HashSet<>(targets);
     int safety = 0;
-    while (it.hasNext() && !remaining.isEmpty() && safety++ < 10000) {
+    while (it.hasNext() && !remaining.isEmpty() && safety++ < FIND_ALL_SAFETY_LIMIT) {
       remaining.remove(idOf.apply(it.next()));
     }
     return remaining.isEmpty();
