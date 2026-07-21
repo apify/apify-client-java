@@ -1,6 +1,5 @@
 package com.apify.client.task;
 
-import com.apify.client.internal.CallOptionsLike;
 import com.apify.client.log.StreamedLogOptions;
 import java.util.List;
 
@@ -18,8 +17,13 @@ import java.util.List;
  * reference client's {@code options.log} defaulting to {@code 'default'}. Use {@link
  * #disableLogStreaming()} to opt out, or {@link #logOptions(StreamedLogOptions)} for a custom
  * destination.
+ *
+ * <p>{@link #toStartOptions}/{@link #logStreamingEnabledValue}/{@link #logOptionsValue} are
+ * package-private: {@link TaskClient} (same package) reads them directly and hands the results to
+ * {@code com.apify.client.internal.RunStartSupport} as plain values/method references, so this
+ * internal shape never needs to be public API.
  */
-public final class TaskCallOptions implements CallOptionsLike<TaskStartOptions> {
+public final class TaskCallOptions {
 
   private final TaskStartOptions startOptions = new TaskStartOptions();
   private boolean logStreamingEnabled = true;
@@ -87,18 +91,15 @@ public final class TaskCallOptions implements CallOptionsLike<TaskStartOptions> 
     return this;
   }
 
-  @Override
-  public TaskStartOptions toStartOptions() {
+  TaskStartOptions toStartOptions() {
     return startOptions;
   }
 
-  @Override
-  public boolean logStreamingEnabledValue() {
+  boolean logStreamingEnabledValue() {
     return logStreamingEnabled;
   }
 
-  @Override
-  public StreamedLogOptions logOptionsValue() {
+  StreamedLogOptions logOptionsValue() {
     return logOptions;
   }
 }

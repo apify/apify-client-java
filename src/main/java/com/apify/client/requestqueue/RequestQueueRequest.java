@@ -40,7 +40,6 @@ public final class RequestQueueRequest extends ApifyResource {
     return id;
   }
 
-  /** Sets the unique request ID. */
   public RequestQueueRequest setId(String id) {
     this.id = id;
     return this;
@@ -51,13 +50,19 @@ public final class RequestQueueRequest extends ApifyResource {
     return url;
   }
 
-  /** Sets the request URL. */
   public RequestQueueRequest setUrl(String url) {
     this.url = url;
     return this;
   }
 
-  /** The deduplication key for the request. */
+  /**
+   * The deduplication key for the request. Nullable — if unset, the API derives one from the
+   * request (typically the URL + method). Note that {@link
+   * RequestQueueClient#batchAddRequests(List, boolean, BatchAddRequestsOptions) batchAddRequests}'
+   * retry reconciliation matches requests back to the API's response by this field, so a request
+   * without an explicit {@code uniqueKey} can be falsely reported unprocessed after a retry even
+   * though it succeeded server-side; set it explicitly if you rely on that return value.
+   */
   public String getUniqueKey() {
     return uniqueKey;
   }
@@ -73,7 +78,6 @@ public final class RequestQueueRequest extends ApifyResource {
     return method;
   }
 
-  /** Sets the HTTP method. */
   public RequestQueueRequest setMethod(String method) {
     this.method = method;
     return this;
@@ -100,7 +104,6 @@ public final class RequestQueueRequest extends ApifyResource {
     return payload;
   }
 
-  /** Sets the HTTP request body. */
   public RequestQueueRequest setPayload(String payload) {
     this.payload = payload;
     return this;

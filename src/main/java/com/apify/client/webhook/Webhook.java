@@ -58,7 +58,7 @@ public final class Webhook extends ApifyResource {
    * #getHeadersTemplate()} are interpolated with values from the triggering event before the
    * webhook is dispatched.
    */
-  public Boolean isShouldInterpolateStrings() {
+  public Boolean getShouldInterpolateStrings() {
     return shouldInterpolateStrings;
   }
 

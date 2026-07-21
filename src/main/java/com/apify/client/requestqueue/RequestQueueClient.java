@@ -211,6 +211,13 @@ public final class RequestQueueClient {
    * is returned in {@link BatchAddResult#getUnprocessedRequests()} instead. A single request whose
    * own JSON encoding already exceeds the payload-size limit is rejected up front with {@link
    * IllegalArgumentException}, since no chunk size could ever fit it.
+   *
+   * <p><b>Caveat:</b> processed-vs-unprocessed reconciliation after a retry matches requests by
+   * {@link RequestQueueRequest#getUniqueKey()}. If a request omits {@code uniqueKey} (it is
+   * nullable), a request that actually succeeded server-side on an earlier attempt can still be
+   * reported in {@link BatchAddResult#getUnprocessedRequests()} after retries, because there is no
+   * caller-supplied key to match it back against the API's per-attempt response. Callers that rely
+   * on {@code batchAddRequests}' return value should set {@code uniqueKey} explicitly.
    */
   public BatchAddResult batchAddRequests(
       List<RequestQueueRequest> requests, boolean forefront, BatchAddRequestsOptions options) {
@@ -342,7 +349,7 @@ public final class RequestQueueClient {
         if (remaining.isEmpty()) {
           break;
         }
-      } catch (ApifyApiException e) {
+      } catch (ApifyApiException ignored) {
         // Any API error (rate-limit, server error, or a hard client error such as a bad token)
         // stops retrying this chunk immediately; whatever has not been confirmed processed is
         // reported as unprocessed below, never thrown — matching the reference client's contract.

@@ -23,6 +23,7 @@ import com.apify.client.requestqueue.RequestQueueRequest;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunChargeOptions;
+import com.apify.client.run.SetStatusMessageOptions;
 import com.apify.client.store.ActorStoreListItem;
 import com.apify.client.store.StoreListOptions;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
@@ -113,6 +114,27 @@ class ClientBehaviourRegressionTest {
         IllegalArgumentException.class, () -> client.run("r").charge(new RunChargeOptions("")));
     assertEquals(0, backend.calls, "no request should be sent for an invalid charge");
   }
+
+  @Test
+  void setStatusMessageThrowsWhenActorRunIdUnset() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
+    ApifyClient client = client(backend);
+    assertThrows(
+        IllegalStateException.class,
+        () -> client.setStatusMessage("hello", new SetStatusMessageOptions()));
+    assertEquals(0, backend.calls, "no request should be sent when ACTOR_RUN_ID is unset");
+  }
+
+  // Documented skip, mirroring this project's existing metamorph/reboot/charge live-skip
+  // convention (see ActorRunIntegrationTest's class-level comment): the ACTOR_RUN_ID-set success
+  // path (PUTs statusMessage/isStatusMessageTerminal to the run identified by that env var) is not
+  // covered here because the JVM's environment map is effectively immutable in-process without
+  // reflecting into JDK internals (fragile, and guarded by the module system since Java 9), and it
+  // is not live-testable either (a live integration test isn't itself an Actor run, so
+  // ACTOR_RUN_ID is never set there). The PUT-body construction it exercises — statusMessage
+  // always set, isStatusMessageTerminal only when non-null — is otherwise a straight-line, 3-line
+  // method body with no branch this test suite doesn't already cover elsewhere (RunClient.update's
+  // PUT is exercised by TaskIntegrationTest#taskCrudFlow and friends).
 
   @Test
   void metamorphSendsTargetActorIdBuildAndInputBody() {

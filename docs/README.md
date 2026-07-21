@@ -3,7 +3,8 @@
 This directory documents the public API of the Apify Java client, organized by resource. Each page
 lists the available methods with their parameters and short snippets. The snippets are code
 fragments that assume a configured `client` and the imports listed below, not standalone `main`
-programs; for complete, runnable programs see [examples.md](examples.md) and
+programs; [examples.md](examples.md) has more fragments in the same style, and the complete,
+runnable programs live under
 [`src/test/java/com/apify/client/examples/`](https://github.com/apify/apify-client-java/tree/master/src/test/java/com/apify/client/examples). For an
 overview, configuration, error handling and the full resource table, see the
 [top-level README](../README.md).
@@ -44,7 +45,7 @@ option types, so import each resource you use from its own package:
 | `com.apify.client.requestqueue` | `RequestQueue`, `RequestQueueClient`, `RequestQueueCollectionClient`, `RequestQueueRequest`, `RequestQueueHead`, `LockedRequestQueueHead`, `RequestQueueOperationInfo`, `RequestLockInfo`, `UnlockRequestsResult`, `RequestsList`, `BatchAddResult`, `BatchDeleteResult`, `DeletedRequestInfo`, `ListRequestsOptions`, `BatchAddRequestsOptions` |
 | `com.apify.client.task` | `Task`, `TaskStats`, `TaskOptions`, `TaskClient`, `TaskCollectionClient`, `TaskStartOptions`, `TaskCallOptions`, `ValidateInputOptions` |
 | `com.apify.client.schedule` | `Schedule`, `ScheduleNotifications`, `ScheduleClient`, `ScheduleCollectionClient` |
-| `com.apify.client.webhook` | `Webhook`, `WebhookStats`, `WebhookClient`, `WebhookCollectionClient`, `WebhookDispatchCollectionClient`, `NestedWebhookCollectionClient`, `WebhookDispatch`, `WebhookDispatchClient` |
+| `com.apify.client.webhook` | `Webhook`, `WebhookStats`, `WebhookLastDispatch`, `WebhookClient`, `WebhookCollectionClient`, `WebhookDispatchCollectionClient`, `NestedWebhookCollectionClient`, `WebhookDispatch`, `WebhookDispatchClient` |
 | `com.apify.client.user` | `User`, `UserClient` |
 | `com.apify.client.store` | `ActorStoreListItem`, `StoreCollectionClient`, `StoreListOptions` |
 | `com.apify.client.log` | `LogClient`, `LogOptions`, `StreamedLog`, `StreamedLogOptions` |
@@ -74,9 +75,12 @@ Jackson `JsonNode` (or accept an arbitrary `Object` serialized to JSON):
 - Write: `task(id).updateInput(...)` (itself returning a required `JsonNode`, the updated input)
   and `me().updateLimits(...)` accept an arbitrary JSON-serializable value, as do
   definition/`update`/`create` arguments generally — a `Map`, a `JsonNode`, or your own POJO.
-- A few typed models still carry one raw-JSON field where the shape is a discriminated union not
-  worth fully modelling: `RequestQueueRequest.getUserData()`, `Webhook.getCondition()`,
-  `ActorRun.getPricingInfo()`, `Schedule.getActions()` (a `List<JsonNode>`).
+- A few typed models still carry one or more raw-JSON fields where the shape is a discriminated
+  union (or otherwise not worth fully modelling): `RequestQueueRequest.getUserData()`,
+  `Webhook.getCondition()`, `Schedule.getActions()` (a `List<JsonNode>`), `Task.getInput()` (the
+  task's stored input, on the `Task` model itself — distinct from the live-fetching
+  `task(id).getInput()` client call listed above), and `ActorRun`, which carries two:
+  `getPricingInfo()` and `getStorageIds()`.
 
 Navigate a `JsonNode` with `node.get("field")`, `node.path("a").asText()`, etc.
 
@@ -113,6 +117,12 @@ Object plan = me.getExtra().get("plan");
 `ACTOR_RUN_ID` environment variable); it only works from inside a run and throws
 `IllegalStateException` otherwise. `SetStatusMessageOptions.isStatusMessageTerminal(boolean)` marks
 the message as final so it won't be overwritten. Returns the updated `ActorRun`.
+
+Note: `isStatusMessageTerminal(boolean)` takes a primitive `boolean`, not a boxed `Boolean` — an
+intentional exception to the "optional fields are boxed so they can stay unset" convention used
+elsewhere in this client's options classes, since this field always has a concrete on/off meaning
+with no useful "unset" state (the field is simply omitted from the request body when the setter is
+never called).
 
 ```java
 client.setStatusMessage("half way there", new SetStatusMessageOptions().isStatusMessageTerminal(false));

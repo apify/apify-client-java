@@ -81,8 +81,10 @@ System.out.println("Items in this page: " + items.getCount());
 The types used above — `PaginationList<T>` (root package), `DatasetListItemsOptions`
 (`com.apify.client.dataset`), and the per-resource clients — are documented on the
 [resource pages](docs/README.md); `ApifyApiException` (`com.apify.client.http`) is covered under
-[Error handling](#error-handling) below. [`docs/examples.md`](docs/examples.md) has complete,
-runnable programs (build-and-run, storages, log redirection, and more).
+[Error handling](#error-handling) below. [`docs/examples.md`](docs/examples.md) has more fragments
+in the same style (build-and-run, storages, log redirection, and more); the complete, runnable
+programs live under
+[`src/test/java/com/apify/client/examples/`](https://github.com/apify/apify-client-java/tree/master/src/test/java/com/apify/client/examples).
 
 ## Configuration
 
@@ -100,6 +102,8 @@ ApifyClient configured =
         .build();
 ```
 
+`Duration` above is `java.time.Duration`.
+
 ### Replaceable HTTP transport
 
 The transport is a replaceable component. The default is `DefaultHttpTransport` (backed by the JDK's
@@ -109,6 +113,16 @@ proxy/TLS:
 ```java
 HttpTransport transport = new DefaultHttpTransport(java.net.http.HttpClient.newHttpClient());
 ApifyClient withTransport = ApifyClient.builder().token("t").httpTransport(transport).build();
+```
+
+`DefaultHttpTransport` also has a `DefaultHttpTransport(Duration connectTimeout)` constructor that
+builds its own JDK `HttpClient` with a custom connection-establishment timeout (default 10s,
+`DefaultHttpTransport.DEFAULT_CONNECT_TIMEOUT`) without requiring you to construct the `HttpClient`
+yourself — use it when you only want to change the connect timeout and don't otherwise need to
+customize the JDK client:
+
+```java
+HttpTransport transport = new DefaultHttpTransport(Duration.ofSeconds(5));
 ```
 
 Cross-cutting behaviour applied to every request lives in the client, not the transport

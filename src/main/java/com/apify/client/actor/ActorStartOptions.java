@@ -3,15 +3,19 @@ package com.apify.client.actor;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import com.apify.client.internal.StartOptionsLike;
 import java.util.Base64;
 import java.util.List;
 
 /**
  * Configures starting an Actor run ({@link ActorClient#start}/{@link ActorClient#call}). All fields
  * are optional.
+ *
+ * <p>{@link #apply}/{@link #contentTypeOrDefault} are package-private: {@link ActorClient}/{@link
+ * ActorCallOptions} (both in this package) read them directly and hand the results to {@code
+ * com.apify.client.internal.RunStartSupport} as plain values/method references, so this internal
+ * shape never needs to be public API.
  */
-public final class ActorStartOptions implements StartOptionsLike {
+public final class ActorStartOptions {
   private String build;
   private Long memoryMbytes;
   private Long timeoutSecs;
@@ -89,15 +93,13 @@ public final class ActorStartOptions implements StartOptionsLike {
     return this;
   }
 
-  @Override
-  public String contentTypeOrDefault() {
+  String contentTypeOrDefault() {
     return (contentType != null && !contentType.isEmpty())
         ? contentType
         : ResourceContext.CONTENT_TYPE_JSON;
   }
 
-  @Override
-  public void apply(QueryParams q) {
+  void apply(QueryParams q) {
     q.addString("build", build)
         .addLong("memory", memoryMbytes)
         .addLong("timeout", timeoutSecs)

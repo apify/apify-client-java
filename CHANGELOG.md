@@ -50,9 +50,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `KeyValueStoreCollectionClient`, `RequestQueueCollectionClient`, `ActorCollectionClient`,
   `ScheduleCollectionClient`, `TaskCollectionClient`, `BuildCollectionClient` and
   `RunCollectionClient`; behavior is unchanged.
-- Extracted shared `StartOptionsLike`/`CallOptionsLike` interfaces (internal) and a
-  `RunStartSupport` helper backing `ActorClient`/`TaskClient`'s `start`/`call`, removing the
-  duplicated implementation between the two; behavior is unchanged.
+- Extracted a shared `RunStartSupport` helper (internal) backing `ActorClient`/`TaskClient`'s
+  `start`/`call`, removing the duplicated implementation between the two. `ActorClient`/
+  `TaskClient` pass their options' behavior in as plain values and method references (e.g.
+  `options::apply`), so `ActorStartOptions`/`TaskStartOptions`/`ActorCallOptions`/`TaskCallOptions`
+  stay package-private with no public marker interface; behavior is unchanged.
 - Tightened `spotbugs-exclude.xml` to only the entries that currently reproduce a real finding.
 - `java-integration-tests.yml` now declares an explicit, least-privilege `permissions: contents:
   read` block.
@@ -102,6 +104,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   can no longer corrupt the request's stored state.
 - `RequestQueueClient.paginateRequests(...)` no longer yields more than the requested `totalLimit`
   when a single page overshoots it, matching `PaginatedIterator`'s equivalent guard.
+- `Webhook.isShouldInterpolateStrings()` renamed to `getShouldInterpolateStrings()`, following the
+  JavaBeans convention for a boxed `Boolean` accessor (`is`-prefixed getters are for primitive
+  `boolean`). The underlying field name, `shouldInterpolateStrings`, is unchanged, so this has no
+  effect on the JSON wire format.
 
 ### Documentation
 
@@ -113,6 +119,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   contradiction; documented `ApifyApiException`'s accessor return types and the
   `HttpTimeoutException` naming collision with `java.net.http.HttpTimeoutException`; added
   `setStatusMessage` to the README resources table; noted `getExtra()` on every thin response model.
+- Fixed a contradiction in `README.md`/`docs/README.md`: both described `docs/examples.md` as
+  "complete, runnable programs," but its own snippets are fragments in the same style as the
+  resource pages — the complete, runnable programs live under
+  `src/test/java/com/apify/client/examples/`. Reworded both to match.
+  Added the missing `WebhookLastDispatch` import to the `com.apify.client.webhook` package-table row.
+  Corrected the "one raw-JSON field" framing in `docs/README.md`'s "Raw JSON values" section:
+  `ActorRun` actually carries two (`getPricingInfo()`, `getStorageIds()`), and `Task.getInput()` (the
+  model field) is a third, distinct from the live-fetching `task(id).getInput()` client call.
+  Clarified in `docs/storages.md` that request queues, unlike datasets/key-value stores, have no
+  `getOrCreate(String, Object schema)` overload. Noted that
+  `SetStatusMessageOptions.isStatusMessageTerminal(boolean)` intentionally takes a primitive
+  `boolean`, not boxed `Boolean` like this client's other optional option fields. Documented the
+  `DefaultHttpTransport(Duration)` constructor in the README's transport section, and disclosed
+  `Duration`'s package (`java.time.Duration`) next to the Configuration snippet for consistency with
+  how other fragments disclose the types they use. Added a javadoc caveat on
+  `RequestQueueClient.batchAddRequests`/`RequestQueueRequest.getUniqueKey()`: retry reconciliation
+  matches by `uniqueKey`, so a request that omits it can be falsely reported unprocessed after
+  retries even though it succeeded server-side.
 
 ## [0.3.1] - 2026-07-14
 

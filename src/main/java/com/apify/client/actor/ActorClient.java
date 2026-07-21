@@ -65,7 +65,7 @@ public final class ActorClient {
    * JSON-serializable value (or {@code null} for no input).
    */
   public ActorRun start(Object input, ActorStartOptions options) {
-    return RunStartSupport.start(ctx, input, options);
+    return RunStartSupport.start(ctx, input, options::apply, options.contentTypeOrDefault());
   }
 
   /**
@@ -77,7 +77,8 @@ public final class ActorClient {
    * Long)} for that (matching the reference client's default {@code call} behavior).
    */
   public ActorRun call(Object input, ActorStartOptions options, Long waitSecs) {
-    return RunStartSupport.call(root, ctx, input, options, waitSecs);
+    return RunStartSupport.call(
+        root, ctx, input, options::apply, options.contentTypeOrDefault(), waitSecs);
   }
 
   /**
@@ -94,7 +95,16 @@ public final class ActorClient {
    */
   public ActorRun call(Object input, ActorCallOptions options, Long waitSecs) {
     ActorCallOptions opts = options != null ? options : new ActorCallOptions();
-    return RunStartSupport.callWithLogStreaming(root, ctx, input, opts, waitSecs);
+    ActorStartOptions startOptions = opts.toStartOptions();
+    return RunStartSupport.callWithLogStreaming(
+        root,
+        ctx,
+        input,
+        startOptions::apply,
+        startOptions.contentTypeOrDefault(),
+        opts.logStreamingEnabledValue(),
+        opts.logOptionsValue(),
+        waitSecs);
   }
 
   /** Validates the given input against the Actor's default-build input schema. */

@@ -1,6 +1,5 @@
 package com.apify.client.actor;
 
-import com.apify.client.internal.CallOptionsLike;
 import com.apify.client.log.StreamedLogOptions;
 import java.util.List;
 
@@ -18,8 +17,13 @@ import java.util.List;
  * reference client's {@code options.log} defaulting to {@code 'default'}. Use {@link
  * #disableLogStreaming()} to opt out, or {@link #logOptions(StreamedLogOptions)} for a custom
  * destination.
+ *
+ * <p>{@link #toStartOptions}/{@link #logStreamingEnabledValue}/{@link #logOptionsValue} are
+ * package-private: {@link ActorClient} (same package) reads them directly and hands the results to
+ * {@code com.apify.client.internal.RunStartSupport} as plain values/method references, so this
+ * internal shape never needs to be public API.
  */
-public final class ActorCallOptions implements CallOptionsLike<ActorStartOptions> {
+public final class ActorCallOptions {
 
   private final ActorStartOptions startOptions = new ActorStartOptions();
   private boolean logStreamingEnabled = true;
@@ -102,18 +106,15 @@ public final class ActorCallOptions implements CallOptionsLike<ActorStartOptions
     return this;
   }
 
-  @Override
-  public ActorStartOptions toStartOptions() {
+  ActorStartOptions toStartOptions() {
     return startOptions;
   }
 
-  @Override
-  public boolean logStreamingEnabledValue() {
+  boolean logStreamingEnabledValue() {
     return logStreamingEnabled;
   }
 
-  @Override
-  public StreamedLogOptions logOptionsValue() {
+  StreamedLogOptions logOptionsValue() {
     return logOptions;
   }
 }

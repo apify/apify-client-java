@@ -53,7 +53,7 @@ public final class TaskClient {
    * overrides the task's stored input ({@code null} to use the stored input).
    */
   public ActorRun start(Object input, TaskStartOptions options) {
-    return RunStartSupport.start(ctx, input, options);
+    return RunStartSupport.start(ctx, input, options::apply, options.contentTypeOrDefault());
   }
 
   /**
@@ -64,7 +64,8 @@ public final class TaskClient {
    * Long)} for that (matching the reference client's default {@code call} behavior).
    */
   public ActorRun call(Object input, TaskStartOptions options, Long waitSecs) {
-    return RunStartSupport.call(root, ctx, input, options, waitSecs);
+    return RunStartSupport.call(
+        root, ctx, input, options::apply, options.contentTypeOrDefault(), waitSecs);
   }
 
   /**
@@ -80,7 +81,16 @@ public final class TaskClient {
    */
   public ActorRun call(Object input, TaskCallOptions options, Long waitSecs) {
     TaskCallOptions opts = options != null ? options : new TaskCallOptions();
-    return RunStartSupport.callWithLogStreaming(root, ctx, input, opts, waitSecs);
+    TaskStartOptions startOptions = opts.toStartOptions();
+    return RunStartSupport.callWithLogStreaming(
+        root,
+        ctx,
+        input,
+        startOptions::apply,
+        startOptions.contentTypeOrDefault(),
+        opts.logStreamingEnabledValue(),
+        opts.logOptionsValue(),
+        waitSecs);
   }
 
   /** Fetches the task's stored input, or empty if none is set. */

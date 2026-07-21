@@ -3,7 +3,6 @@ package com.apify.client.task;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import com.apify.client.internal.StartOptionsLike;
 import java.util.List;
 
 /**
@@ -12,8 +11,13 @@ import java.util.List;
  * <p>It mirrors {@link ActorStartOptions} but omits the fields the task run endpoint does not
  * accept (the Actor-only {@code contentType} and {@code forcePermissionLevel}), matching the
  * reference client.
+ *
+ * <p>{@link #apply}/{@link #contentTypeOrDefault} are package-private: {@link TaskClient}/{@link
+ * TaskCallOptions} (both in this package) read them directly and hand the results to {@code
+ * com.apify.client.internal.RunStartSupport} as plain values/method references, so this internal
+ * shape never needs to be public API.
  */
-public final class TaskStartOptions implements StartOptionsLike {
+public final class TaskStartOptions {
   private String build;
   private Long memoryMbytes;
   private Long timeoutSecs;
@@ -71,8 +75,7 @@ public final class TaskStartOptions implements StartOptionsLike {
     return this;
   }
 
-  @Override
-  public void apply(QueryParams q) {
+  void apply(QueryParams q) {
     q.addString("build", build)
         .addLong("memory", memoryMbytes)
         .addLong("timeout", timeoutSecs)
@@ -85,11 +88,10 @@ public final class TaskStartOptions implements StartOptionsLike {
 
   /**
    * The task run endpoint does not accept a content-type override (unlike the Actor run endpoint),
-   * so this always returns the JSON default; present only to satisfy {@link StartOptionsLike} so
-   * {@code start}/{@code call} can be driven generically for both Actor and task runs.
+   * so this always returns the JSON default; present only so {@code start}/{@code call} can be
+   * driven generically for both Actor and task runs (both call sites read this the same way).
    */
-  @Override
-  public String contentTypeOrDefault() {
+  String contentTypeOrDefault() {
     return ResourceContext.CONTENT_TYPE_JSON;
   }
 }

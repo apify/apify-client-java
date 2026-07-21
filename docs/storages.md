@@ -143,7 +143,8 @@ expiry-aware storage-content signature — hence only `createKeysPublicUrl` take
 ### `RequestQueueCollectionClient` — `client.requestQueues()`
 
 `list(StorageListOptions)`, `iterate(StorageListOptions, Long chunkSize)`, and `getOrCreate(String)`,
-as for datasets.
+as for datasets. Unlike datasets/key-value stores, there is no `getOrCreate(String, Object schema)`
+overload here — the request-queue creation endpoint does not accept a creation-time schema.
 
 ### `RequestQueueClient` — `client.requestQueue(id)`
 
