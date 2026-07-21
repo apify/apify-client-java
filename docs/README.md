@@ -59,7 +59,8 @@ different packages for one four-line snippet.
 Snippets in these docs also assume the standard-library types they use are imported
 (`java.util.List`, `java.util.ArrayList`, `java.util.Map`, `java.util.Optional`,
 `java.util.Iterator`, `java.util.UUID`, `java.util.function.Consumer`, `java.time.Duration`,
-`java.io.InputStream`).
+`java.time.Instant`, `java.io.InputStream`). `java.time.Instant` is returned by many model getters
+(e.g. `createdAt`, `modifiedAt`, `nextRunAt`, `lockExpiresAt`).
 
 Raw-JSON return values use Jackson's `com.fasterxml.jackson.databind.JsonNode`. Jackson is a
 transitive dependency of this client, so it is already on your classpath.

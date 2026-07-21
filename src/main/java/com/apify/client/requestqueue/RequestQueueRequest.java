@@ -40,6 +40,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return id;
   }
 
+  /** Sets the unique request ID. */
   public RequestQueueRequest setId(String id) {
     this.id = id;
     return this;
@@ -50,6 +51,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return url;
   }
 
+  /** Sets the request URL. */
   public RequestQueueRequest setUrl(String url) {
     this.url = url;
     return this;
@@ -78,6 +80,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return method;
   }
 
+  /** Sets the HTTP method. */
   public RequestQueueRequest setMethod(String method) {
     this.method = method;
     return this;
@@ -104,6 +107,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return payload;
   }
 
+  /** Sets the HTTP request body. */
   public RequestQueueRequest setPayload(String payload) {
     this.payload = payload;
     return this;
@@ -136,6 +140,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return handledAt;
   }
 
+  /** Sets when the request was marked as handled. */
   public RequestQueueRequest setHandledAt(Instant handledAt) {
     this.handledAt = handledAt;
     return this;
@@ -146,6 +151,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return retryCount;
   }
 
+  /** Sets the number of times processing this request has already been retried. */
   public RequestQueueRequest setRetryCount(Integer retryCount) {
     this.retryCount = retryCount;
     return this;
@@ -156,6 +162,7 @@ public final class RequestQueueRequest extends ApifyResource {
     return loadedUrl;
   }
 
+  /** Sets the URL actually loaded, after following redirects. */
   public RequestQueueRequest setLoadedUrl(String loadedUrl) {
     this.loadedUrl = loadedUrl;
     return this;

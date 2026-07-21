@@ -140,8 +140,9 @@ client.actor("apify/hello-world").get().ifPresent(actor -> System.out.println(ac
 
 ## Error handling
 
-Every exception this client throws is an unchecked `com.apify.client.http.ApifyClientException`.
-It has two concrete subtypes, both also in `com.apify.client.http`:
+Every exception this client throws for a request/transport failure is an unchecked
+`com.apify.client.http.ApifyClientException`. It has two concrete subtypes, both also in
+`com.apify.client.http`:
 
 - `ApifyApiException` — the request reached the API, which answered with a non-success status.
 - `ApifyTransportException` — the request never produced an API response at all (connection
@@ -155,6 +156,17 @@ It has two concrete subtypes, both also in `com.apify.client.http`:
 
 Catch `ApifyClientException` to handle both failure modes uniformly, or catch a specific subtype to
 handle one of them differently. `ApifyApiException` is imported from `com.apify.client.http`:
+
+A few methods validate their own preconditions before making any request and throw a plain JDK
+exception instead, not an `ApifyClientException` subtype: `ApifyClient.setStatusMessage(message,
+options)` throws `IllegalStateException` if the `ACTOR_RUN_ID` environment variable is not set,
+`ApifyClient.me()`'s limits methods (`limits()`, `updateLimits(...)`, `monthlyUsage(...)`) throw the
+same `IllegalStateException` if called on a `UserClient` that is not `me()`, and
+`ApifyClientBuilder`'s setters throw `IllegalArgumentException` on an invalid configuration value
+(e.g. a negative retry count). These are local, no-request-sent failures, not something the API
+responded with or the transport failed to deliver, which is why they stay outside the
+request/transport exception hierarchy above — catch `IllegalStateException`/`IllegalArgumentException`
+separately if you call any of them.
 
 ```java
 try {

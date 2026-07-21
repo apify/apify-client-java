@@ -12,10 +12,12 @@ import java.util.function.Consumer;
  * for every client that can start a run from a runnable resource (Actor, Task).
  *
  * <p>{@code ActorStartOptions}/{@code TaskStartOptions}/{@code ActorCallOptions}/{@code
- * TaskCallOptions} stay package-private in their own packages ({@code com.apify.client.actor}/
- * {@code com.apify.client.task}) with no public interface or shared supertype: {@code
- * ActorClient}/{@code TaskClient} (same package as their respective options types) read the option
- * values directly and pass them here as plain values and method references (e.g. {@code
+ * TaskCallOptions} (in {@code com.apify.client.actor}/{@code com.apify.client.task}) are themselves
+ * public classes — only the handful of accessor methods this class needs from them ({@code apply},
+ * {@code contentTypeOrDefault}, {@code toStartOptions}, {@code logStreamingEnabledValue}, {@code
+ * logOptionsValue}) are package-private, with no public interface or shared supertype exposing
+ * them. {@code ActorClient}/{@code TaskClient} (same package as their respective options types)
+ * read those values directly and pass them here as plain values and method references (e.g. {@code
  * options::apply} bound as a {@code Consumer<QueryParams>}). That keeps this one implementation
  * backing both Actor and task calls (instead of each duplicating the same ~90 lines) without
  * forcing any of the options builders' internal plumbing — including the internal {@link

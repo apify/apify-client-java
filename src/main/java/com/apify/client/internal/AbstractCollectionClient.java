@@ -33,10 +33,11 @@ public abstract class AbstractCollectionClient<T, O extends ListOptionsLike> {
     this.defaultOptions = defaultOptions;
   }
 
-  /** Lists the collection's items for one page. */
+  /** Lists the collection's items for one page. {@code options} may be {@code null} (defaults). */
   public PaginationList<T> list(O options) {
+    O opts = options != null ? options : defaultOptions.get();
     QueryParams params = new QueryParams();
-    options.apply(params);
+    opts.apply(params);
     return listWithParams(params);
   }
 

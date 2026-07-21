@@ -43,6 +43,14 @@ PaginationList<ActorRun> runs = client.runs().list(
 | `getStreamedLog()` | A `StreamedLog` that redirects the live log to a default per-run logger. |
 | `getStreamedLog(StreamedLogOptions)` | As above, with a custom destination / options. |
 
+If `waitSecs` elapses before the run reaches a terminal state, `waitForFinish` returns the run's
+current (non-terminal) status rather than throwing or blocking further — check `isTerminal()` on
+the result and call `waitForFinish` again (or poll) if you need to keep waiting. `ActorClient`/
+`TaskClient`'s `call(...)` overloads (see [Actors](actors.md#actorclient)/[Tasks](tasks.md)) return
+this same possibly-non-terminal `ActorRun` for the same reason: `call` is `start` followed by
+`waitForFinish`, so a `call` with a short `waitSecs` on a long-running Actor can return before the
+run finishes.
+
 ### Streamed log redirection
 
 `getStreamedLog()` returns a `StreamedLog`: a helper that follows the run's live raw log in a

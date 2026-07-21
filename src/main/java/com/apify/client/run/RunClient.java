@@ -190,7 +190,10 @@ public final class RunClient {
 
   /**
    * Polls until the run reaches a terminal state or {@code waitSecs} elapses ({@code null} waits
-   * indefinitely). Returns the latest run.
+   * indefinitely). Returns the latest run fetched, whether or not it is terminal: if the wait
+   * budget runs out first, this returns the still-running run as of the last poll rather than
+   * throwing or blocking further — check {@link ActorRun#isTerminal()} on the result if the
+   * distinction matters to the caller.
    */
   public ActorRun waitForFinish(Long waitSecs) {
     return ctx.waitForFinish(waitSecs, "run", Json.type(ActorRun.class), ActorRun::isTerminal);

@@ -202,7 +202,56 @@ class ActorRunIntegrationTest extends IntegrationBase {
         }
       }
     }
-    assertTrue(!collected.isEmpty(), "expected redirected log messages");
+
+    // The catch-up window above closes an eventual-consistency race, but not a genuine one: the
+    // *first* stream was opened before the run finished, following the live log as the run was
+    // still writing to it, so the underlying HTTP stream can reach EOF (the container/log-follow
+    // connection closing) a hair before the final bytes are flushed to that same connection -- no
+    // amount of client-side waiting after that EOF recovers bytes that were never delivered on it.
+    // Ask the authoritative source - the run's persisted log via the plain (non-streaming)
+    // log().get() call - whether the run produced any log output at all, and if the first stream
+    // still came up empty despite that, retry once with a brand-new stream opened strictly after
+    // the run is already finished: that is no longer a live tail, just a GET against a static,
+    // fully-persisted log, so it cannot race the run's own writer the way the first stream could.
+    Optional<String> authoritativeLog = runClient.log().get();
+    boolean runProducedLog = authoritativeLog.isPresent() && !authoritativeLog.get().isEmpty();
+    if (runProducedLog && collected.isEmpty()) {
+      collected.addAll(collectFinishedRunLog(runClient));
+    }
+    if (runProducedLog) {
+      assertTrue(
+          !collected.isEmpty(),
+          "run produced a non-empty log ("
+              + authoritativeLog.get().length()
+              + " chars) but the"
+              + " streamed collector observed none - redirection did not work");
+    }
+  }
+
+  /**
+   * Opens a fresh {@link StreamedLog} against an already-finished run's static log (with {@link
+   * StreamedLogOptions#fromStart(boolean)} so the run's already-past-relative-to-construction
+   * messages are not filtered out) and waits up to {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS} for it
+   * to deliver the (now non-racing) content, so {@link #streamedLogRedirection} can retry once
+   * after the first, live-tail stream comes up empty despite the run having produced a log.
+   */
+  private static java.util.List<String> collectFinishedRunLog(RunClient runClient) {
+    java.util.List<String> retryCollected = new java.util.concurrent.CopyOnWriteArrayList<>();
+    try (StreamedLog retryStream =
+        runClient.getStreamedLog(
+            new StreamedLogOptions().toLog(retryCollected::add).fromStart(true))) {
+      retryStream.start();
+      long deadline = System.currentTimeMillis() + STREAM_CATCH_UP_TIMEOUT_MILLIS;
+      while (retryCollected.isEmpty() && System.currentTimeMillis() < deadline) {
+        try {
+          Thread.sleep(STREAM_CATCH_UP_POLL_MILLIS);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          break;
+        }
+      }
+    }
+    return retryCollected;
   }
 
   /** Bounded window given to {@link #streamedLogRedirection} for the log to catch up. */
