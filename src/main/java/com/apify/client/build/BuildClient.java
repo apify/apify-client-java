@@ -65,7 +65,7 @@ public final class BuildClient {
     if (resp == null) {
       return Optional.empty();
     }
-    return Optional.of(Json.parse(resp.body, JsonNode.class));
+    return Optional.of(Json.parse(resp.body(), JsonNode.class));
   }
 
   /** A client for accessing this build's log. */

@@ -62,6 +62,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `com.apify.client.actor` (its only consumer is `ActorClient.validateInput`); its internal
   `apply`/`contentTypeOrDefault` are package-private again now that it's same-package with that
   consumer.
+- **Breaking:** `ActorRunOptions.getTimeoutSecs()`/`getMemoryMbytes()`/`getDiskMbytes()` now return
+  boxed `Long` instead of primitive `long`, matching the boxed-when-optional convention used by
+  every sibling field, so an unset value is distinguishable from a real `0`.
+- **Breaking:** `ApiResponse` is now a `record` (`statusCode`, `headers`, `body` are accessor
+  methods, e.g. `resp.body()`, not public fields); its shape and no-copy `body` contract are
+  unchanged. `HttpClientCore.Compressed` (internal, non-exported) is likewise now a record.
+- `StoreCollectionClient` and `WebhookDispatchCollectionClient` now extend
+  `AbstractCollectionClient<T, O>` instead of hand-rolling `list`/`iterate` (`StoreListOptions` now
+  implements `ListOptionsLike`), closing the two collection clients the loop-3 extraction missed;
+  behavior is unchanged.
+- `RunClient.metamorph` now normalizes `targetActorId` via the same `username~actorName` safe-id
+  form as every other Actor-id-accepting call, instead of sending it raw.
 
 ### Added
 
@@ -84,6 +96,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `actorStandby`), `ActorRun` (`generalAccess`, `chargedEventCounts`, `pricingInfo`, `usage`,
   `usageUsd`, `stats`, `options`, `meta`, `usageTotalUsd`, `buildNumber`, `exitCode`,
   `isContainerServerReady`, `gitBranchName`, `storageIds`).
+- Further typed getters resolving the remaining thin-DTO gaps against the JS reference client:
+  `WebhookDispatch` (`status`, `eventType`, `userId`, `createdAt`, `calls`, `webhook`, `eventData`);
+  `Actor` (`actorStandby`, `stats`, `versions`, `pricingInfos`, `defaultRunOptions`, `taggedBuilds`,
+  `actorPermissionLevel`, `categories`, `isDeprecated`, `deploymentKey`, `seoTitle`,
+  `seoDescription`); `Build` (`userId`, `meta`, `stats`, `options`, `usage`, `usageUsd`,
+  `usageTotalUsd`); `User` (`profile`, `email`, `proxy`, `plan`, `effectivePlatformFeatures`,
+  `createdAt`, `isPaying`); `ActorStoreListItem` (`description`, `stats`, `currentPricingInfo`,
+  `pictureUrl`, `userPictureUrl`, `url`, `readmeSummary`). `getExtra()` remains available on every
+  touched model for any field still not individually typed.
 
 ### Fixed
 
@@ -128,6 +149,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   field.
 - `RequestQueueClient`'s chunk-by-byte-size slicing now accounts for the inter-element commas in
   its incremental size estimate, matching the exact full-array measurement.
+- `BatchDeleteResult.getProcessedRequests()`/`getUnprocessedRequests()` and
+  `RequestQueueRequest.getErrorMessages()` no longer throw `NullPointerException` on an explicit
+  JSON `null` for either field, mirroring `BatchAddResult`'s existing guard.
+- `RunClient.metamorph`/`resurrect` and `ActorClient.build` now throw a clear
+  `IllegalArgumentException` when called with a `null` required options argument, instead of a
+  `NullPointerException` deep inside the method.
+- `RunClient`'s default log-redirection prefix now uses the run's resolved real id instead of the
+  client's own `id` field, which is the literal string `"last"` for a `runs/last`-scoped client.
 
 ### Documentation
 
@@ -167,6 +196,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and corrected `spotbugs-exclude.xml`'s header to accurately explain why its former `ApiResponse`
   EI_EXPOSE exclusion stopped reproducing (the no-copy contract never changed; the tool simply
   stopped flagging it) rather than implying the exposure was defensively fixed.
+- `docs/storages.md` now spells out `RequestQueueRequest`'s getters by name (`getUrl`,
+  `getUniqueKey`, ...) next to their setters, and adds argument types to the `DatasetListItemsOptions`
+  /`DatasetDownloadOptions`/`SetRecordOptions` field lists (`docs/actors.md` likewise for
+  `ValidateInputOptions`). The top-level README's Configuration section gained an
+  `ApifyClientBuilder` setter reference table (default + valid range for every setter) and an
+  `HttpTransport` contract table (`send`/`sendStreamingResponse` signatures and behavior a
+  custom-transport implementer must satisfy). Trimmed `PaginationList`'s ~10-line public-setter
+  justification comment to two sentences and made `StreamedLog`'s internal `(see below)` comment
+  reference the `finally` block explicitly.
+- Added a `list()` step to the Actor/Dataset/RequestQueue/KeyValueStore/Webhook/Task CRUD-flow
+  integration tests, verifying the just-created resource's id appears in its top-level collection
+  listing (polled for eventual consistency via a new shared `IntegrationBase.LIST_FIND_ATTEMPTS`/
+  `LIST_FIND_BACKOFF_MILLIS`), matching the pattern the run-collection and Schedule flows already
+  used.
 
 ## [0.3.1] - 2026-07-14
 

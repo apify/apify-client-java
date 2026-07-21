@@ -104,6 +104,28 @@ ApifyClient configured =
 
 `Duration` above is `java.time.Duration`.
 
+### `ApifyClientBuilder` reference
+
+Every setter is optional; leaving one uncalled keeps its default. `int`/`Duration` arguments are
+validated at call time (see below), not deferred to `build()`.
+
+| Setter | Type | Default | Valid range |
+|---|---|---|---|
+| `token(String)` | `String` | none (unauthenticated) | any non-null string |
+| `baseUrl(String)` | `String` | `https://api.apify.com` (`/v2` appended automatically) | non-null, non-blank |
+| `publicBaseUrl(String)` | `String` | same as `baseUrl` | non-null, non-blank |
+| `maxRetries(int)` | `int` | `8` | `>= 0` |
+| `minDelayBetweenRetries(Duration)` | `Duration` | `500ms` | non-null, `>= 0` |
+| `maxDelayBetweenRetries(Duration)` | `Duration` | same as `timeout` (`360s`) | non-null, `>= 0` |
+| `timeout(Duration)` | `Duration` | `360s` | non-null, strictly `> 0` |
+| `userAgentSuffix(String)` | `String` | none (no suffix appended) | any string |
+| `httpTransport(HttpTransport)` | `HttpTransport` | `new DefaultHttpTransport()` | non-null |
+
+A violated range throws `IllegalArgumentException` from the setter itself. `timeout` is the ceiling
+each retry attempt's per-request (socket) timeout grows toward — not a wall-clock bound on the
+cumulative time across all retries; the connection-establishment timeout is a separate,
+transport-level setting (see `DefaultHttpTransport`'s constructors below).
+
 ### Replaceable HTTP transport
 
 The transport is a replaceable component. The default is `DefaultHttpTransport` (backed by the JDK's
@@ -128,6 +150,24 @@ HttpTransport transport = new DefaultHttpTransport(Duration.ofSeconds(5));
 Cross-cutting behaviour applied to every request lives in the client, not the transport
 implementation: bearer-token authentication, the mandated `User-Agent` header, and retries with
 exponential backoff and jitter on `429`, `5xx` and network errors.
+
+#### `HttpTransport` contract
+
+A custom implementation (`com.apify.client.http.HttpTransport`) must provide both methods:
+
+| Method | Signature | Contract |
+|---|---|---|
+| `send` | `HttpResponse<byte[]> send(HttpRequest request) throws IOException, InterruptedException` | Sends the single, fully-prepared request (auth, `User-Agent` and any other headers are already set by the client) and returns the response with its body fully buffered as `byte[]`. Used for every non-streaming call. |
+| `sendStreamingResponse` | `HttpResponse<InputStream> sendStreamingResponse(HttpRequest request) throws IOException, InterruptedException` | Sends the request and returns the response body as a live `InputStream` for incremental consumption, used by log streaming (`LogClient.stream(...)`). The *caller* (the client) is responsible for closing the returned stream; an implementation must not close it itself before returning. |
+
+Both methods perform exactly one network round-trip each — no retrying, no request mutation
+(retries, auth, and the `User-Agent` header are handled one layer up, by the client itself). A
+non-2xx HTTP status is **not** a transport-level error: return it as a normal `HttpResponse` with
+its actual status code. Only throw for a genuine transport failure — connection refused, DNS
+resolution failure, or a timeout. Any thrown `IOException` (or `InterruptedException`, with the
+interrupt flag restored) is translated by the client into an `ApifyTransportException`; throw
+`com.apify.client.http.HttpTimeoutException` specifically for a timeout so
+`ApifyTransportException.isTimeout()` reports it correctly.
 
 ## Fetching single resources
 

@@ -32,6 +32,7 @@ import com.apify.client.webhook.Webhook;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -143,9 +144,7 @@ class ClientBehaviourRegressionTest {
     client(backend)
         .run("run123")
         .metamorph(
-            "apify/other-actor",
-            java.util.Map.of("foo", "bar"),
-            new MetamorphOptions().build("1.2.3"));
+            "apify/other-actor", Map.of("foo", "bar"), new MetamorphOptions().build("1.2.3"));
     assertTrue(backend.lastUrl.contains("actor-runs/run123/metamorph"), backend.lastUrl);
     // targetActorId is normalized to the URL-safe username~actor-name form before sending
     // (ResourceContext.toSafeId), matching the reference client's _toSafeId; '~' is then
@@ -540,7 +539,7 @@ class ClientBehaviourRegressionTest {
   @Test
   void accountWebhookCollectionCanCreate() {
     MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"wh1\"}}");
-    Webhook created = client(backend).webhooks().create(java.util.Map.of("eventTypes", List.of()));
+    Webhook created = client(backend).webhooks().create(Map.of("eventTypes", List.of()));
     assertEquals("wh1", created.getId());
     assertTrue(backend.lastUrl.endsWith("/webhooks"), backend.lastUrl);
   }
@@ -548,7 +547,7 @@ class ClientBehaviourRegressionTest {
   @Test
   void updateLimitsSendsPutToMeLimits() {
     MockTransport backend = MockTransport.ofConstant(200, "{}");
-    client(backend).me().updateLimits(java.util.Map.of("maxMonthlyUsageUsd", 100));
+    client(backend).me().updateLimits(Map.of("maxMonthlyUsageUsd", 100));
     assertTrue(backend.lastUrl.endsWith("/users/me/limits"), backend.lastUrl);
     assertTrue(backend.lastBody.contains("\"maxMonthlyUsageUsd\":100"), backend.lastBody);
     assertEquals(1, backend.calls);

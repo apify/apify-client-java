@@ -84,10 +84,10 @@ class CompressionTest {
     byte[] payload = payload(4096, (byte) 'a');
     HttpClientCore.Compressed c = HttpClientCore.compress(payload, true);
 
-    assertEquals("br", c.encoding, "brotli path must announce Content-Encoding: br");
-    assertTrue(c.body.length < payload.length, "brotli-compressed body should be smaller");
+    assertEquals("br", c.encoding(), "brotli path must announce Content-Encoding: br");
+    assertTrue(c.body().length < payload.length, "brotli-compressed body should be smaller");
     assertArrayEquals(
-        payload, unbrotli(c.body), "server must recover the original body from brotli");
+        payload, unbrotli(c.body()), "server must recover the original body from brotli");
   }
 
   @Test
@@ -95,9 +95,9 @@ class CompressionTest {
     byte[] payload = payload(4096, (byte) 'a');
     HttpClientCore.Compressed c = HttpClientCore.compress(payload, false);
 
-    assertEquals("gzip", c.encoding, "gzip fallback must announce Content-Encoding: gzip");
-    assertTrue(c.body.length < payload.length, "gzip-compressed body should be smaller");
-    assertArrayEquals(payload, gunzip(c.body), "server must recover the original body from gzip");
+    assertEquals("gzip", c.encoding(), "gzip fallback must announce Content-Encoding: gzip");
+    assertTrue(c.body().length < payload.length, "gzip-compressed body should be smaller");
+    assertArrayEquals(payload, gunzip(c.body()), "server must recover the original body from gzip");
   }
 
   // --- Brotli native codec must load where a native is bundled (CI/runtime), so brotli runs. ---

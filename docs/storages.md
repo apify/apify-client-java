@@ -65,20 +65,23 @@ PaginationList<JsonNode> page = client.dataset(ds.getId()).listItems(new Dataset
 byte[] csv = client.dataset(ds.getId()).downloadItems(DownloadItemsFormat.CSV, new DatasetDownloadOptions().bom(true));
 ```
 
-`DatasetListItemsOptions` fields: `offset` (number of items to skip), `limit` (maximum number of
-items to return), `desc` (return items newest-first), `fields` (restrict the output to these source
-fields), `outputFields` (positionally *renames* the fields chosen by `fields` in the output — the
-i-th name renames the i-th `fields` entry, so it only makes sense together with `fields`), `omit`
-(exclude these fields from the output), `skipEmpty` (skip empty items), `skipHidden` (skip hidden
-fields, i.e. those starting with `#`), `clean` (return only clean — non-empty, non-hidden — items),
-`unwind` (expand these fields so each array element becomes a separate item), `flatten` (flatten
-these nested fields into dot-notation keys), `view` (select a predefined dataset view for field
-selection), `simplified` (return simplified — flattened and cleaned — items), `skipFailedPages`
-(skip items that come from failed pages), `signature` (a pre-shared URL signature granting access
-without an API token). `downloadItems(...)` returns `byte[]` (the serialized export).
-`DatasetDownloadOptions` wraps a `DatasetListItemsOptions` (`items(...)`) and adds
-`attachment`, `bom`, `delimiter`, `skipHeaderRow`, `xmlRoot`, `xmlRow`, `feedTitle`,
-`feedDescription`.
+`DatasetListItemsOptions` fields: `offset` (`Long`, number of items to skip), `limit` (`Long`,
+maximum number of items to return), `desc` (`Boolean`, return items newest-first), `fields`
+(`List<String>`, restrict the output to these source fields), `outputFields` (`List<String>`,
+positionally *renames* the fields chosen by `fields` in the output — the i-th name renames the i-th
+`fields` entry, so it only makes sense together with `fields`), `omit` (`List<String>`, exclude
+these fields from the output), `skipEmpty` (`Boolean`, skip empty items), `skipHidden` (`Boolean`,
+skip hidden fields, i.e. those starting with `#`), `clean` (`Boolean`, return only clean —
+non-empty, non-hidden — items), `unwind` (`List<String>`, expand these fields so each array element
+becomes a separate item), `flatten` (`List<String>`, flatten these nested fields into dot-notation
+keys), `view` (`String`, select a predefined dataset view for field selection), `simplified`
+(`Boolean`, return simplified — flattened and cleaned — items), `skipFailedPages` (`Boolean`, skip
+items that come from failed pages), `signature` (`String`, a pre-shared URL signature granting
+access without an API token). `downloadItems(...)` returns `byte[]` (the serialized export).
+`DatasetDownloadOptions` wraps a `DatasetListItemsOptions` (`items(DatasetListItemsOptions)`) and
+adds `attachment` (`Boolean`), `bom` (`Boolean`), `delimiter` (`String`), `skipHeaderRow`
+(`Boolean`), `xmlRoot` (`String`), `xmlRow` (`String`), `feedTitle` (`String`), `feedDescription`
+(`String`).
 
 `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` returns a `String` URL. If the
 dataset is private, the client fetches it, reads its URL-signing secret, and appends an HMAC-SHA256
@@ -111,7 +114,7 @@ datasets.
 | `recordExists(String key)` | Whether a record exists. |
 | `getRecord(String key)` / `getRecord(String key, GetRecordOptions)` | Fetch a record. Returns `Optional<KeyValueStoreRecord>`. |
 | `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. No return value. |
-| `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`timeoutSecs`, `doNotRetryTimeouts`). No return value. |
+| `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`SetRecordOptions`: `timeoutSecs` (`Long`), `doNotRetryTimeouts` (`Boolean`)). No return value. |
 | `setRecordJson(String key, Object value)` | Store JSON. No return value. |
 | `deleteRecord(String key)` | Delete a record. No return value. |
 | `getRecordPublicUrl(String key)` | A public (optionally signed) record URL. |
@@ -239,12 +242,18 @@ queue.unlockRequests();
 
 `RequestQueueRequest` models a request. Its `(url, uniqueKey)` constructor covers the common case
 (`uniqueKey` is the deduplication key); fluent setters and matching getters cover the rest (unset
-fields are omitted on the wire): `setId`, `setUrl`, `setUniqueKey`, `setMethod`,
-`setUserData(JsonNode)`, `setPayload(String)` (the HTTP request body), `setHeaders(Map<String,
-String>)`, `setNoRetry(Boolean)`, `setHandledAt(Instant)`, `setRetryCount(Integer)`,
-`setLoadedUrl(String)` (the URL actually loaded, after redirects), and
-`setErrorMessages(List<String>)`. `getLockExpiresAt()` (read-only, no setter) is populated only on
-items returned from `listAndLockHead`.
+fields are omitted on the wire): `setId`/`getId` (`String`), `setUrl`/`getUrl` (`String`),
+`setUniqueKey`/`getUniqueKey` (`String`), `setMethod`/`getMethod` (`String`),
+`setUserData(JsonNode)`/`getUserData()` (`JsonNode`),
+`setPayload(String)`/`getPayload()` (`String`, the HTTP request body),
+`setHeaders(Map<String, String>)`/`getHeaders()` (`Map<String, String>`),
+`setNoRetry(Boolean)`/`getNoRetry()` (`Boolean`),
+`setHandledAt(Instant)`/`getHandledAt()` (`Instant`),
+`setRetryCount(Integer)`/`getRetryCount()` (`Integer`),
+`setLoadedUrl(String)`/`getLoadedUrl()` (`String`, the URL actually loaded, after redirects), and
+`setErrorMessages(List<String>)`/`getErrorMessages()` (`List<String>`, never `null` — empty when
+unset). `getLockExpiresAt()` (read-only, no setter, `Instant`) is populated only on items returned
+from `listAndLockHead`.
 
 Return types:
 - `RequestQueueOperationInfo` (from `addRequest`/`updateRequest`): `getRequestId()`,

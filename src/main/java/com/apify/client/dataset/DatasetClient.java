@@ -156,7 +156,7 @@ public final class DatasetClient {
     ApiResponse resp = http.call("GET", url, null, "", http.baseRequestTimeout());
 
     JavaType listType = Json.parametric(List.class, Json.type(itemClass));
-    List<T> items = Json.parse(resp.body, listType);
+    List<T> items = Json.parse(resp.body(), listType);
     long count = items.size();
 
     PaginationList<T> result = new PaginationList<>();
@@ -182,7 +182,7 @@ public final class DatasetClient {
     options.apply(params);
     String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
     ApiResponse resp = http.call("GET", url, null, "", http.baseRequestTimeout());
-    return resp.body;
+    return resp.body();
   }
 
   /**
@@ -207,7 +207,7 @@ public final class DatasetClient {
     if (resp == null) {
       return Optional.empty();
     }
-    return Optional.of(Json.parseData(resp.body, JsonNode.class));
+    return Optional.of(Json.parseData(resp.body(), JsonNode.class));
   }
 
   /**
@@ -237,6 +237,6 @@ public final class DatasetClient {
   }
 
   private static long headerLong(ApiResponse resp, String name, long fallback) {
-    return resp.headers.firstValueAsLong(name).orElse(fallback);
+    return resp.headers().firstValueAsLong(name).orElse(fallback);
   }
 }

@@ -170,9 +170,9 @@ public final class HttpClientCore {
     Map<String, String> headers = extraHeaders;
     if (shouldCompress(requestBody, extraHeaders)) {
       Compressed compressed = compress(requestBody, BROTLI_AVAILABLE);
-      requestBody = compressed.body;
+      requestBody = compressed.body();
       headers = new LinkedHashMap<>(extraHeaders == null ? Map.of() : extraHeaders);
-      headers.put(CONTENT_ENCODING_HEADER, compressed.encoding);
+      headers.put(CONTENT_ENCODING_HEADER, compressed.encoding());
     }
 
     Duration delay = retry.minDelayBetweenRetries;
@@ -191,11 +191,11 @@ public final class HttpClientCore {
                 contentType,
                 headers,
                 attemptTimeout(baseTimeout, attempt));
-        if (resp.statusCode < MAX_SUCCESS_STATUS) {
+        if (resp.statusCode() < MAX_SUCCESS_STATUS) {
           return resp;
         }
-        lastError = buildApiError(resp.statusCode, resp.body, attempt, method, path);
-        retryable = isStatusRetryable(resp.statusCode);
+        lastError = buildApiError(resp.statusCode(), resp.body(), attempt, method, path);
+        retryable = isStatusRetryable(resp.statusCode());
       } catch (ApifyTransportException e) {
         lastError = e;
         // Network/timeout failures are retryable, unless the caller opted out of retrying timeouts.
@@ -300,16 +300,11 @@ public final class HttpClientCore {
 
   /**
    * A compressed request body together with the {@code Content-Encoding} token that describes it.
+   *
+   * @param body the compressed request body
+   * @param encoding the {@code Content-Encoding} token describing {@code body}
    */
-  public static final class Compressed {
-    public final byte[] body;
-    public final String encoding;
-
-    Compressed(byte[] body, String encoding) {
-      this.body = body;
-      this.encoding = encoding;
-    }
-  }
+  public record Compressed(byte[] body, String encoding) {}
 
   /**
    * Compresses a request body, preferring brotli and falling back to gzip, matching the reference

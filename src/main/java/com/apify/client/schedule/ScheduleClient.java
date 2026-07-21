@@ -37,6 +37,6 @@ public final class ScheduleClient {
     if (resp == null) {
       return Optional.empty();
     }
-    return Optional.of(new String(resp.body, StandardCharsets.UTF_8));
+    return Optional.of(new String(resp.body(), StandardCharsets.UTF_8));
   }
 }

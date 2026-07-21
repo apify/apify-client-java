@@ -77,6 +77,21 @@ class WebhookIntegrationTest extends IntegrationBase {
       webhook.dispatches().list(new ListOptions());
       webhook.test();
 
+      // list() step of the create/get/modify/list/delete flow: verify the just-created webhook
+      // appears in the top-level collection listing.
+      boolean foundInList =
+          pollUntil(
+              LIST_FIND_ATTEMPTS,
+              LIST_FIND_BACKOFF_MILLIS,
+              () ->
+                  client
+                      .webhooks()
+                      .list(new ListOptions().desc(true).limit(10L))
+                      .getItems()
+                      .stream()
+                      .anyMatch(w -> wh.getId().equals(w.getId())));
+      assertTrue(foundInList, "expected the just-created webhook to appear in the top-level list");
+
       // Typed getters (previously only reachable via getExtra()): verify the API's response
       // actually deserializes into them, not just that the code compiles.
       assertTrue(wh.isAdHoc());

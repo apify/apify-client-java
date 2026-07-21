@@ -192,8 +192,8 @@ public final class KeyValueStoreClient {
     if (resp == null) {
       return Optional.empty();
     }
-    String contentType = resp.headers.firstValue(HttpHeaders.CONTENT_TYPE).orElse(null);
-    return Optional.of(new KeyValueStoreRecord(key, resp.body, contentType));
+    String contentType = resp.headers().firstValue(HttpHeaders.CONTENT_TYPE).orElse(null);
+    return Optional.of(new KeyValueStoreRecord(key, resp.body(), contentType));
   }
 
   /** Stores a record with raw bytes and the given content type. */

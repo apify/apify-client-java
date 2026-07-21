@@ -65,6 +65,17 @@ class TaskIntegrationTest extends IntegrationBase {
       tc.update(Map.of("name", uniqueName("task-renamed")));
       tc.runs().list(new ListOptions(), new RunListOptions());
 
+      // list() step of the create/get/modify/list/delete flow: verify the just-created task
+      // appears in the top-level collection listing.
+      boolean foundInList =
+          pollUntil(
+              LIST_FIND_ATTEMPTS,
+              LIST_FIND_BACKOFF_MILLIS,
+              () ->
+                  client.tasks().list(new ListOptions().desc(true).limit(10L)).getItems().stream()
+                      .anyMatch(t -> task.getId().equals(t.getId())));
+      assertTrue(foundInList, "expected the just-created task to appear in the top-level list");
+
       // Typed getters (previously only reachable via getExtra()): verify the API's response
       // actually deserializes into them, not just that the code compiles.
       assertEquals("Integration test task", task.getDescription());

@@ -65,6 +65,22 @@ class RequestQueueIntegrationTest extends IntegrationBase {
       assertTrue(!queue.listHead(10L).getItems().isEmpty());
       queue.update(Map.of("name", uniqueName("rq-renamed")));
       queue.deleteRequest(info.getRequestId());
+
+      // list() step of the create/get/modify/list/delete flow: verify the just-created request
+      // queue appears in the top-level collection listing.
+      boolean foundInList =
+          pollUntil(
+              LIST_FIND_ATTEMPTS,
+              LIST_FIND_BACKOFF_MILLIS,
+              () ->
+                  client
+                      .requestQueues()
+                      .list(new StorageListOptions().desc(true).limit(10L))
+                      .getItems()
+                      .stream()
+                      .anyMatch(q -> rq.getId().equals(q.getId())));
+      assertTrue(
+          foundInList, "expected the just-created request queue to appear in the top-level list");
     } finally {
       client.requestQueue(rq.getId()).delete();
     }

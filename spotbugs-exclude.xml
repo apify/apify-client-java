@@ -25,11 +25,13 @@
      deserializer via reflection, which SpotBugs cannot see - a known false positive for
      data-binding models.
 
-  Note: {@code ApiResponse}'s {@code body} field intentionally holds the raw response bytes
-  without a defensive copy (the payload can be large, e.g. dataset exports, so copying it on every
-  access would be wasteful). It has no entry in this filter: per this file's own rule of dropping
-  exclusions that no longer reproduce anything, {@code ApiResponse} is not currently flagged by
-  SpotBugs for this field, even though the no-copy contract itself is deliberate and unchanged.
+  3. EI_EXPOSE_REP / EI_EXPOSE_REP2 on {@code ApiResponse} and {@code HttpClientCore$Compressed}'s
+     {@code body} component: both are {@code record}s whose {@code byte[] body} intentionally holds
+     the raw payload without a defensive copy (the payload can be large, e.g. dataset exports, so
+     copying it on every construction/access would be wasteful). A plain field of the same shape is
+     not flagged (SpotBugs' constructor/getter analysis does not trace a raw public field the way it
+     traces a record's synthesized accessor and canonical constructor), so this pair of exclusions is
+     specific to the record form.
 -->
 <FindBugsFilter>
   <Match>
@@ -61,5 +63,15 @@
   <Match>
     <Class name="com.apify.client.internal.HttpClientCore$ErrorBody"/>
     <Bug pattern="UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD"/>
+  </Match>
+  <Match>
+    <Or>
+      <Class name="com.apify.client.http.ApiResponse"/>
+      <Class name="com.apify.client.internal.HttpClientCore$Compressed"/>
+    </Or>
+    <Or>
+      <Bug pattern="EI_EXPOSE_REP"/>
+      <Bug pattern="EI_EXPOSE_REP2"/>
+    </Or>
   </Match>
 </FindBugsFilter>

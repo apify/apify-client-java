@@ -49,7 +49,7 @@ Actor created = client.actors().create(Map.of(
 | `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Returns `ActorRun`. |
 | `call(Object input, ActorStartOptions, Long waitSecs)` | Start a run and poll until it finishes (`null` waits indefinitely); does **not** stream the run's log. Returns `ActorRun`. |
 | `call(Object input, ActorCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default (matching the reference client's `call` defaulting `options.log` to `'default'`). Use `ActorCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
-| `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Returns `boolean`. `ValidateInputOptions` fields (optional): `build`, `contentType`. |
+| `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Returns `boolean`. `ValidateInputOptions` fields (optional): `build` (`String`), `contentType` (`String`). |
 | `build(String versionNumber, ActorBuildOptions)` | Build a version. Returns `Build`. |
 | `defaultBuild(Long waitForFinish)` | Resolve the default build. Returns `BuildClient`. |
 | `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run. |

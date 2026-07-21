@@ -171,7 +171,7 @@ public final class StreamedLog implements AutoCloseable {
   private void streamLog() {
     // Bytes after the last newline: an incomplete trailing line kept for the next read so a message
     // split across chunk boundaries (including a partial UTF-8 sequence) is not corrupted. Declared
-    // outside the try so the final flush in finally can still emit it (see below).
+    // outside the try so the `finally` block below can still emit it during the final flush.
     byte[] lineRemainder = new byte[0];
     // Decoded log text seen so far but not yet split into complete messages. Local to this reader
     // (not a shared field) so that if a start() ever races a still-draining reader, the two readers

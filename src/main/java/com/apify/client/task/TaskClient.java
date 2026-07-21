@@ -99,7 +99,7 @@ public final class TaskClient {
     if (resp == null) {
       return Optional.empty();
     }
-    return Optional.of(Json.parse(resp.body, JsonNode.class));
+    return Optional.of(Json.parse(resp.body(), JsonNode.class));
   }
 
   /** Replaces the task's stored input and returns the updated input. */

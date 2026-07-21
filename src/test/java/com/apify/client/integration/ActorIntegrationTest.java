@@ -78,6 +78,21 @@ class ActorIntegrationTest extends IntegrationBase {
       assertEquals("Updated Title", updated.getTitle());
       actor.builds().list(new ListOptions());
       actor.versions().list(new ListOptions());
+
+      // list() step of the create/get/modify/list/delete flow: verify the just-created Actor
+      // appears in the top-level collection listing.
+      boolean foundInList =
+          pollUntil(
+              LIST_FIND_ATTEMPTS,
+              LIST_FIND_BACKOFF_MILLIS,
+              () ->
+                  client
+                      .actors()
+                      .list(new ActorListOptions().my(true).desc(true).limit(10L))
+                      .getItems()
+                      .stream()
+                      .anyMatch(a -> created.getId().equals(a.getId())));
+      assertTrue(foundInList, "expected the just-created Actor to appear in the top-level list");
     } finally {
       client.actor(created.getId()).delete();
     }

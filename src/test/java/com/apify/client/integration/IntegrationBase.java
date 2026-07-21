@@ -46,6 +46,19 @@ public abstract class IntegrationBase {
   static final int STREAM_CATCH_UP_ATTEMPTS =
       (int) (STREAM_CATCH_UP_TIMEOUT_MILLIS / STREAM_CATCH_UP_POLL_MILLIS);
 
+  /**
+   * {@link #pollUntil} attempt count bounding how long a CRUD-flow test waits for a just-created
+   * resource to surface in its own top-level collection {@code list()} (a write and the LIST
+   * endpoint's index can converge asynchronously - the same class of eventual-consistency race as
+   * {@link #STREAM_CATCH_UP_ATTEMPTS} and {@code ActorRunIntegrationTest#RUN_LIST_FIND_ATTEMPTS},
+   * just with a shorter budget since these are exclusively-owned resources, not entries in a
+   * heavily-shared public collection).
+   */
+  static final int LIST_FIND_ATTEMPTS = 5;
+
+  /** Poll interval used while waiting out {@link #LIST_FIND_ATTEMPTS}. */
+  static final long LIST_FIND_BACKOFF_MILLIS = 500L;
+
   private static final SecureRandom RANDOM = new SecureRandom();
 
   /**

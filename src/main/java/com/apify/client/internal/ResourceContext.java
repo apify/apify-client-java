@@ -180,7 +180,7 @@ public final class ResourceContext {
   public <T> T getResourceRequired(String subPath, QueryParams params, JavaType dataType) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp = http.call("GET", u, null, "", http.baseRequestTimeout());
-    return Json.parseData(resp.body, dataType);
+    return Json.parseData(resp.body(), dataType);
   }
 
   public <T> T getResourceRequired(String subPath, QueryParams params, Class<T> dataClass) {
@@ -191,7 +191,7 @@ public final class ResourceContext {
     String u = mergedParams(new QueryParams()).applyToUrl(subUrl(subPath));
     ApiResponse resp =
         http.call("PUT", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout());
-    return Json.parseData(resp.body, dataClass);
+    return Json.parseData(resp.body(), dataClass);
   }
 
   /** Performs a DELETE; a not-found is treated as a successful no-op. */
@@ -244,7 +244,7 @@ public final class ResourceContext {
     String u = mergedParams(params).applyToUrl(subUrl(""));
     ApiResponse resp =
         http.call("POST", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout());
-    return Json.parseData(resp.body, dataClass);
+    return Json.parseData(resp.body(), dataClass);
   }
 
   /** POST that gets-or-creates a named resource ({@code POST {collection}?name=...}). */
@@ -278,7 +278,7 @@ public final class ResourceContext {
     ApiResponse resp =
         http.call(
             "POST", u, bodyBytes, body == null ? "" : CONTENT_TYPE_JSON, http.baseRequestTimeout());
-    return Json.parseData(resp.body, dataClass);
+    return Json.parseData(resp.body(), dataClass);
   }
 
   /** POST with a raw body (optional) and content type, unwrapping the data envelope. */
@@ -291,7 +291,7 @@ public final class ResourceContext {
       String subPath, QueryParams params, byte[] body, String contentType, JavaType dataType) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp = http.call("POST", u, body, contentType, http.baseRequestTimeout());
-    return Json.parseData(resp.body, dataType);
+    return Json.parseData(resp.body(), dataType);
   }
 
   /**
@@ -303,7 +303,7 @@ public final class ResourceContext {
       String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp = http.call("POST", u, body, contentType, http.baseRequestTimeout());
-    return Json.parse(resp.body, dataClass);
+    return Json.parse(resp.body(), dataClass);
   }
 
   /** PUT with a raw body (optional) and content type, unwrapping the data envelope. */
@@ -311,7 +311,7 @@ public final class ResourceContext {
       String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp = http.call("PUT", u, body, contentType, http.baseRequestTimeout());
-    return Json.parseData(resp.body, dataClass);
+    return Json.parseData(resp.body(), dataClass);
   }
 
   /**
@@ -323,7 +323,7 @@ public final class ResourceContext {
       String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp = http.call("PUT", u, body, contentType, http.baseRequestTimeout());
-    return Json.parse(resp.body, dataClass);
+    return Json.parse(resp.body(), dataClass);
   }
 
   /** DELETE with a JSON body (used for batch request deletion), unwrapping the data envelope. */
@@ -331,7 +331,7 @@ public final class ResourceContext {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     ApiResponse resp =
         http.call("DELETE", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout());
-    return Json.parseData(resp.body, dataClass);
+    return Json.parseData(resp.body(), dataClass);
   }
 
   /** GET returning the raw response (no data envelope). Returns {@code null} on not-found. */

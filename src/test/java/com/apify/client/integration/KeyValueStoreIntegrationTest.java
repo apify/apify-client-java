@@ -76,6 +76,22 @@ class KeyValueStoreIntegrationTest extends IntegrationBase {
       assertTrue(!keys.getItems().isEmpty());
       kvs.update(Map.of("name", uniqueName("kvs-renamed")));
       kvs.deleteRecord("OUTPUT");
+
+      // list() step of the create/get/modify/list/delete flow: verify the just-created key-value
+      // store appears in the top-level collection listing.
+      boolean foundInList =
+          pollUntil(
+              LIST_FIND_ATTEMPTS,
+              LIST_FIND_BACKOFF_MILLIS,
+              () ->
+                  client
+                      .keyValueStores()
+                      .list(new StorageListOptions().desc(true).limit(10L))
+                      .getItems()
+                      .stream()
+                      .anyMatch(s -> store.getId().equals(s.getId())));
+      assertTrue(
+          foundInList, "expected the just-created key-value store to appear in the top-level list");
     } finally {
       client.keyValueStore(store.getId()).delete();
     }

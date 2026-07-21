@@ -59,16 +59,9 @@ public final class PaginationList<T> {
     return items == null ? List.of() : Collections.unmodifiableList(items);
   }
 
-  // Setters used by the collection-listing and dataset-items paths, which build a page from a
-  // parsed response (or, for dataset items, from response headers) one field at a time. These stay
-  // public rather than package-private: DatasetClient (com.apify.client.dataset, the only caller
-  // outside Jackson's own field-based deserialization) builds a page's metadata one header at a
-  // time in listItems/downloadItems, and Java has no cross-package "friend" visibility - narrowing
-  // this without a public setter would mean either moving that header-parsing logic into this
-  // (root) package, which is a bigger surgery than this getter surface warrants, or introducing a
-  // module-info split purely for this one class. Left as-is; a caller holding a page can mutate it
-  // after the fact, which is a real but minor and pre-existing encapsulation gap, not a correctness
-  // bug (this client never re-reads a page after constructing it).
+  // Public (not package-private) because DatasetClient, in a different package, builds a page's
+  // metadata from response headers one field at a time and Java has no cross-package visibility
+  // between "public" and "package-private".
   public void setTotal(long total) {
     this.total = total;
   }
