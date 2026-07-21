@@ -40,8 +40,9 @@ public final class RunStartSupport {
   }
 
   /**
-   * Starts a run and waits (client-side polling) for it to finish, without log streaming. {@code
-   * waitSecs} bounds the wait; {@code null} waits indefinitely.
+   * Starts a run and waits (client-side polling) for it to finish, without log streaming.
+   *
+   * @param waitSecs bounds the wait; {@code null} waits indefinitely
    */
   public static ActorRun call(
       ApifyClient root,
@@ -60,6 +61,13 @@ public final class RunStartSupport {
    * options.log} to {@code 'default'}. Log streaming is best-effort: if starting it fails (e.g. the
    * log is not yet available), the run still starts and is still waited for, just without
    * redirected log output.
+   *
+   * @param applyParams applies every start-option query parameter the caller's call-options type
+   *     configures (delegated from its paired start-options type)
+   * @param contentType the input body's content type
+   * @param logStreamingEnabled whether to stream the log for the duration of the wait
+   * @param logOptions a custom log-streaming destination, or {@code null} for the default
+   * @param waitSecs bounds the wait; {@code null} waits indefinitely
    */
   public static ActorRun callWithLogStreaming(
       ApifyClient root,

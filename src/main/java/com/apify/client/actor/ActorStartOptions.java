@@ -10,10 +10,8 @@ import java.util.List;
  * Configures starting an Actor run ({@link ActorClient#start}/{@link ActorClient#call}). All fields
  * are optional.
  *
- * <p>{@link #apply}/{@link #contentTypeOrDefault} are package-private: {@link ActorClient}/{@link
- * ActorCallOptions} (both in this package) read them directly and hand the results to {@code
- * com.apify.client.internal.RunStartSupport} as plain values/method references, so this internal
- * shape never needs to be public API.
+ * <p>{@link #apply}/{@link #contentTypeOrDefault} are package-private on purpose — see {@link
+ * com.apify.client.internal.RunStartSupport}'s class javadoc for why.
  */
 public final class ActorStartOptions {
   private String build;

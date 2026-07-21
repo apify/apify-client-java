@@ -19,9 +19,8 @@ import java.util.List;
  * destination.
  *
  * <p>{@link #toStartOptions}/{@link #logStreamingEnabledValue}/{@link #logOptionsValue} are
- * package-private: {@link ActorClient} (same package) reads them directly and hands the results to
- * {@code com.apify.client.internal.RunStartSupport} as plain values/method references, so this
- * internal shape never needs to be public API.
+ * package-private on purpose — see {@link com.apify.client.internal.RunStartSupport}'s class
+ * javadoc for why.
  */
 public final class ActorCallOptions {
 

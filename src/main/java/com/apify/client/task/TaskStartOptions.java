@@ -12,10 +12,8 @@ import java.util.List;
  * accept (the Actor-only {@code contentType} and {@code forcePermissionLevel}), matching the
  * reference client.
  *
- * <p>{@link #apply}/{@link #contentTypeOrDefault} are package-private: {@link TaskClient}/{@link
- * TaskCallOptions} (both in this package) read them directly and hand the results to {@code
- * com.apify.client.internal.RunStartSupport} as plain values/method references, so this internal
- * shape never needs to be public API.
+ * <p>{@link #apply}/{@link #contentTypeOrDefault} are package-private on purpose — see {@link
+ * com.apify.client.internal.RunStartSupport}'s class javadoc for why.
  */
 public final class TaskStartOptions {
   private String build;

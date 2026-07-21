@@ -136,7 +136,6 @@ public final class RequestQueueRequest extends ApifyResource {
     return handledAt;
   }
 
-  /** Sets when the request was marked as handled. */
   public RequestQueueRequest setHandledAt(Instant handledAt) {
     this.handledAt = handledAt;
     return this;
@@ -147,7 +146,6 @@ public final class RequestQueueRequest extends ApifyResource {
     return retryCount;
   }
 
-  /** Sets the number of times processing this request has already been retried. */
   public RequestQueueRequest setRetryCount(Integer retryCount) {
     this.retryCount = retryCount;
     return this;
@@ -158,7 +156,6 @@ public final class RequestQueueRequest extends ApifyResource {
     return loadedUrl;
   }
 
-  /** Sets the URL actually loaded, after following redirects. */
   public RequestQueueRequest setLoadedUrl(String loadedUrl) {
     this.loadedUrl = loadedUrl;
     return this;
