@@ -397,7 +397,7 @@ public final class HttpClientCore {
     String type = null;
     String message = null;
     Map<String, Object> data = null;
-    if (envelope != null && envelope.error != null && envelope.error.message != null) {
+    if (envelope != null && envelope.error != null) {
       type = envelope.error.type;
       message = envelope.error.message;
       data = envelope.error.data;

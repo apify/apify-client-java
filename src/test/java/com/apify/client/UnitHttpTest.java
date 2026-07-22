@@ -97,6 +97,34 @@ class UnitHttpTest {
   }
 
   @Test
+  void notFoundWithTypeButNoMessageMapsToEmpty() {
+    // The `type` field alone must drive not-found detection; `message` may be absent.
+    MockTransport transport =
+        MockTransport.ofConstant(404, "{\"error\":{\"type\":\"record-not-found\"}}");
+    Optional<Actor> actor = client(transport, 5).actor("nope").get();
+    assertFalse(actor.isPresent());
+    assertEquals(1, transport.calls); // no retry on 404
+  }
+
+  @Test
+  void deleteOnNotFoundWithTypeButNoMessageIsNoOp() {
+    MockTransport transport =
+        MockTransport.ofConstant(404, "{\"error\":{\"type\":\"record-or-token-not-found\"}}");
+    client(transport, 5).actor("nope").delete(); // must not throw
+    assertEquals(1, transport.calls);
+  }
+
+  @Test
+  void nonNotFoundErrorWithTypeButNoMessageStillThrowsWithType() {
+    MockTransport transport =
+        MockTransport.ofConstant(400, "{\"error\":{\"type\":\"bad-request\"}}");
+    ApifyApiException ex =
+        assertThrows(ApifyApiException.class, () -> client(transport, 0).me().get());
+    assertEquals(400, ex.getStatusCode());
+    assertEquals("bad-request", ex.getType());
+  }
+
+  @Test
   void errorBodyIsParsed() {
     MockTransport transport =
         MockTransport.ofConstant(
