@@ -51,11 +51,12 @@ ActorRun streamed = client.task("TASK_ID").call(null, new TaskCallOptions().memo
 `Task` fields: `getId()`, `getActId()`, `getUserId()`, `getName()`, `getTitle()`,
 `getDescription()`, `getCreatedAt()`, `getModifiedAt()`, `getStats()` (`TaskStats`, exposing
 `getTotalRuns()`), `getOptions()` (`TaskOptions`: the task's stored default run configuration —
-`getBuild()`, `getTimeoutSecs()`, `getMemoryMbytes()`, `getRestartOnError()`), `getInput()` (a
-`JsonNode` snapshot of the stored input, from whichever response last returned this `Task` object;
-prefer `TaskClient.getInput()` above to fetch it fresh on-demand), and `getActorStandby()`
-(`ActorStandby`, standby-mode configuration overrides for this task, if any). Any field not covered
-by a typed getter is still available via the inherited `getExtra()` (see
+`getBuild()` (`String`), `getTimeoutSecs()` (`Long`), `getMemoryMbytes()` (`Long`),
+`getRestartOnError()` (`Boolean`)), `getInput()` (a `JsonNode` snapshot of the stored input, from
+whichever response last returned this `Task` object; prefer `TaskClient.getInput()` above to fetch
+it fresh on-demand), and `getActorStandby()` (`ActorStandby`, from `com.apify.client.actor`,
+standby-mode configuration overrides for this task, if any). Any field not covered by a typed
+getter is still available via the inherited `getExtra()` (see
 [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
 
 `ActorStandby` fields (all optional; `null` when unset): `getBuild()` (tag/number of the build

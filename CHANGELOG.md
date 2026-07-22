@@ -53,8 +53,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Extracted a shared `RunStartSupport` helper (internal) backing `ActorClient`/`TaskClient`'s
   `start`/`call`, removing the duplicated implementation between the two. `ActorClient`/
   `TaskClient` pass their options' behavior in as plain values and method references (e.g.
-  `options::apply`), so `ActorStartOptions`/`TaskStartOptions`/`ActorCallOptions`/`TaskCallOptions`
-  stay package-private with no public marker interface; behavior is unchanged.
+  `options::apply`), so `ActorStartOptions`/`TaskStartOptions`/`ActorCallOptions`/`TaskCallOptions`'s
+  internal `apply`/`contentTypeOrDefault` accessors stay package-private with no public marker
+  interface needed; the options classes themselves remain public. Behavior is unchanged.
 - Tightened `spotbugs-exclude.xml` to only the entries that currently reproduce a real finding.
 - `java-integration-tests.yml` now declares an explicit, least-privilege `permissions: contents:
   read` block.
@@ -70,8 +71,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unchanged. `HttpClientCore.Compressed` (internal, non-exported) is likewise now a record.
 - `StoreCollectionClient` and `WebhookDispatchCollectionClient` now extend
   `AbstractCollectionClient<T, O>` instead of hand-rolling `list`/`iterate` (`StoreListOptions` now
-  implements `ListOptionsLike`), closing the two collection clients the loop-3 extraction missed;
-  behavior is unchanged.
+  implements `ListOptionsLike`); behavior is unchanged.
 - `RunClient.metamorph` now normalizes `targetActorId` via the same `username~actorName` safe-id
   form as every other Actor-id-accepting call, instead of sending it raw.
 
@@ -122,8 +122,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `PaginationList.setItems` now defensively copies its input.
 - `ApifyClient`'s class javadoc no longer duplicates the "official, but experimental" disclaimer;
   it appears only once, in the top-level README, as required.
-- `ApifyClientBuilder.timeout(Duration)` now rejects `Duration.ZERO`/a negative duration at build
-  time instead of building a client whose first request fails deep inside the transport.
+- `ApifyClientBuilder.timeout(Duration)` now rejects `Duration.ZERO`/a negative duration from the
+  setter itself, at call time, instead of building a client whose first request fails deep inside
+  the transport.
 - `RequestQueueRequest.getUserData()`/`setUserData()` now defensively deep-copy the `JsonNode`,
   matching `getHeaders()`/`getErrorMessages()`, so external mutation of the passed-in/returned value
   can no longer corrupt the request's stored state.

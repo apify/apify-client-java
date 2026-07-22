@@ -126,6 +126,13 @@ each retry attempt's per-request (socket) timeout grows toward — not a wall-cl
 cumulative time across all retries; the connection-establishment timeout is a separate,
 transport-level setting (see `DefaultHttpTransport`'s constructors below).
 
+`publicBaseUrl` does not affect ordinary API requests (those always use `baseUrl`); it only changes
+the origin embedded in the handful of public, directly-fetchable URLs the client builds without a
+request — `DatasetClient.createItemsPublicUrl(...)` and `KeyValueStoreClient.getRecordPublicUrl(...)`/
+`createKeysPublicUrl(...)` (see [Storages](docs/storages.md)). Set it when the API is reached
+through one origin (e.g. an internal proxy) but those public URLs must point at a different,
+externally-reachable one.
+
 ### Replaceable HTTP transport
 
 The transport is a replaceable component. The default is `DefaultHttpTransport` (backed by the JDK's
@@ -153,7 +160,9 @@ exponential backoff and jitter on `429`, `5xx` and network errors.
 
 #### `HttpTransport` contract
 
-A custom implementation (`com.apify.client.http.HttpTransport`) must provide both methods:
+A custom implementation (`com.apify.client.http.HttpTransport`) must provide both methods.
+`HttpRequest` and `HttpResponse<T>` below are the JDK's `java.net.http.HttpRequest`/
+`java.net.http.HttpResponse<T>` (not custom client types) — same as `Duration` above:
 
 | Method | Signature | Contract |
 |---|---|---|

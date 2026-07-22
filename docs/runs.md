@@ -149,5 +149,5 @@ client.run("RUN_ID").charge(new RunChargeOptions("my-event").count(3L));
 ```
 
 `MetamorphOptions` uses plain values `build(String)` and `contentType(String)`.
-`RunResurrectOptions` fields: `build`, `memoryMbytes`, `timeoutSecs`, `maxItems`,
-`maxTotalChargeUsd`, `restartOnError`.
+`RunResurrectOptions` fields: `build(String)`, `memoryMbytes(Long)`, `timeoutSecs(Long)`,
+`maxItems(Long)`, `maxTotalChargeUsd(Double)`, `restartOnError(Boolean)`.

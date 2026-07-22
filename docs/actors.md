@@ -57,13 +57,14 @@ Actor created = client.actors().create(Map.of(
 | `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, `list` + `iterate`, no `create`). |
 | `version(String)` | An `ActorVersionClient`. |
 
-`ActorStartOptions` fields (all optional): `build` (the tag or number of the build to run, e.g.
-`latest`, `0.1.2`), `memoryMbytes` (memory in megabytes allocated for the run), `timeoutSecs` (run
-timeout in seconds; `0` means no timeout), `waitForFinish` (maximum seconds to wait server-side for
-the run to finish, max 60), `maxItems` (maximum dataset items to charge, pay-per-result Actors),
-`maxTotalChargeUsd` (maximum total charge in USD, pay-per-event Actors), `contentType` (content type
-of the input body, defaults to `application/json`), `restartOnError` (restart the run if it fails),
-`forcePermissionLevel` (override the Actor's permission level for this run:
+`ActorStartOptions` fields (all optional): `build(String)` (the tag or number of the build to run,
+e.g. `latest`, `0.1.2`), `memoryMbytes(Long)` (memory in megabytes allocated for the run),
+`timeoutSecs(Long)` (run timeout in seconds; `0` means no timeout), `waitForFinish(Long)` (maximum
+seconds to wait server-side for the run to finish, max 60), `maxItems(Long)` (maximum dataset items
+to charge, pay-per-result Actors), `maxTotalChargeUsd(Double)` (maximum total charge in USD,
+pay-per-event Actors), `contentType(String)` (content type of the input body, defaults to
+`application/json`), `restartOnError(Boolean)` (restart the run if it fails),
+`forcePermissionLevel(String)` (override the Actor's permission level for this run:
 `LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), and `webhooks(List<Object>)` — ad-hoc webhook definitions
 (each a JSON-serializable `Map`, as in [Webhooks](webhooks.md)) that the client base64-encodes on the
 wire.
@@ -99,8 +100,9 @@ System.out.println(run.getStatus());
 (`ActorDefaultRunOptions` — `getBuild()`, `getTimeoutSecs()`/`getMemoryMbytes()` as `Long`,
 `getRestartOnError()` as `Boolean`), `getTaggedBuilds()` (`JsonNode`; dynamic tag-name keys),
 `getIsDeprecated()` (`Boolean`), `getDeploymentKey()`, `getSeoTitle()`, `getSeoDescription()`,
-`getCategories()` (`List<String>`), `getActorStandby()` (`ActorStandby`, nullable — see
-[Tasks](tasks.md) for its field list; only on `Actor` does it additionally expose
+`getCategories()` (`List<String>`), `getActorStandby()` (`ActorStandby`, from
+`com.apify.client.actor`, nullable — see [Tasks](tasks.md) for its field list; only on `Actor` does
+it additionally expose
 `getIsEnabled()`), `getActorPermissionLevel()` (e.g. `"OWNER"`), plus `getExtra()` for any
 unmodelled fields.
 
