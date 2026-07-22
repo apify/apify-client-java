@@ -1,6 +1,5 @@
 package com.apify.client;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Collections;
 import java.util.List;
 
@@ -15,8 +14,7 @@ import java.util.List;
  *
  * @param <T> the item type
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class PaginationList<T> {
+public final class PaginationList<T> extends ApifyResource {
 
   private long total;
   private long offset;

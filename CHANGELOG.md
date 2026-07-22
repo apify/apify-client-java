@@ -96,6 +96,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `actorStandby`), `ActorRun` (`generalAccess`, `chargedEventCounts`, `pricingInfo`, `usage`,
   `usageUsd`, `stats`, `options`, `meta`, `usageTotalUsd`, `buildNumber`, `exitCode`,
   `isContainerServerReady`, `gitBranchName`, `storageIds`).
+- `ActorRunStats.getMigrationCount()`/`getRebootCount()`, `ActorRunMeta.getScheduleId()`/
+  `getScheduledAt()`, `BuildStats.getImageSizeBytes()`.
 - Further typed getters resolving the remaining thin-DTO gaps against the JS reference client:
   `WebhookDispatch` (`status`, `eventType`, `userId`, `createdAt`, `calls`, `webhook`, `eventData`);
   `Actor` (`actorStandby`, `stats`, `versions`, `pricingInfos`, `defaultRunOptions`, `taggedBuilds`,
@@ -158,6 +160,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `NullPointerException` deep inside the method.
 - `RunClient`'s default log-redirection prefix now uses the run's resolved real id instead of the
   client's own `id` field, which is the literal string `"last"` for a `runs/last`-scoped client.
+- Every nested value DTO (`ActorRunStats`, `ActorRunMeta`, `ActorRunUsage`, `ActorRunOptions`,
+  `BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage`, `ActorStandby`, `ActorStats`,
+  `ActorDefaultRunOptions`, `TaskStats`, `TaskOptions`, `ScheduleNotifications`, `WebhookStats`,
+  `WebhookLastDispatch`, `WebhookDispatchCall`, `WebhookDispatchWebhookInfo`,
+  `WebhookDispatchEventData`, `UserProfile`, `UserProxy`, `UserPlan`, `ProxyGroup`, `PricingInfo`,
+  `PaginationList`, `BatchAddResult`, `BatchDeleteResult`, `DeletedRequestInfo`, `RequestLockInfo`,
+  `RequestQueueOperationInfo`, `RequestsList`, `UnlockRequestsResult`, `KeyValueStoreKeysPage`) now
+  extends `ApifyResource`, so any field the API returns without a matching typed getter is
+  reachable via `getExtra()` instead of being silently discarded.
 
 ### Documentation
 
@@ -192,7 +203,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Documented `ActorStandby`'s fields in `docs/tasks.md`, added the standard `getExtra()` note to
   `WebhookDispatch` (`docs/webhooks.md`) and `ActorStoreListItem` (`docs/misc.md`), added a
   `ListKeysOptions` field list to `docs/storages.md`, and made `ActorRunStats`'s field list in
-  `docs/runs.md` exhaustive while noting it has no `getExtra()` fallback. Reworded `ApiResponse`'s
+  `docs/runs.md` exhaustive. Reworded `ApiResponse`'s
   javadoc (it is a plain public data carrier used across resource clients, not internal plumbing)
   and corrected `spotbugs-exclude.xml`'s header to accurately explain why its former `ApiResponse`
   EI_EXPOSE exclusion stopped reproducing (the no-copy contract never changed; the tool simply
@@ -206,6 +217,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   custom-transport implementer must satisfy). Trimmed `PaginationList`'s ~10-line public-setter
   justification comment to two sentences and made `StreamedLog`'s internal `(see below)` comment
   reference the `finally` block explicitly.
+- `docs/runs.md`/`docs/builds.md` field lists updated for `ActorRunStats.getMigrationCount()`/
+  `getRebootCount()`, `ActorRunMeta.getScheduleId()`/`getScheduledAt()`, and
+  `BuildStats.getImageSizeBytes()`; `docs/README.md`'s "What `ApifyResource` is" / "Model fields and
+  unmodeled data" sections now state that nested value DTOs, not only top-level resources, extend
+  `ApifyResource` and expose `getExtra()`.
 - Added a `list()` step to the Actor/Dataset/RequestQueue/KeyValueStore/Webhook/Task CRUD-flow
   integration tests, verifying the just-created resource's id appears in its top-level collection
   listing (polled for eventual consistency via a new shared `IntegrationBase.LIST_FIND_ATTEMPTS`/

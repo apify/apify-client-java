@@ -1,11 +1,10 @@
 package com.apify.client.actor;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import java.time.Instant;
 
 /** Usage and activity statistics for an {@link Actor}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class ActorStats {
+public final class ActorStats extends ApifyResource {
   private Long totalBuilds;
   private Long totalRuns;
   private Long totalUsers;

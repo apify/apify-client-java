@@ -25,11 +25,13 @@ builds) and a single build with `client.build(id)`.
 `Build` fields: `getId()`, `getActId()`, `getUserId()`, `getStatus()`, `getStartedAt()`,
 `getFinishedAt()`, `getBuildNumber()`, `getMeta()` (`BuildMeta` — `getOrigin()`, `getClientIp()`,
 `getUserAgent()`), `getStats()` (`BuildStats` — `getDurationMillis()`/`getRunTimeSecs()` as `Long`,
-`getComputeUnits()` as `Double`), `getOptions()` (`BuildOptions` — `getUseCache()`/
-`getBetaPackages()` as `Boolean`, `getMemoryMbytes()`/`getDiskMbytes()` as `Long`), `getUsage()` /
-`getUsageUsd()` (`BuildUsage` — `getActorComputeUnits()` as `Double`, the latter as its USD cost),
-`getUsageTotalUsd()` (`Double`), plus `isTerminal()` and `getExtra()`. The status is one of
-`READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`, `ABORTING`, `ABORTED`.
+`getComputeUnits()` as `Double`, `getImageSizeBytes()` as `Long`), `getOptions()` (`BuildOptions` —
+`getUseCache()`/`getBetaPackages()` as `Boolean`, `getMemoryMbytes()`/`getDiskMbytes()` as `Long`),
+`getUsage()` / `getUsageUsd()` (`BuildUsage` — `getActorComputeUnits()` as `Double`, the latter as
+its USD cost), `getUsageTotalUsd()` (`Double`), plus `isTerminal()` and `getExtra()`. The status is
+one of `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`, `ABORTING`, `ABORTED`.
+Every nested model above (`BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage`) also has its own
+`getExtra()`, so a field not yet listed here is still reachable rather than dropped.
 
 ```java
 Build build = client.actor("me/my-actor").build("0.0", new ActorBuildOptions().tag("latest"));

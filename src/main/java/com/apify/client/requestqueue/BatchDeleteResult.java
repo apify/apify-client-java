@@ -1,12 +1,11 @@
 package com.apify.client.requestqueue;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import java.util.Collections;
 import java.util.List;
 
 /** The result of {@link RequestQueueClient#batchDeleteRequests}: deleted and failed requests. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class BatchDeleteResult {
+public final class BatchDeleteResult extends ApifyResource {
   private List<DeletedRequestInfo> processedRequests = List.of();
   private List<RequestQueueRequest> unprocessedRequests = List.of();
 

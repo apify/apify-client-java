@@ -1,10 +1,9 @@
 package com.apify.client.user;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** A group of proxies available to a {@link User}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class ProxyGroup {
+public final class ProxyGroup extends ApifyResource {
   private String name;
   private String description;
   private Long availableCount;

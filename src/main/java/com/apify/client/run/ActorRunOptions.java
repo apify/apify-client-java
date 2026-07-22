@@ -1,14 +1,13 @@
 package com.apify.client.run;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /**
  * The configuration options actually applied to an {@link ActorRun} (as opposed to {@link
  * com.apify.client.actor.ActorStartOptions}, which is what a caller requested and may differ, e.g.
  * when a requested value falls back to a task/Actor default).
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class ActorRunOptions {
+public final class ActorRunOptions extends ApifyResource {
   private String build;
   private Long timeoutSecs;
   private Long memoryMbytes;

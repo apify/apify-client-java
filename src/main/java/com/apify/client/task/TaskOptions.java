@@ -1,10 +1,9 @@
 package com.apify.client.task;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** The stored run configuration of a {@link Task} (the defaults applied when it is started). */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class TaskOptions {
+public final class TaskOptions extends ApifyResource {
   private String build;
   private Long timeoutSecs;
   private Long memoryMbytes;

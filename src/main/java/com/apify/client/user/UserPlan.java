@@ -1,13 +1,12 @@
 package com.apify.client.user;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Collections;
 import java.util.List;
 
 /** A {@link User}'s subscription plan and its associated limits. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class UserPlan {
+public final class UserPlan extends ApifyResource {
   private String id;
   private String description;
   private Boolean isEnabled;

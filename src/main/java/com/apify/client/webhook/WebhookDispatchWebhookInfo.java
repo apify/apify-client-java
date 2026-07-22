@@ -1,13 +1,12 @@
 package com.apify.client.webhook;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /**
  * A summary of the {@link Webhook} that produced a {@link WebhookDispatch} (only the subset of
  * fields the API includes alongside a dispatch, not the full webhook object).
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class WebhookDispatchWebhookInfo {
+public final class WebhookDispatchWebhookInfo extends ApifyResource {
   private String requestUrl;
   private boolean isAdHoc;
 

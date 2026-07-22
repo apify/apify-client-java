@@ -32,6 +32,20 @@
      not flagged (SpotBugs' constructor/getter analysis does not trace a raw public field the way it
      traces a record's synthesized accessor and canonical constructor), so this pair of exclusions is
      specific to the record form.
+
+  4. EI_EXPOSE_REP on the specific getters listed below, each returning a field whose type was just
+     changed (this PR) to extend the shared {@code ApifyResource} forward-compatibility base (an
+     {@code extra} catch-all map + package-private {@code @JsonAnySetter}), so unmodelled API fields
+     on nested value DTOs are preserved instead of silently dropped. That base class is not {@code
+     final} and holds a mutable {@code LinkedHashMap} field, which flips SpotBugs' mutability
+     heuristic for every subtype from "no public mutator -> immutable-enough, don't flag" to
+     "mutable -> flag every getter that returns one as a field of another class" - even though
+     nothing about this actually changed: {@code putExtra} stays package-private, {@code
+     getExtra()} still returns an unmodifiable view, and there is still no public way to mutate a
+     returned instance. Defensively copying on every getter call would require deep-cloning the
+     {@code extra} map each time, which is wasted work for a map that is (by construction) never
+     mutated after deserialization, so copying is not the fix here - the false positive is. Listed
+     per getter (not per class) to keep the exclusion exactly as narrow as the finding it suppresses.
 -->
 <FindBugsFilter>
   <Match>
@@ -73,5 +87,83 @@
       <Bug pattern="EI_EXPOSE_REP"/>
       <Bug pattern="EI_EXPOSE_REP2"/>
     </Or>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.actor.Actor"/>
+    <Or>
+      <Method name="getActorStandby"/>
+      <Method name="getDefaultRunOptions"/>
+      <Method name="getStats"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.build.Build"/>
+    <Or>
+      <Method name="getMeta"/>
+      <Method name="getOptions"/>
+      <Method name="getStats"/>
+      <Method name="getUsage"/>
+      <Method name="getUsageUsd"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.run.ActorRun"/>
+    <Or>
+      <Method name="getMeta"/>
+      <Method name="getOptions"/>
+      <Method name="getStats"/>
+      <Method name="getUsage"/>
+      <Method name="getUsageUsd"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.schedule.Schedule"/>
+    <Method name="getNotifications"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.store.ActorStoreListItem"/>
+    <Or>
+      <Method name="getCurrentPricingInfo"/>
+      <Method name="getStats"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.task.Task"/>
+    <Or>
+      <Method name="getActorStandby"/>
+      <Method name="getOptions"/>
+      <Method name="getStats"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.user.User"/>
+    <Or>
+      <Method name="getPlan"/>
+      <Method name="getProfile"/>
+      <Method name="getProxy"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.webhook.Webhook"/>
+    <Or>
+      <Method name="getLastDispatch"/>
+      <Method name="getStats"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.webhook.WebhookDispatch"/>
+    <Or>
+      <Method name="getEventData"/>
+      <Method name="getWebhook"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
   </Match>
 </FindBugsFilter>

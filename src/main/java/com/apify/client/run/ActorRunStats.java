@@ -1,11 +1,12 @@
 package com.apify.client.run;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** Runtime resource-consumption and performance metrics for an {@link ActorRun}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class ActorRunStats {
+public final class ActorRunStats extends ApifyResource {
   private long inputBodyLen;
+  private long migrationCount;
+  private long rebootCount;
   private long restartCount;
   private long resurrectCount;
   private double memAvgBytes;
@@ -24,6 +25,16 @@ public final class ActorRunStats {
   /** The byte length of the run's input body. */
   public long getInputBodyLen() {
     return inputBodyLen;
+  }
+
+  /** How many times the run's container was migrated to a different host. */
+  public long getMigrationCount() {
+    return migrationCount;
+  }
+
+  /** How many times the run's container was rebooted. */
+  public long getRebootCount() {
+    return rebootCount;
   }
 
   /** How many times the run was automatically restarted. */

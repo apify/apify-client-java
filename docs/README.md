@@ -92,19 +92,22 @@ than raw `JsonNode` — see [Storages](storages.md#request-queues).
 
 ## What `ApifyResource` is
 
-`ApifyResource` (root package) is the base class every response model extends (`Actor`, `Dataset`,
-`Schedule`, `ActorRun`, and so on). It has no fields of its own beyond the `extra` map described
-below; it exists purely so every model shares one place to capture unmodelled API fields, and so
-code that only needs the common capability (rare — most call sites use a concrete model type
+`ApifyResource` (root package) is the base class every response model extends — both the top-level
+resources (`Actor`, `Dataset`, `Schedule`, `ActorRun`, and so on) and the nested value DTOs embedded
+in them (`ActorRunStats`, `ActorRunMeta`, `BuildStats`, `WebhookStats`, `UserProfile`, `PricingInfo`,
+and every other nested model in this client). It has no fields of its own beyond the `extra` map
+described below; it exists purely so every model shares one place to capture unmodelled API fields,
+and so code that only needs the common capability (rare — most call sites use a concrete model type
 directly) can accept `ApifyResource` rather than a specific model.
 
 ## Model fields and unmodeled data (`getExtra`)
 
 Response models expose the commonly-used fields as typed getters. The API returns more fields than
-are modelled; every model also carries a `getExtra()` map (`Map<String, Object>`, inherited from
-`ApifyResource` above) holding any field not mapped to a typed getter, so nothing the API returns is
-lost. For example a `me()` `User`'s private account details (email, plan, proxy settings, …) are
-available via `getExtra()`, since `User` models only its most commonly used fields.
+are modelled; every model — including nested value DTOs, not only the top-level resources — also
+carries a `getExtra()` map (`Map<String, Object>`, inherited from `ApifyResource` above) holding any
+field not mapped to a typed getter, so nothing the API returns is lost, now or as the API grows new
+fields later. For example a `me()` `User`'s private account details (email, plan, proxy settings,
+…) are available via `getExtra()`, since `User` models only its most commonly used fields.
 
 ```java
 User me = client.me().get().orElseThrow();

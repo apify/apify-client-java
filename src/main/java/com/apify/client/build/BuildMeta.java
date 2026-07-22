@@ -1,10 +1,9 @@
 package com.apify.client.build;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** Metadata about how a {@link Build} was initiated. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class BuildMeta {
+public final class BuildMeta extends ApifyResource {
   private String origin;
   private String clientIp;
   private String userAgent;

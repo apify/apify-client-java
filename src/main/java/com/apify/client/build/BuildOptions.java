@@ -1,10 +1,9 @@
 package com.apify.client.build;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** The configuration options actually applied to a {@link Build}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class BuildOptions {
+public final class BuildOptions extends ApifyResource {
   private Boolean useCache;
   private Boolean betaPackages;
   private Long memoryMbytes;

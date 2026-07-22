@@ -1,13 +1,12 @@
 package com.apify.client.webhook;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /**
  * The event payload that triggered a {@link WebhookDispatch}. Fields not relevant to the triggering
  * event are {@code null}.
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class WebhookDispatchEventData {
+public final class WebhookDispatchEventData extends ApifyResource {
   private String actorRunId;
   private String actorId;
   private String actorTaskId;

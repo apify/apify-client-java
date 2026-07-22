@@ -1,6 +1,6 @@
 package com.apify.client.requestqueue;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import java.util.Collections;
 import java.util.List;
 
@@ -8,8 +8,7 @@ import java.util.List;
  * A page of requests returned by {@link RequestQueueClient#listRequests}, with cursor-based
  * pagination information.
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class RequestsList {
+public final class RequestsList extends ApifyResource {
   private List<RequestQueueRequest> items = List.of();
   private long limit;
 

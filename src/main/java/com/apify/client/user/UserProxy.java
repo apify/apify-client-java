@@ -1,12 +1,11 @@
 package com.apify.client.user;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import java.util.Collections;
 import java.util.List;
 
 /** A {@link User}'s Apify Proxy credentials and available proxy groups. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class UserProxy {
+public final class UserProxy extends ApifyResource {
   private String password;
   private List<ProxyGroup> groups = List.of();
 

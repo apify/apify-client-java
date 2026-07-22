@@ -1,10 +1,9 @@
 package com.apify.client.webhook;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** Usage statistics for a {@link Webhook}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class WebhookStats {
+public final class WebhookStats extends ApifyResource {
   private long totalDispatches;
 
   /** The total number of times this webhook has been dispatched. */

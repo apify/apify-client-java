@@ -1,12 +1,11 @@
 package com.apify.client.keyvalue;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import java.util.Collections;
 import java.util.List;
 
 /** A page of keys from a key-value store. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class KeyValueStoreKeysPage {
+public final class KeyValueStoreKeysPage extends ApifyResource {
   private long limit;
   private boolean isTruncated;
   private String exclusiveStartKey;

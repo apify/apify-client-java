@@ -1,13 +1,13 @@
 package com.apify.client.build;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** Runtime statistics for a {@link Build}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class BuildStats {
+public final class BuildStats extends ApifyResource {
   private Long durationMillis;
   private Long runTimeSecs;
   private Double computeUnits;
+  private Long imageSizeBytes;
 
   /** How long the build took, in milliseconds. */
   public Long getDurationMillis() {
@@ -22,5 +22,10 @@ public final class BuildStats {
   /** Compute units consumed by the build. */
   public Double getComputeUnits() {
     return computeUnits;
+  }
+
+  /** The size of the built Docker image, in bytes, if known. */
+  public Long getImageSizeBytes() {
+    return imageSizeBytes;
   }
 }

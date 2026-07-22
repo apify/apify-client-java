@@ -1,10 +1,9 @@
 package com.apify.client.store;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** A Store Actor's current pricing model summary. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class PricingInfo {
+public final class PricingInfo extends ApifyResource {
   private String pricingModel;
 
   /**

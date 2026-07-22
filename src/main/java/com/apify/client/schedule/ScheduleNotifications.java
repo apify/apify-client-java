@@ -1,10 +1,9 @@
 package com.apify.client.schedule;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** Notification settings for a {@link Schedule}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class ScheduleNotifications {
+public final class ScheduleNotifications extends ApifyResource {
   private boolean email;
 
   /** Whether the schedule owner is notified by email of run failures. */

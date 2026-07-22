@@ -1,10 +1,9 @@
 package com.apify.client.actor;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** Default configuration options applied to an {@link Actor}'s runs unless overridden. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class ActorDefaultRunOptions {
+public final class ActorDefaultRunOptions extends ApifyResource {
   private String build;
   private Long timeoutSecs;
   private Long memoryMbytes;

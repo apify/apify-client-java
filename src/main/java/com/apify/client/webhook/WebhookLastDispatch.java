@@ -1,11 +1,10 @@
 package com.apify.client.webhook;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import java.time.Instant;
 
 /** A summary of the most recent dispatch of a {@link Webhook}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class WebhookLastDispatch {
+public final class WebhookLastDispatch extends ApifyResource {
   private String status;
   private Instant finishedAt;
   private Instant removedAt;

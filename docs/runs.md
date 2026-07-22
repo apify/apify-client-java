@@ -111,16 +111,16 @@ pay-per-event Actors, `null` otherwise), `getPricingInfo()` (`JsonNode`; shape d
 Actor's pricing model), `getUsage()` / `getUsageUsd()` (`ActorRunUsage`; per-billable-unit resource
 consumption, the latter as its USD cost — see below), `getUsageTotalUsd()` (`Double`; the run's
 total cost in USD, combining platform usage and/or event costs depending on pricing model),
-`getStats()` (`ActorRunStats`; runtime metrics — `getInputBodyLen()`, `getRestartCount()`,
-`getResurrectCount()`, `getMemAvgBytes()`/`getMemMaxBytes()`/`getMemCurrentBytes()`,
+`getStats()` (`ActorRunStats`; runtime metrics — `getInputBodyLen()`, `getMigrationCount()`,
+`getRebootCount()`, `getRestartCount()`, `getResurrectCount()`,
+`getMemAvgBytes()`/`getMemMaxBytes()`/`getMemCurrentBytes()`,
 `getCpuAvgUsage()`/`getCpuMaxUsage()`/`getCpuCurrentUsage()`, `getNetRxBytes()`/`getNetTxBytes()`,
-`getDurationMillis()`, `getRunTimeSecs()`, `getMetamorph()`, `getComputeUnits()`; this list is
-exhaustive for the currently modelled fields, but `ActorRunStats` does not extend the common
-`ApifyResource` base and so has no `getExtra()` - an API field added later without a matching
-getter added here is silently dropped rather than surfaced), `getOptions()` (`ActorRunOptions`; the
-run configuration actually applied,
+`getDurationMillis()`, `getRunTimeSecs()`, `getMetamorph()`, `getComputeUnits()`; any other field is
+still reachable via the inherited `getExtra()`), `getOptions()` (`ActorRunOptions`; the run
+configuration actually applied,
 which may differ from what was requested — see below), `getMeta()` (`ActorRunMeta`; `getOrigin()`,
-`getClientIp()`, `getUserAgent()` — how the run was initiated), `getBuildNumber()` (`String`; the
+`getClientIp()`, `getUserAgent()`, `getScheduleId()`, `getScheduledAt()` — how and, if triggered by a
+schedule, when the run was initiated), `getBuildNumber()` (`String`; the
 build's semver-like number, e.g. `"0.0.36"`), `getExitCode()` (`Integer`; the process exit code once
 finished), `isContainerServerReady()` (`Boolean`; whether the container's HTTP server can accept
 requests), `getGitBranchName()` (`String`; the git branch the build was built from, if any), and

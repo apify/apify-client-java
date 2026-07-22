@@ -1,13 +1,12 @@
 package com.apify.client.requestqueue;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /** The result of {@link RequestQueueClient#batchAddRequests}: accepted and unprocessed requests. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class BatchAddResult {
+public final class BatchAddResult extends ApifyResource {
   private List<RequestQueueOperationInfo> processedRequests = new ArrayList<>();
   private List<RequestQueueRequest> unprocessedRequests = new ArrayList<>();
 

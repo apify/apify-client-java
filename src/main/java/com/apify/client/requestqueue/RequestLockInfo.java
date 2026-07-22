@@ -1,11 +1,10 @@
 package com.apify.client.requestqueue;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import java.time.Instant;
 
 /** Returned by {@link RequestQueueClient#prolongRequestLock}: the request's new lock expiry. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class RequestLockInfo {
+public final class RequestLockInfo extends ApifyResource {
   private Instant lockExpiresAt;
 
   /** When the (extended) lock on the request expires. */

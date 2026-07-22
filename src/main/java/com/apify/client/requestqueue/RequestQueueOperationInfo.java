@@ -1,10 +1,9 @@
 package com.apify.client.requestqueue;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** Returned when adding or updating a request in a queue. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class RequestQueueOperationInfo {
+public final class RequestQueueOperationInfo extends ApifyResource {
   private String requestId;
   private String uniqueKey;
   private boolean wasAlreadyPresent;

@@ -1,6 +1,6 @@
 package com.apify.client.run;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -11,8 +11,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * "ACTOR_COMPUTE_UNITS"}); each field is mapped to its idiomatic camelCase Java name via
  * {@code @JsonProperty}.
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class ActorRunUsage {
+public final class ActorRunUsage extends ApifyResource {
   @JsonProperty("ACTOR_COMPUTE_UNITS")
   private Double actorComputeUnits;
 

@@ -1,14 +1,13 @@
 package com.apify.client.requestqueue;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /**
  * Confirmation that a request was successfully deleted by {@link
  * RequestQueueClient#batchDeleteRequests}, identified by whichever of {@code id}/{@code uniqueKey}
  * the API returned.
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class DeletedRequestInfo {
+public final class DeletedRequestInfo extends ApifyResource {
   private String id;
   private String uniqueKey;
 

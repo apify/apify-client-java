@@ -1,10 +1,9 @@
 package com.apify.client.actor;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** Standby-mode configuration for an Actor, or for a task that overrides its Actor's defaults. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class ActorStandby {
+public final class ActorStandby extends ApifyResource {
   private Boolean isEnabled;
   private String build;
   private Long desiredRequestsPerActorRun;

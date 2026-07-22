@@ -1,10 +1,9 @@
 package com.apify.client.user;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** The public profile of a {@link User}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class UserProfile {
+public final class UserProfile extends ApifyResource {
   private String bio;
   private String name;
   private String pictureUrl;

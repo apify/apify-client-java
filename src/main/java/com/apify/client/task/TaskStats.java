@@ -1,10 +1,9 @@
 package com.apify.client.task;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 
 /** Usage statistics for a {@link Task}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class TaskStats {
+public final class TaskStats extends ApifyResource {
   private long totalRuns;
 
   /** The total number of runs started from this task. */

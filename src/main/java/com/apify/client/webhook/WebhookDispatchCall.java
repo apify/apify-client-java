@@ -1,11 +1,10 @@
 package com.apify.client.webhook;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.apify.client.ApifyResource;
 import java.time.Instant;
 
 /** A single HTTP delivery attempt made for a {@link WebhookDispatch}. */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class WebhookDispatchCall {
+public final class WebhookDispatchCall extends ApifyResource {
   private Instant startedAt;
   private Instant finishedAt;
   private String errorMessage;
