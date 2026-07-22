@@ -139,8 +139,12 @@ class TaskIntegrationTest extends IntegrationBase {
       // internal log-streaming lifecycle closes the stream as soon as the run finishes, which can
       // race the background reader before it has pulled any bytes off the live log stream, even
       // though the log content is already fully available server-side. Gate the assertion on
-      // whether the run actually produced a log at all, rather than asserting unconditionally.
-      assertStreamedLogNonEmptyIfProduced(client.run(run.getId()), collected);
+      // whether the run actually produced a log at all - via the call()-default variant, which
+      // never
+      // rescues via a separate explicit stream, so a genuinely broken default-streaming wiring
+      // still
+      // fails here rather than being masked.
+      assertCallDefaultStreamedLogNonEmptyIfProduced(client.run(run.getId()), collected);
     } finally {
       client.task(task.getId()).delete();
     }

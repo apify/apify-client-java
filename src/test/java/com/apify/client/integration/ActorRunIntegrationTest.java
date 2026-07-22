@@ -144,8 +144,11 @@ class ActorRunIntegrationTest extends IntegrationBase {
     // call()'s internal log-streaming lifecycle closes the stream as soon as the run is finished
     // (RunStartSupport#callWithLogStreaming), which can race the background reader the same way
     // streamedLogRedirection below does for its own explicit StreamedLog. Gate the assertion on
-    // whether the run actually produced a log at all, same as that test.
-    assertStreamedLogNonEmptyIfProduced(client.run(run.getId()), collected);
+    // whether the run actually produced a log at all - via the call()-default variant, which
+    // (unlike
+    // streamedLogRedirection's) never rescues via a separate explicit stream, so a genuinely broken
+    // default-streaming wiring still fails here rather than being masked.
+    assertCallDefaultStreamedLogNonEmptyIfProduced(client.run(run.getId()), collected);
   }
 
   @Test

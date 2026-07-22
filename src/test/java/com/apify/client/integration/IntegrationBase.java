@@ -160,31 +160,76 @@ public abstract class IntegrationBase {
   }
 
   /**
-   * Asserts that {@code collected} - lines captured by a live-tail {@link StreamedLog} (or a {@code
-   * call(...)} overload's built-in log streaming) for a now-finished run - is non-empty, but only
-   * when the run actually produced log output at all, per the authoritative, statically-persisted
-   * log ({@code runClient.log().get()}).
+   * Asserts that {@code collected} - lines captured by an explicit, directly-tested {@link
+   * StreamedLog} for a now-finished run - is non-empty, but only when the run actually produced log
+   * output at all, per the authoritative, statically-persisted log ({@code runClient.log().get()}).
    *
-   * <p>A fast Actor/task run (the store Actors this suite exercises routinely finish in a couple of
-   * seconds) can complete - and any log-streaming lifecycle tied to the call/wait can close -
-   * before the background reader has pulled any bytes off the live log stream yet, even though the
-   * log content itself is already fully available server-side once the run is done. This method
-   * first gives {@code collected} a bounded {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS} window to catch
-   * up in-place. If it is still empty, it consults the authoritative persisted log to find out
-   * whether the run produced any log output at all: if it did not, there is nothing to have
-   * streamed and the assertion is skipped entirely (this is not a race, just an Actor that logged
-   * nothing); if it did, one more attempt is made via {@link #collectFinishedRunLog} (a brand-new,
-   * non-racing stream) before failing.
+   * <p>A fast Actor run (the store Actors this suite exercises routinely finish in a couple of
+   * seconds) can complete before the background reader has pulled any bytes off the live log stream
+   * yet, even though the log content itself is already fully available server-side once the run is
+   * done. This method first gives {@code collected} a bounded {@link
+   * #STREAM_CATCH_UP_TIMEOUT_MILLIS} window to catch up in-place. If it is still empty, it consults
+   * the authoritative persisted log to find out whether the run produced any log output at all: if
+   * it did not, there is nothing to have streamed and the assertion is skipped entirely (this is
+   * not a race, just an Actor that logged nothing); if it did, one more attempt is made via {@link
+   * #collectFinishedRunLog} (a brand-new, non-racing {@link StreamedLog}) before failing.
+   *
+   * <p>The {@link #collectFinishedRunLog} retry opens its own explicit {@code StreamedLog} against
+   * the finished run, so it is only safe to use when the test's subject under test <em>is</em> that
+   * same explicit {@code getStreamedLog} API (as {@code streamedLogRedirection} is) - a genuine
+   * break in that API still fails the assertion. For a test whose subject is instead a {@code
+   * call(...)} overload's own <em>internal, default</em> log-streaming wiring, use {@link
+   * #assertCallDefaultStreamedLogNonEmptyIfProduced} instead: retrying via a separate explicit
+   * stream there would bypass the very wiring under test, silently masking a genuinely broken
+   * default (e.g. log streaming not actually enabled by default) behind a green assertion sourced
+   * from a different code path.
    */
   static void assertStreamedLogNonEmptyIfProduced(RunClient runClient, List<String> collected) {
     pollUntil(STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !collected.isEmpty());
 
     Optional<String> authoritativeLog = runClient.log().get();
-    boolean runProducedLog = authoritativeLog.isPresent() && !authoritativeLog.get().isEmpty();
-    if (runProducedLog && collected.isEmpty()) {
+    if (runProducedLog(authoritativeLog) && collected.isEmpty()) {
       collected.addAll(collectFinishedRunLog(runClient));
     }
-    if (runProducedLog) {
+    assertNonEmptyIfLogProduced(authoritativeLog, collected);
+  }
+
+  /**
+   * Asserts that {@code collected} - lines captured by a {@code call(...)} overload's own internal,
+   * default log-streaming wiring for a now-finished run - is non-empty, but only when the run
+   * actually produced log output at all, per the authoritative, statically-persisted log ({@code
+   * runClient.log().get()}).
+   *
+   * <p>Like {@link #assertStreamedLogNonEmptyIfProduced}, this gives {@code collected} a bounded
+   * {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS} window to catch up in-place and skips the assertion
+   * entirely if the authoritative log shows the run produced no output at all. Unlike that method,
+   * it does <em>not</em> retry via a separate, explicit {@link StreamedLog} on a mismatch: that
+   * retry goes through a different code path than the one under test here ({@code call(...)}'s own
+   * default-streaming wiring, not the standalone {@code getStreamedLog} API), so using it as a
+   * rescue would let a genuinely broken default (e.g. log streaming silently not enabled) pass by
+   * being quietly repopulated from the bypassing stream instead of failing. The bounded catch-up
+   * poll is kept as this variant's sole flake mitigation.
+   */
+  static void assertCallDefaultStreamedLogNonEmptyIfProduced(
+      RunClient runClient, List<String> collected) {
+    pollUntil(STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !collected.isEmpty());
+    assertNonEmptyIfLogProduced(runClient.log().get(), collected);
+  }
+
+  /** Whether the authoritative, statically-persisted log shows the run produced any output. */
+  private static boolean runProducedLog(Optional<String> authoritativeLog) {
+    return authoritativeLog.isPresent() && !authoritativeLog.get().isEmpty();
+  }
+
+  /**
+   * Shared assertion backing both {@link #assertStreamedLogNonEmptyIfProduced} and {@link
+   * #assertCallDefaultStreamedLogNonEmptyIfProduced}: fails if the run produced a non-empty
+   * authoritative log but nothing was collected, and is a no-op otherwise (including when the run
+   * produced no log at all, in which case there is nothing to have streamed).
+   */
+  private static void assertNonEmptyIfLogProduced(
+      Optional<String> authoritativeLog, List<String> collected) {
+    if (runProducedLog(authoritativeLog)) {
       assertTrue(
           !collected.isEmpty(),
           "run produced a non-empty log ("
