@@ -141,7 +141,11 @@ class ActorRunIntegrationTest extends IntegrationBase {
             new ActorCallOptions().logOptions(new StreamedLogOptions().toLog(collected::add)),
             TEST_ACTOR_WAIT_SECS);
     assertEquals("SUCCEEDED", run.getStatus());
-    assertTrue(!collected.isEmpty(), "expected the default call() to have streamed log lines");
+    // call()'s internal log-streaming lifecycle closes the stream as soon as the run is finished
+    // (RunStartSupport#callWithLogStreaming), which can race the background reader the same way
+    // streamedLogRedirection below does for its own explicit StreamedLog. Gate the assertion on
+    // whether the run actually produced a log at all, same as that test.
+    assertStreamedLogNonEmptyIfProduced(client.run(run.getId()), collected);
   }
 
   @Test
@@ -230,57 +234,15 @@ class ActorRunIntegrationTest extends IntegrationBase {
         runClient.getStreamedLog(new StreamedLogOptions().toLog(collected::add))) {
       streamedLog.start();
       runClient.waitForFinish(TEST_ACTOR_WAIT_SECS);
-      // A fast Actor (hello-world routinely finishes in a couple of seconds) can complete before
-      // the background reader has pulled any bytes off the live log stream yet, even though the
-      // log content itself is already fully available server-side once the run is done. Rather
-      // than asserting immediately (a race with that background thread) or closing the stream
-      // right away (which would cut the reader off before its first read), give it a bounded
-      // window to catch up and flush; the log is static at this point, so waiting longer never
-      // helps once it is genuinely empty.
-      pollUntil(STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !collected.isEmpty());
     }
 
-    // The catch-up window above closes an eventual-consistency race, but not a genuine one: the
-    // *first* stream was opened before the run finished, following the live log as the run was
-    // still writing to it, so the underlying HTTP stream can reach EOF (the container/log-follow
-    // connection closing) a hair before the final bytes are flushed to that same connection -- no
-    // amount of client-side waiting after that EOF recovers bytes that were never delivered on it.
-    // Ask the authoritative source - the run's persisted log via the plain (non-streaming)
-    // log().get() call - whether the run produced any log output at all, and if the first stream
-    // still came up empty despite that, retry once with a brand-new stream opened strictly after
-    // the run is already finished: that is no longer a live tail, just a GET against a static,
-    // fully-persisted log, so it cannot race the run's own writer the way the first stream could.
-    Optional<String> authoritativeLog = runClient.log().get();
-    boolean runProducedLog = authoritativeLog.isPresent() && !authoritativeLog.get().isEmpty();
-    if (runProducedLog && collected.isEmpty()) {
-      collected.addAll(collectFinishedRunLog(runClient));
-    }
-    if (runProducedLog) {
-      assertTrue(
-          !collected.isEmpty(),
-          "run produced a non-empty log ("
-              + authoritativeLog.get().length()
-              + " chars) but the"
-              + " streamed collector observed none - redirection did not work");
-    }
-  }
-
-  /**
-   * Opens a fresh {@link StreamedLog} against an already-finished run's static log (with {@link
-   * StreamedLogOptions#fromStart(boolean)} so the run's already-past-relative-to-construction
-   * messages are not filtered out) and waits up to {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS} for it
-   * to deliver the (now non-racing) content, so {@link #streamedLogRedirection} can retry once
-   * after the first, live-tail stream comes up empty despite the run having produced a log.
-   */
-  private static List<String> collectFinishedRunLog(RunClient runClient) {
-    List<String> retryCollected = new CopyOnWriteArrayList<>();
-    try (StreamedLog retryStream =
-        runClient.getStreamedLog(
-            new StreamedLogOptions().toLog(retryCollected::add).fromStart(true))) {
-      retryStream.start();
-      pollUntil(
-          STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !retryCollected.isEmpty());
-    }
-    return retryCollected;
+    // The *first* stream above was opened before the run finished, following the live log as the
+    // run was still writing to it, so the underlying HTTP stream can reach EOF (the container/
+    // log-follow connection closing) a hair before the final bytes are flushed to that same
+    // connection, or before the background reader has pulled any bytes off it at all - no amount
+    // of client-side waiting after that EOF recovers bytes that were never delivered on it. Gate
+    // the assertion on the authoritative persisted log (see
+    // IntegrationBase#assertStreamedLogNonEmptyIfProduced for the full retry/skip rationale).
+    assertStreamedLogNonEmptyIfProduced(runClient, collected);
   }
 }

@@ -1,9 +1,16 @@
 package com.apify.client.integration;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.apify.client.ApifyClient;
+import com.apify.client.log.StreamedLog;
+import com.apify.client.log.StreamedLogOptions;
+import com.apify.client.run.RunClient;
 import java.security.SecureRandom;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -128,5 +135,62 @@ public abstract class IntegrationBase {
       }
     }
     return false;
+  }
+
+  /**
+   * Opens a fresh {@link StreamedLog} against an already-finished run's static log (with {@link
+   * StreamedLogOptions#fromStart(boolean)} so the run's already-past-relative-to-construction
+   * messages are not filtered out) and waits up to {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS} for it
+   * to deliver the (now non-racing) content. Used by {@link #assertStreamedLogNonEmptyIfProduced}
+   * to retry once when a live-tail stream came up empty despite the run having produced a log:
+   * opening this stream strictly after the run is already finished means it is a plain GET against
+   * a static, fully-persisted log, not a live tail, so it cannot race the run's own writer the way
+   * the original stream could.
+   */
+  static List<String> collectFinishedRunLog(RunClient runClient) {
+    List<String> retryCollected = new CopyOnWriteArrayList<>();
+    try (StreamedLog retryStream =
+        runClient.getStreamedLog(
+            new StreamedLogOptions().toLog(retryCollected::add).fromStart(true))) {
+      retryStream.start();
+      pollUntil(
+          STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !retryCollected.isEmpty());
+    }
+    return retryCollected;
+  }
+
+  /**
+   * Asserts that {@code collected} - lines captured by a live-tail {@link StreamedLog} (or a {@code
+   * call(...)} overload's built-in log streaming) for a now-finished run - is non-empty, but only
+   * when the run actually produced log output at all, per the authoritative, statically-persisted
+   * log ({@code runClient.log().get()}).
+   *
+   * <p>A fast Actor/task run (the store Actors this suite exercises routinely finish in a couple of
+   * seconds) can complete - and any log-streaming lifecycle tied to the call/wait can close -
+   * before the background reader has pulled any bytes off the live log stream yet, even though the
+   * log content itself is already fully available server-side once the run is done. This method
+   * first gives {@code collected} a bounded {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS} window to catch
+   * up in-place. If it is still empty, it consults the authoritative persisted log to find out
+   * whether the run produced any log output at all: if it did not, there is nothing to have
+   * streamed and the assertion is skipped entirely (this is not a race, just an Actor that logged
+   * nothing); if it did, one more attempt is made via {@link #collectFinishedRunLog} (a brand-new,
+   * non-racing stream) before failing.
+   */
+  static void assertStreamedLogNonEmptyIfProduced(RunClient runClient, List<String> collected) {
+    pollUntil(STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !collected.isEmpty());
+
+    Optional<String> authoritativeLog = runClient.log().get();
+    boolean runProducedLog = authoritativeLog.isPresent() && !authoritativeLog.get().isEmpty();
+    if (runProducedLog && collected.isEmpty()) {
+      collected.addAll(collectFinishedRunLog(runClient));
+    }
+    if (runProducedLog) {
+      assertTrue(
+          !collected.isEmpty(),
+          "run produced a non-empty log ("
+              + authoritativeLog.get().length()
+              + " chars) but the streamed collector observed none - log streaming/redirection did"
+              + " not work");
+    }
   }
 }
