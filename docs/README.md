@@ -17,7 +17,7 @@ ApifyClient client = ApifyClient.create("my-api-token");
 
 `ApifyClient.create` takes the token as an explicit argument — it does not read `APIFY_TOKEN`
 automatically. Use `ApifyClient.builder()` for non-default settings (base URL, retries, timeout,
-user-agent suffix, custom HTTP backend).
+user-agent suffix, custom HTTP transport).
 
 Get your API token from the
 [Apify Console → Settings → API & Integrations](https://console.apify.com/settings/integrations).
