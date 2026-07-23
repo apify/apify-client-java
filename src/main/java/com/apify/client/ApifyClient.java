@@ -1,14 +1,39 @@
 package com.apify.client;
 
+import com.apify.client.actor.ActorClient;
+import com.apify.client.actor.ActorCollectionClient;
+import com.apify.client.build.BuildClient;
+import com.apify.client.build.BuildCollectionClient;
+import com.apify.client.dataset.DatasetClient;
+import com.apify.client.dataset.DatasetCollectionClient;
+import com.apify.client.http.DefaultHttpTransport;
+import com.apify.client.http.HttpTransport;
+import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.HttpClientCore;
+import com.apify.client.keyvalue.KeyValueStoreClient;
+import com.apify.client.keyvalue.KeyValueStoreCollectionClient;
+import com.apify.client.log.LogClient;
+import com.apify.client.requestqueue.RequestQueueClient;
+import com.apify.client.requestqueue.RequestQueueCollectionClient;
+import com.apify.client.run.ActorRun;
+import com.apify.client.run.RunClient;
+import com.apify.client.run.RunCollectionClient;
+import com.apify.client.run.SetStatusMessageOptions;
+import com.apify.client.schedule.ScheduleClient;
+import com.apify.client.schedule.ScheduleCollectionClient;
+import com.apify.client.store.StoreCollectionClient;
+import com.apify.client.task.TaskClient;
+import com.apify.client.task.TaskCollectionClient;
+import com.apify.client.user.UserClient;
+import com.apify.client.webhook.WebhookClient;
+import com.apify.client.webhook.WebhookCollectionClient;
+import com.apify.client.webhook.WebhookDispatchClient;
+import com.apify.client.webhook.WebhookDispatchCollectionClient;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
  * The entry point for interacting with the Apify API.
- *
- * <p><b>Official, but experimental — AI-generated and AI-maintained.</b> This is an official Apify
- * client, but it is experimental: it is generated and maintained by AI. Review the code before
- * relying on it in production and report issues on the repository.
  *
  * <p>Construct it with {@link #create(String)} (token-only) or {@link #builder()}, then obtain
  * resource clients via the accessor methods, e.g. {@link #actor(String)}, {@link #dataset(String)},
@@ -27,16 +52,24 @@ import java.util.Map;
  *
  * <ul>
  *   <li>Public interface: {@link ApifyClient} and the resource clients it returns.
- *   <li>Replaceable transport: the {@link HttpBackend} interface, with a default {@link
- *       DefaultHttpBackend}; swap it via {@link ApifyClientBuilder#httpBackend(HttpBackend)}.
+ *   <li>Replaceable transport: the {@link HttpTransport} interface, with a default {@link
+ *       DefaultHttpTransport}; swap it via {@link ApifyClientBuilder#httpTransport(HttpTransport)}.
  *   <li>Cross-cutting behaviour (auth, User-Agent, retries with exponential backoff, timeouts)
  *       lives in the internal HTTP client and is applied to every request.
  * </ul>
+ *
+ * <p>Every resource client's constructor is public, but that is an artifact of each living in its
+ * own resource-scoped package (e.g. {@link ActorClient} in {@code com.apify.client.actor}) rather
+ * than an invitation to call it directly: they are not meant to be constructed by user code. Always
+ * obtain one from {@link ApifyClient} or from another resource client's own accessor methods (e.g.
+ * {@link ActorClient#lastRun}, {@link ActorClient#builds}), which supply the internal wiring (the
+ * shared HTTP client, base URL, inherited query filters) a direct constructor call would otherwise
+ * have to reconstruct by hand.
  */
 public final class ApifyClient {
 
-  /** Addresses the current user ({@code /users/me}). */
-  private static final String ME_USER_PLACEHOLDER = "me";
+  /** Environment variable holding the run id of the Actor run the client is executing in. */
+  private static final String ACTOR_RUN_ID_ENV_VAR = "ACTOR_RUN_ID";
 
   private final HttpClientCore http;
   private final String baseUrl;
@@ -58,16 +91,20 @@ public final class ApifyClient {
     return new ApifyClientBuilder();
   }
 
-  /** Returns the {@code User-Agent} header value this client sends. */
-  public String getUserAgent() {
+  /**
+   * Returns the {@code User-Agent} header value this client sends. Not part of the public API
+   * (there is no supported use for an end user to read it back); package-private only so the test
+   * suite can assert on it.
+   */
+  String getUserAgent() {
     return http.userAgent();
   }
 
   /**
    * Returns the fully-qualified API base URL this client targets (including the {@code /v2}
-   * suffix).
+   * suffix). Not part of the public API, for the same reason as {@link #getUserAgent()}.
    */
-  public String getApiBaseUrl() {
+  String getApiBaseUrl() {
     return baseUrl;
   }
 
@@ -87,7 +124,7 @@ public final class ApifyClient {
 
   /** A client for the Actor build collection (list builds). */
   public BuildCollectionClient builds() {
-    return new BuildCollectionClient(http, baseUrl, "actor-builds");
+    return new BuildCollectionClient(http, baseUrl, ApiPaths.ACTOR_BUILDS);
   }
 
   /** A client for a specific Actor build. */
@@ -99,12 +136,12 @@ public final class ApifyClient {
 
   /** A client for the Actor run collection (list runs). */
   public RunCollectionClient runs() {
-    return new RunCollectionClient(http, baseUrl, "actor-runs");
+    return new RunCollectionClient(http, baseUrl, ApiPaths.ACTOR_RUNS);
   }
 
   /** A client for a specific Actor run. */
   public RunClient run(String id) {
-    return new RunClient(this, http, baseUrl, "actor-runs", id);
+    return new RunClient(this, http, baseUrl, ApiPaths.ACTOR_RUNS, id);
   }
 
   // ----- Dataset accessors ---------------------------------------------------
@@ -116,7 +153,7 @@ public final class ApifyClient {
 
   /** A client for a specific dataset, addressed by ID or name. */
   public DatasetClient dataset(String id) {
-    return new DatasetClient(http, baseUrl, "datasets", id).withPublicBase(publicBaseUrl);
+    return new DatasetClient(http, baseUrl, id, publicBaseUrl);
   }
 
   // ----- Key-value store accessors -------------------------------------------
@@ -128,8 +165,7 @@ public final class ApifyClient {
 
   /** A client for a specific key-value store, addressed by ID or name. */
   public KeyValueStoreClient keyValueStore(String id) {
-    return new KeyValueStoreClient(http, baseUrl, "key-value-stores", id)
-        .withPublicBase(publicBaseUrl);
+    return new KeyValueStoreClient(http, baseUrl, id, publicBaseUrl);
   }
 
   // ----- Request queue accessors ---------------------------------------------
@@ -141,7 +177,7 @@ public final class ApifyClient {
 
   /** A client for a specific request queue, addressed by ID or name. */
   public RequestQueueClient requestQueue(String id) {
-    return new RequestQueueClient(http, baseUrl, "request-queues", id);
+    return new RequestQueueClient(http, baseUrl, id);
   }
 
   // ----- Task accessors ------------------------------------------------------
@@ -182,7 +218,7 @@ public final class ApifyClient {
 
   /** A client for the webhook dispatch collection. */
   public WebhookDispatchCollectionClient webhookDispatches() {
-    return new WebhookDispatchCollectionClient(http, baseUrl, "webhook-dispatches");
+    return new WebhookDispatchCollectionClient(http, baseUrl, ApiPaths.WEBHOOK_DISPATCHES);
   }
 
   /** A client for a specific webhook dispatch. */
@@ -199,12 +235,12 @@ public final class ApifyClient {
 
   /** A client for accessing a build's or run's log. */
   public LogClient log(String buildOrRunId) {
-    return new LogClient(http, baseUrl, "logs", buildOrRunId);
+    return new LogClient(http, baseUrl, buildOrRunId);
   }
 
   /** A client for the current user ({@code /users/me}). */
   public UserClient me() {
-    return new UserClient(http, baseUrl, ME_USER_PLACEHOLDER);
+    return new UserClient(http, baseUrl, UserClient.ME);
   }
 
   /** A client for a specific user by ID or username. */
@@ -216,18 +252,20 @@ public final class ApifyClient {
    * Sets the status message of the current Actor run.
    *
    * <p>This convenience method updates the run identified by the {@code ACTOR_RUN_ID} environment
-   * variable, so it only works when called from inside an Actor run. If {@code isTerminal} is true,
-   * the message becomes final and won't be overwritten. Throws {@link IllegalStateException} if
-   * {@code ACTOR_RUN_ID} is not set.
+   * variable, so it only works when called from inside an Actor run. Throws {@link
+   * IllegalStateException} if {@code ACTOR_RUN_ID} is not set. Matches the reference client's
+   * top-level {@code setStatusMessage}.
    */
-  public ActorRun setStatusMessage(String message, boolean isTerminal) {
-    String runId = System.getenv("ACTOR_RUN_ID");
+  public ActorRun setStatusMessage(String message, SetStatusMessageOptions options) {
+    String runId = System.getenv(ACTOR_RUN_ID_ENV_VAR);
     if (runId == null || runId.isEmpty()) {
-      throw new IllegalStateException("ACTOR_RUN_ID environment variable is not set");
+      throw new IllegalStateException(ACTOR_RUN_ID_ENV_VAR + " environment variable is not set");
     }
     Map<String, Object> body = new LinkedHashMap<>();
     body.put("statusMessage", message);
-    body.put("isStatusMessageTerminal", isTerminal);
+    if (options != null && options.isStatusMessageTerminal() != null) {
+      body.put("isStatusMessageTerminal", options.isStatusMessageTerminal());
+    }
     return run(runId).update(body);
   }
 }

@@ -20,6 +20,11 @@ concurrency:
   group: java-integration-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege default: this workflow only checks out code and runs tests, it never writes to
+# the repository or opens PRs/issues, so the GITHUB_TOKEN needs no more than read access.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

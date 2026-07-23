@@ -1,6 +1,5 @@
 package com.apify.client;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Collections;
 import java.util.List;
 
@@ -15,8 +14,7 @@ import java.util.List;
  *
  * @param <T> the item type
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public final class PaginationList<T> {
+public final class PaginationList<T> extends ApifyResource {
 
   private long total;
   private long offset;
@@ -52,31 +50,40 @@ public final class PaginationList<T> {
 
   /** The items of this page (never {@code null}; unmodifiable). */
   public List<T> getItems() {
-    return Collections.unmodifiableList(items);
+    // Null-coalesce: Jackson binds directly to the (private) `items` field for deserialization
+    // (see Json's FIELD/ANY visibility config), which bypasses setItems()'s List.copyOf() default
+    // whenever the API response contains an explicit `"items": null`. Falling back to List.of()
+    // here keeps the "never null" contract regardless of how the field was populated.
+    return items == null ? List.of() : Collections.unmodifiableList(items);
   }
 
-  // Package-private setters used by the dataset-items path, which builds pages from headers.
-  void setTotal(long total) {
+  // Public (not package-private) because DatasetClient, in a different package, builds a page's
+  // metadata from response headers one field at a time and Java has no cross-package visibility
+  // between "public" and "package-private".
+  public void setTotal(long total) {
     this.total = total;
   }
 
-  void setOffset(long offset) {
+  public void setOffset(long offset) {
     this.offset = offset;
   }
 
-  void setLimit(long limit) {
+  public void setLimit(long limit) {
     this.limit = limit;
   }
 
-  void setCount(long count) {
+  public void setCount(long count) {
     this.count = count;
   }
 
-  void setDesc(boolean desc) {
+  public void setDesc(boolean desc) {
     this.desc = desc;
   }
 
-  void setItems(List<T> items) {
-    this.items = items;
+  public void setItems(List<T> items) {
+    // Copy defensively: items is set once by the client from a freshly-parsed/collected list, but
+    // taking an immutable copy means a caller can never mutate this page's items afterwards by
+    // mutating the list it passed in, and getItems() needs no wrapping to stay unmodifiable.
+    this.items = List.copyOf(items);
   }
 }

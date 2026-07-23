@@ -1,11 +1,14 @@
 package com.apify.client;
 
+import com.apify.client.internal.ListOptionsLike;
+import com.apify.client.internal.QueryParams;
+
 /**
  * The standard offset/limit pagination shared by most {@code list} endpoints (builds, runs, tasks,
  * schedules, webhooks, Actor versions). All fields are optional; leave one unset to use the API
  * default.
  */
-public final class ListOptions {
+public final class ListOptions implements ListOptionsLike {
   private Long offset;
   private Long limit;
   private Boolean desc;
@@ -33,15 +36,18 @@ public final class ListOptions {
     return this;
   }
 
-  Long offsetValue() {
+  @Override
+  public Long offsetValue() {
     return offset;
   }
 
-  Long limitValue() {
+  @Override
+  public Long limitValue() {
     return limit;
   }
 
-  void apply(QueryParams q) {
+  @Override
+  public void apply(QueryParams q) {
     q.addLong("offset", offset).addLong("limit", limit);
     applyFilters(q);
   }
@@ -49,7 +55,8 @@ public final class ListOptions {
   /**
    * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
    */
-  void applyFilters(QueryParams q) {
+  @Override
+  public void applyFilters(QueryParams q) {
     q.addBool("desc", desc);
   }
 }

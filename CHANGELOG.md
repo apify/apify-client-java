@@ -5,6 +5,229 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-20
+
+### Changed
+
+- **Breaking:** split the single `com.apify.client` package into resource-scoped sub-packages
+  (`com.apify.client.actor`, `.build`, `.run`, `.dataset`, `.keyvalue`, `.requestqueue`, `.task`,
+  `.schedule`, `.webhook`, `.user`, `.store`, `.log`, `.http`); `ApifyClient`, its builder, shared
+  value types and the exception hierarchy stay in the root package. Pure implementation plumbing
+  (`ResourceContext`, `QueryParams`, `HttpClientCore`, `Json`, `Signatures`, `Statuses`,
+  `DataEnvelope`, `ApiPaths`, `PaginatedIterator`, ...) moved to a new, non-exported
+  `com.apify.client.internal` package; a `module-info.java` exports only the resource-scoped
+  packages above.
+- **Breaking:** renamed the replaceable transport: `HttpBackend` -> `HttpTransport`,
+  `DefaultHttpBackend` -> `DefaultHttpTransport`, `HttpBackend.sendStreaming` ->
+  `HttpTransport.sendStreamingResponse`, `ApifyClientBuilder.httpBackend` ->
+  `ApifyClientBuilder.httpTransport`.
+- **Breaking:** reworked the exception hierarchy: added a common `ApifyClientException` base that
+  `ApifyApiException` and the new public `ApifyTransportException` both extend; timeout detection
+  is transport-agnostic via a new `HttpTimeoutException` that any `HttpTransport` implementation
+  can throw.
+- **Breaking:** `ApifyClient.getUserAgent()`/`getApiBaseUrl()` are no longer public.
+- **Breaking:** `RunClient.setLastRunParams` is no longer public; last-run construction is now
+  internal to `RunClient.lastRun(...)`, used by `ActorClient.lastRun`/`TaskClient.lastRun`.
+- `DatasetClient`/`KeyValueStoreClient` are now fully immutable: the public-base-URL is set at
+  construction instead of through a self-mutating `withPublicBase` step. `ResourceContext` no
+  longer has any in-place-mutating call site.
+- Lowered the default HTTP connection-establishment timeout from 30s to 10s and made it
+  configurable (`DefaultHttpTransport(Duration)`).
+- Consolidated the internal `call`/`callWithHeaders` overloads under a single `call` name.
+- Error-response body parsing now maps to typed Jackson classes instead of navigating a raw
+  `JsonNode` tree; error-reporting path extraction now parses the URL instead of using string
+  offsets.
+- Brotli request-body compression is now opt-in: the client depends only on the brotli4j core API
+  (`optional`, no native codec bundled); a consumer that wants brotli over the always-available
+  gzip fallback adds brotli4j's native artifact for their platform themselves.
+- The default log-redirection destination now logs through SLF4J instead of `java.util.logging`.
+- Centralized the API's resource-collection path segments (e.g. `datasets`, `actor-builds`) into a
+  single `ApiPaths` constants class, referenced by each dedicated resource client instead of being
+  passed in from `ApifyClient`.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-20T094852Z`.
+- Extracted a shared `AbstractCollectionClient<T, O>` (internal) for the repetitive
+  offset/limit `list`/`iterate` boilerplate on `DatasetCollectionClient`,
+  `KeyValueStoreCollectionClient`, `RequestQueueCollectionClient`, `ActorCollectionClient`,
+  `ScheduleCollectionClient`, `TaskCollectionClient`, `BuildCollectionClient` and
+  `RunCollectionClient`; behavior is unchanged.
+- Extracted a shared `RunStartSupport` helper (internal) backing `ActorClient`/`TaskClient`'s
+  `start`/`call`, removing the duplicated implementation between the two. `ActorClient`/
+  `TaskClient` pass their options' behavior in as plain values and method references (e.g.
+  `options::apply`), so `ActorStartOptions`/`TaskStartOptions`/`ActorCallOptions`/`TaskCallOptions`'s
+  internal `apply`/`contentTypeOrDefault` accessors stay package-private with no public marker
+  interface needed; the options classes themselves remain public. Behavior is unchanged.
+- Tightened `spotbugs-exclude.xml` to only the entries that currently reproduce a real finding.
+- `java-integration-tests.yml` now declares an explicit, least-privilege `permissions: contents:
+  read` block.
+- **Breaking:** moved `ValidateInputOptions` from `com.apify.client.task` to
+  `com.apify.client.actor` (its only consumer is `ActorClient.validateInput`); its internal
+  `apply`/`contentTypeOrDefault` are package-private again now that it's same-package with that
+  consumer.
+- **Breaking:** `ActorRunOptions.getTimeoutSecs()`/`getMemoryMbytes()`/`getDiskMbytes()` now return
+  boxed `Long` instead of primitive `long`, matching the boxed-when-optional convention used by
+  every sibling field, so an unset value is distinguishable from a real `0`.
+- **Breaking:** `ApiResponse` is now a `record` (`statusCode`, `headers`, `body` are accessor
+  methods, e.g. `resp.body()`, not public fields); its shape and no-copy `body` contract are
+  unchanged. `HttpClientCore.Compressed` (internal, non-exported) is likewise now a record.
+- `StoreCollectionClient` and `WebhookDispatchCollectionClient` now extend
+  `AbstractCollectionClient<T, O>` instead of hand-rolling `list`/`iterate` (`StoreListOptions` now
+  implements `ListOptionsLike`); behavior is unchanged.
+- `RunClient.metamorph` now normalizes `targetActorId` via the same `username~actorName` safe-id
+  form as every other Actor-id-accepting call, instead of sending it raw.
+
+### Added
+
+- `ApifyClient.setStatusMessage(String, SetStatusMessageOptions)`, matching the reference client's
+  top-level `setStatusMessage`.
+- `ActorClient.call(Object, ActorCallOptions, Long)` / `TaskClient.call(Object, TaskCallOptions,
+  Long)`: a log-streaming `call` overload that streams the run's log for the duration of the wait
+  by default, matching the reference client's `call` defaulting `options.log` to `'default'`.
+  `ActorCallOptions`/`TaskCallOptions` mirror `ActorStartOptions`/`TaskStartOptions` (minus
+  `waitForFinish`) and add `disableLogStreaming()` / `logOptions(StreamedLogOptions)`.
+- Typed return values for `RequestQueueClient.listAndLockHead` (`LockedRequestQueueHead`),
+  `prolongRequestLock` (`RequestLockInfo`), `unlockRequests` (`UnlockRequestsResult`),
+  `batchDeleteRequests` (`BatchDeleteResult`) and `listRequests` (`RequestsList`), replacing raw
+  `JsonNode`. `RequestQueueHead`/`RequestQueueRequest` gained `queueModifiedAt`/`lockExpiresAt`.
+- Typed getters replacing several `getExtra()`-only fields: `Schedule` (`title`, `timezone`,
+  `isExclusive`, `description`, `createdAt`, `modifiedAt`, `nextRunAt`, `lastRunAt`, `actions`,
+  `notifications`), `Webhook` (`condition`, `ignoreSslErrors`, `doNotRetry`, `payloadTemplate`,
+  `headersTemplate`, `isAdHoc`, `stats`, `description`, `createdAt`, `modifiedAt`,
+  `shouldInterpolateStrings`, `lastDispatch`), `Task` (`description`, `stats`, `options`, `input`,
+  `actorStandby`), `ActorRun` (`generalAccess`, `chargedEventCounts`, `pricingInfo`, `usage`,
+  `usageUsd`, `stats`, `options`, `meta`, `usageTotalUsd`, `buildNumber`, `exitCode`,
+  `isContainerServerReady`, `gitBranchName`, `storageIds`).
+- `ActorRunStats.getMigrationCount()`/`getRebootCount()`, `ActorRunMeta.getScheduleId()`/
+  `getScheduledAt()`, `BuildStats.getImageSizeBytes()`.
+- Further typed getters resolving the remaining thin-DTO gaps against the JS reference client:
+  `WebhookDispatch` (`status`, `eventType`, `userId`, `createdAt`, `calls`, `webhook`, `eventData`);
+  `Actor` (`actorStandby`, `stats`, `versions`, `pricingInfos`, `defaultRunOptions`, `taggedBuilds`,
+  `actorPermissionLevel`, `categories`, `isDeprecated`, `deploymentKey`, `seoTitle`,
+  `seoDescription`); `Build` (`userId`, `meta`, `stats`, `options`, `usage`, `usageUsd`,
+  `usageTotalUsd`); `User` (`profile`, `email`, `proxy`, `plan`, `effectivePlatformFeatures`,
+  `createdAt`, `isPaying`); `ActorStoreListItem` (`description`, `stats`, `currentPricingInfo`,
+  `pictureUrl`, `userPictureUrl`, `url`, `readmeSummary`). `getExtra()` remains available on every
+  touched model for any field still not individually typed.
+
+### Fixed
+
+- `RequestQueueClient.batchAddRequests` now additionally splits chunks by cumulative JSON-encoded
+  byte size (matching the reference client's `MAX_PAYLOAD_SIZE_BYTES`), not just the 25-request
+  count limit, so a batch of individually large requests (e.g. sizeable `userData`) can no longer
+  413.
+- `RequestQueueClient.batchAddRequests` no longer throws on a non-retryable 4xx; the affected
+  requests are now reported via `BatchAddResult.getUnprocessedRequests()`, matching the reference
+  client's never-throws contract.
+- `ApifyApiException` now extends `ApifyClientException` (previously `RuntimeException` directly),
+  so `catch (ApifyClientException)` catches API errors as documented.
+- `PaginationList.getItems()` no longer throws `NullPointerException` when the API response
+  contains an explicit `"items": null`.
+- `PaginationList.setItems` now defensively copies its input.
+- `ApifyClient`'s class javadoc no longer duplicates the "official, but experimental" disclaimer;
+  it appears only once, in the top-level README, as required.
+- `ApifyClientBuilder.timeout(Duration)` now rejects `Duration.ZERO`/a negative duration from the
+  setter itself, at call time, instead of building a client whose first request fails deep inside
+  the transport.
+- `RequestQueueRequest.getUserData()`/`setUserData()` now defensively deep-copy the `JsonNode`,
+  matching `getHeaders()`/`getErrorMessages()`, so external mutation of the passed-in/returned value
+  can no longer corrupt the request's stored state.
+- `RequestQueueClient.paginateRequests(...)` no longer yields more than the requested `totalLimit`
+  when a single page overshoots it, matching `PaginatedIterator`'s equivalent guard.
+- `Webhook.isShouldInterpolateStrings()` renamed to `getShouldInterpolateStrings()`, following the
+  JavaBeans convention for a boxed `Boolean` accessor (`is`-prefixed getters are for primitive
+  `boolean`). The underlying field name, `shouldInterpolateStrings`, is unchanged, so this has no
+  effect on the JSON wire format.
+- `AbstractCollectionClient.list(options)` no longer throws `NullPointerException` on a `null`
+  `options` argument (now defaults it, matching `iterate(options)`'s existing tolerance).
+- `BatchAddResult.getProcessedRequests()`/`getUnprocessedRequests()` no longer throw
+  `NullPointerException` on an explicit JSON `null` for either field.
+- `RequestQueueClient.batchAddChunkWithRetries` now also catches `ApifyTransportException` (not
+  just `ApifyApiException`), so a persistent transport failure (connection error, timeout) is
+  reported via `BatchAddResult.getUnprocessedRequests()` instead of escaping as an exception,
+  matching `batchAddRequests`' documented never-throws contract.
+- `RunClient.metamorph` now rejects a `null`/empty `targetActorId` with
+  `IllegalArgumentException`, matching `charge`'s `eventName` validation.
+- `RequestsList.getItems()`, `RequestQueueHead.getItems()`, `LockedRequestQueueHead.getItems()`,
+  `KeyValueStoreKeysPage.getItems()`, `Schedule.getActions()` and `Webhook.getEventTypes()` no
+  longer throw `NullPointerException` when the API response contains an explicit `null` for that
+  field.
+- `RequestQueueClient`'s chunk-by-byte-size slicing now accounts for the inter-element commas in
+  its incremental size estimate, matching the exact full-array measurement.
+- `BatchDeleteResult.getProcessedRequests()`/`getUnprocessedRequests()` and
+  `RequestQueueRequest.getErrorMessages()` no longer throw `NullPointerException` on an explicit
+  JSON `null` for either field, mirroring `BatchAddResult`'s existing guard.
+- `RunClient.metamorph`/`resurrect` and `ActorClient.build` now throw a clear
+  `IllegalArgumentException` when called with a `null` required options argument, instead of a
+  `NullPointerException` deep inside the method.
+- `RunClient`'s default log-redirection prefix now uses the run's resolved real id instead of the
+  client's own `id` field, which is the literal string `"last"` for a `runs/last`-scoped client.
+- Every nested value DTO (`ActorRunStats`, `ActorRunMeta`, `ActorRunUsage`, `ActorRunOptions`,
+  `BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage`, `ActorStandby`, `ActorStats`,
+  `ActorDefaultRunOptions`, `TaskStats`, `TaskOptions`, `ScheduleNotifications`, `WebhookStats`,
+  `WebhookLastDispatch`, `WebhookDispatchCall`, `WebhookDispatchWebhookInfo`,
+  `WebhookDispatchEventData`, `UserProfile`, `UserProxy`, `UserPlan`, `ProxyGroup`, `PricingInfo`,
+  `PaginationList`, `BatchAddResult`, `BatchDeleteResult`, `DeletedRequestInfo`, `RequestLockInfo`,
+  `RequestQueueOperationInfo`, `RequestsList`, `UnlockRequestsResult`, `KeyValueStoreKeysPage`) now
+  extends `ApifyResource`, so any field the API returns without a matching typed getter is
+  reachable via `getExtra()` instead of being silently discarded.
+
+### Documentation
+
+- Documented the newly added `ActorRun`/`Webhook` fields above, `ActorRunOptions`/`ActorRunUsage`'s
+  getters, and the per-scope support for `RunListOptions.startedAfter`/`startedBefore`; added a
+  request-queue lock/unlock worked example (`withClientKey`/`listAndLockHead`/
+  `prolongRequestLock`/`deleteRequestLock`/`unlockRequests`); added the missing
+  `DownloadItemsFormat` import to the package table and fixed the Quick Start "fragment"
+  contradiction; documented `ApifyApiException`'s accessor return types and the
+  `HttpTimeoutException` naming collision with `java.net.http.HttpTimeoutException`; added
+  `setStatusMessage` to the README resources table; noted `getExtra()` on every thin response model.
+- Fixed a contradiction in `README.md`/`docs/README.md`: both described `docs/examples.md` as
+  "complete, runnable programs," but its own snippets are fragments in the same style as the
+  resource pages — the complete, runnable programs live under
+  `src/test/java/com/apify/client/examples/`. Reworded both to match.
+  Added the missing `WebhookLastDispatch` import to the `com.apify.client.webhook` package-table row.
+  Corrected the "one raw-JSON field" framing in `docs/README.md`'s "Raw JSON values" section:
+  `ActorRun` actually carries two (`getPricingInfo()`, `getStorageIds()`), and `Task.getInput()` (the
+  model field) is a third, distinct from the live-fetching `task(id).getInput()` client call.
+  Clarified in `docs/storages.md` that request queues, unlike datasets/key-value stores, have no
+  `getOrCreate(String, Object schema)` overload. Noted that
+  `SetStatusMessageOptions.isStatusMessageTerminal(boolean)` intentionally takes a primitive
+  `boolean`, not boxed `Boolean` like this client's other optional option fields. Documented the
+  `DefaultHttpTransport(Duration)` constructor in the README's transport section, and disclosed
+  `Duration`'s package (`java.time.Duration`) next to the Configuration snippet for consistency with
+  how other fragments disclose the types they use. Added a javadoc caveat on
+  `RequestQueueClient.batchAddRequests`/`RequestQueueRequest.getUniqueKey()`: retry reconciliation
+  matches by `uniqueKey`, so a request that omits it can be falsely reported unprocessed after
+  retries even though it succeeded server-side.
+- Removed a stale `docs/actors.md` cross-package import note for `ValidateInputOptions`, now moot
+  since it moved to `com.apify.client.actor`; updated `docs/README.md`'s package table to match.
+  Documented `ActorStandby`'s fields in `docs/tasks.md`, added the standard `getExtra()` note to
+  `WebhookDispatch` (`docs/webhooks.md`) and `ActorStoreListItem` (`docs/misc.md`), added a
+  `ListKeysOptions` field list to `docs/storages.md`, and made `ActorRunStats`'s field list in
+  `docs/runs.md` exhaustive. Reworded `ApiResponse`'s
+  javadoc (it is a plain public data carrier used across resource clients, not internal plumbing)
+  and corrected `spotbugs-exclude.xml`'s header to accurately explain why its former `ApiResponse`
+  EI_EXPOSE exclusion stopped reproducing (the no-copy contract never changed; the tool simply
+  stopped flagging it) rather than implying the exposure was defensively fixed.
+- `docs/storages.md` now spells out `RequestQueueRequest`'s getters by name (`getUrl`,
+  `getUniqueKey`, ...) next to their setters, and adds argument types to the `DatasetListItemsOptions`
+  /`DatasetDownloadOptions`/`SetRecordOptions` field lists (`docs/actors.md` likewise for
+  `ValidateInputOptions`). The top-level README's Configuration section gained an
+  `ApifyClientBuilder` setter reference table (default + valid range for every setter) and an
+  `HttpTransport` contract table (`send`/`sendStreamingResponse` signatures and behavior a
+  custom-transport implementer must satisfy). Trimmed `PaginationList`'s ~10-line public-setter
+  justification comment to two sentences and made `StreamedLog`'s internal `(see below)` comment
+  reference the `finally` block explicitly.
+- `docs/runs.md`/`docs/builds.md` field lists updated for `ActorRunStats.getMigrationCount()`/
+  `getRebootCount()`, `ActorRunMeta.getScheduleId()`/`getScheduledAt()`, and
+  `BuildStats.getImageSizeBytes()`; `docs/README.md`'s "What `ApifyResource` is" / "Model fields and
+  unmodeled data" sections now state that nested value DTOs, not only top-level resources, extend
+  `ApifyResource` and expose `getExtra()`.
+- Added a `list()` step to the Actor/Dataset/RequestQueue/KeyValueStore/Webhook/Task CRUD-flow
+  integration tests, verifying the just-created resource's id appears in its top-level collection
+  listing (polled for eventual consistency via a new shared `IntegrationBase.LIST_FIND_ATTEMPTS`/
+  `LIST_FIND_BACKOFF_MILLIS`), matching the pattern the run-collection and Schedule flows already
+  used.
+
 ## [0.3.1] - 2026-07-14
 
 ### Added
@@ -14,12 +237,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Verified the client against OpenAPI specification version `v2-2026-07-13T092445Z` and bumped
-  `Version.API_SPEC_VERSION`. The spec change only added already-handled error responses (`402`
-  Payment Required on actor and run-resurrect run-sync endpoints, `408` Request Timeout on the
-  task run-sync endpoint) and relaxed `required` constraints on run/build/key-value-store/webhook
-  stats counters; both are already covered by the client's generic status-code error handling and
-  its forward-compatible model deserialization, so no interface or behavior change was needed.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-13T092445Z`.
 
 ### Fixed
 
@@ -85,12 +303,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Verified the client against OpenAPI specification version `v2-2026-07-10T105921Z` and bumped
-  `Version.API_SPEC_VERSION` accordingly. The spec delta is forward-compatible: new `401`/`402`
-  error responses on several endpoints (handled generically by `ApifyApiException`) and relaxed
-  nullability/optionality on some response fields — already tolerated because the models use
-  nullable boxed field types (a JSON `null` deserializes to `null`) and an optional field simply
-  stays unset.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-10T105921Z`.
 - **Breaking:** `StoreCollectionClient.iterate` now takes `iterate(StoreListOptions, Long chunkSize)`,
   where the options' `limit` is the total-items cap and `chunkSize` is the page size. Previously
   `limit` was the per-page size. This aligns Store iteration with the reference client and the new
@@ -114,8 +327,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Verified the client against OpenAPI specification version `v2-2026-07-08T143931Z` and bumped
-  `Version.API_SPEC_VERSION` accordingly.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-08T143931Z`.
 - Aligned the `User-Agent` OS token with the reference JS client's `os.platform()` token: it now
   uses the short, lowercase platform identifier (`linux`, `darwin`, `win32`, `android`, …) instead
   of the human-readable `os.name` value.
@@ -129,15 +341,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Verified the client against OpenAPI specification version `v2-2026-07-07T132551Z` and bumped
-  `Version.API_SPEC_VERSION` accordingly.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-07T132551Z`.
 - Corrected the `LastRunOptions` documentation: `origin` is now a spec-declared query parameter on
   the `runs/last` endpoints (behaviour unchanged).
 
 ## [0.1.0] - 2026-07-03
 
-Initial release of the official (experimental, AI-generated and AI-maintained) Java client for the
-Apify API, verified against OpenAPI specification version `v2-2026-07-02T131926Z`.
+Initial release of the Java client for the Apify API, targeting OpenAPI specification version
+`v2-2026-07-02T131926Z`.
 
 ### Added
 

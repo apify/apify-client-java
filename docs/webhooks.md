@@ -1,9 +1,5 @@
 # Webhooks & dispatches
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Webhooks notify an external service when specific events occur. Access the collection with
 `client.webhooks()` and a single webhook with `client.webhook(id)`. Dispatches (individual
 invocations) are available account-wide via `client.webhookDispatches()` /
@@ -54,7 +50,18 @@ WebhookDispatch dispatch = client.webhook("WEBHOOK_ID").test();
 System.out.println(dispatch.getId());
 ```
 
-`Webhook` fields: `getId()`, `getUserId()`, `getRequestUrl()`, `getEventTypes()`.
+`Webhook` fields: `getId()`, `getUserId()`, `getRequestUrl()`, `getEventTypes()`, `getCreatedAt()`
+/ `getModifiedAt()` (`Instant`), `isAdHoc()` (a one-off webhook attached to a single run, e.g. via
+`ActorStartOptions.webhooks(...)`, rather than a persistent account-level webhook),
+`getShouldInterpolateStrings()` (`Boolean`; whether `{{...}}` placeholders in `getPayloadTemplate()`/
+`getHeadersTemplate()` are interpolated with values from the triggering event before dispatch),
+`getCondition()` (`JsonNode`; one of an Actor ID, a task ID or a specific run ID, depending on how
+the webhook was configured), `isIgnoreSslErrors()`, `isDoNotRetry()`, `getPayloadTemplate()`,
+`getHeadersTemplate()`, `getDescription()`, `getLastDispatch()` (`WebhookLastDispatch`, nullable —
+a summary of the most recent dispatch: `getStatus()` one of `"ACTIVE"`/`"SUCCEEDED"`/`"FAILED"`,
+`getFinishedAt()`/`getRemovedAt()` as `Instant`), and `getStats()` (`WebhookStats`, exposing
+`getTotalDispatches()`). Any field not covered by a typed getter is still available via the
+inherited `getExtra()` (see [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
 
 ## `WebhookDispatchCollectionClient` and `WebhookDispatchClient`
 
@@ -64,4 +71,13 @@ System.out.println(dispatch.getId());
 | `webhookDispatches().iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<WebhookDispatch>` over all dispatches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 | `webhookDispatch(id).get()` | Fetch a dispatch. Returns `Optional<WebhookDispatch>`. |
 
-`WebhookDispatch` fields: `getId()`, `getWebhookId()`.
+`WebhookDispatch` fields: `getId()`, `getUserId()`, `getWebhookId()`, `getCreatedAt()` (`Instant`),
+`getStatus()` (one of `"ACTIVE"`/`"SUCCEEDED"`/`"FAILED"`), `getEventType()` (the event that
+triggered the dispatch), `getCalls()` (unmodifiable `List<WebhookDispatchCall>` — each exposing
+`getStartedAt()`/`getFinishedAt()` as `Instant`, `getErrorMessage()`, `getResponseStatus()`
+(`Integer`), `getResponseBody()`), `getWebhook()` (`WebhookDispatchWebhookInfo`, nullable — a
+`getRequestUrl()`/`isAdHoc()` summary of the webhook that produced the dispatch), and
+`getEventData()` (`WebhookDispatchEventData`, nullable — `getActorRunId()`/`getActorId()`/
+`getActorTaskId()`/`getActorBuildId()`, whichever apply to the triggering event). Any field not
+covered by a typed getter is still available via the inherited `getExtra()` (see
+[the docs index](README.md#model-fields-and-unmodeled-data-getextra)).

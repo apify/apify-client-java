@@ -1,9 +1,5 @@
 # Runs
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 `client.task(id).runs()`) and a single run with `client.run(id)`.
 
@@ -14,8 +10,13 @@ Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 | `list(ListOptions, RunListOptions)` | List runs. Returns `PaginationList<ActorRun>`. |
 | `iterate(ListOptions, RunListOptions, Long chunkSize)` | Lazy `Iterator<ActorRun>` over all matching runs; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 
-`RunListOptions` adds `status(List<String>)` (e.g. `SUCCEEDED`, `RUNNING`; sent comma-separated) and,
-for Actor/task-scoped collections, `startedAfter(String)` / `startedBefore(String)` (ISO-8601).
+`RunListOptions` adds `status(List<String>)` (e.g. `SUCCEEDED`, `RUNNING`; sent comma-separated),
+declared by every scope's endpoint (`client.runs()`, `client.actor(id).runs()`,
+`client.task(id).runs()`), and `startedAfter(String)` / `startedBefore(String)` (ISO-8601), declared
+only by the account-wide `client.runs()` and the Actor-scoped `client.actor(id).runs()` endpoints —
+the task-scoped `client.task(id).runs()` endpoint's spec does not declare these two parameters at
+all, so set them only when listing at one of the other two scopes. All parameters a given scope
+declares compose (e.g. a status filter combined with a start-time window on `client.runs()`).
 
 ```java
 PaginationList<ActorRun> runs = client.runs().list(
@@ -42,6 +43,14 @@ PaginationList<ActorRun> runs = client.runs().list(
 | `getStreamedLog()` | A `StreamedLog` that redirects the live log to a default per-run logger. |
 | `getStreamedLog(StreamedLogOptions)` | As above, with a custom destination / options. |
 
+If `waitSecs` elapses before the run reaches a terminal state, `waitForFinish` returns the run's
+current (non-terminal) status rather than throwing or blocking further — check `isTerminal()` on
+the result and call `waitForFinish` again (or poll) if you need to keep waiting. `ActorClient`/
+`TaskClient`'s `call(...)` overloads (see [Actors](actors.md#actorclient)/[Tasks](tasks.md)) return
+this same possibly-non-terminal `ActorRun` for the same reason: `call` is `start` followed by
+`waitForFinish`, so a `call` with a short `waitSecs` on a long-running Actor can return before the
+run finishes.
+
 ### Streamed log redirection
 
 `getStreamedLog()` returns a `StreamedLog`: a helper that follows the run's live raw log in a
@@ -49,7 +58,7 @@ background thread and redirects each complete, timestamped message to a destinat
 `AutoCloseable` — call `start()` to begin redirection and `stop()` (or `close()`, via
 try-with-resources) to end it.
 
-With no options, messages go to a `java.util.logging.Logger` at `INFO` level, prefixed with the
+With no options, messages go to an SLF4J `Logger` at `INFO` level, prefixed with the
 Actor name and run id (looked up automatically). `StreamedLogOptions` customizes it:
 
 - `toLog(Consumer<String>)` — send each complete message to your own consumer instead of the
@@ -72,7 +81,13 @@ For raw stream access without redirection, use `log().stream(new LogOptions().ra
 `log()` for the full log text or for non-raw/download options.
 
 To set the current run's status message from inside an Actor, use the top-level
-`client.setStatusMessage(...)` (see [the docs index](README.md#setting-single-resource-status)).
+`client.setStatusMessage(...)` (see [the docs index](README.md#setting-the-current-runs-status-message)).
+To update the status message of a run other than the current one, call `update()` on its
+`RunClient` directly:
+
+```java
+client.run("RUN_ID").update(Map.of("statusMessage", "half way there", "isStatusMessageTerminal", false));
+```
 
 > **`lastRun()` clients are for reads.** A `RunClient` obtained via `actor(id).lastRun(...)` /
 > `task(id).lastRun(...)` targets the `runs/last` path and is intended for reading (`get`,
@@ -89,6 +104,42 @@ The status is one of `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `T
 `ABORTING`, `ABORTED`; `isTerminal()` is true for the finished states (`SUCCEEDED`, `FAILED`,
 `TIMED-OUT`, `ABORTED`).
 
+`ActorRun` additionally exposes: `getGeneralAccess()` (`String`; who can access the run without
+owning it, e.g. `"ANYONE_WITH_ID_CAN_READ"`, `"RESTRICTED"`, or `null` to follow the account/Actor
+default), `getChargedEventCounts()` (`Map<String, Long>`; per-event-type charge counts for
+pay-per-event Actors, `null` otherwise), `getPricingInfo()` (`JsonNode`; shape depends on the
+Actor's pricing model), `getUsage()` / `getUsageUsd()` (`ActorRunUsage`; per-billable-unit resource
+consumption, the latter as its USD cost — see below), `getUsageTotalUsd()` (`Double`; the run's
+total cost in USD, combining platform usage and/or event costs depending on pricing model),
+`getStats()` (`ActorRunStats`; runtime metrics — `getInputBodyLen()`, `getMigrationCount()`,
+`getRebootCount()`, `getRestartCount()`, `getResurrectCount()`,
+`getMemAvgBytes()`/`getMemMaxBytes()`/`getMemCurrentBytes()`,
+`getCpuAvgUsage()`/`getCpuMaxUsage()`/`getCpuCurrentUsage()`, `getNetRxBytes()`/`getNetTxBytes()`,
+`getDurationMillis()`, `getRunTimeSecs()`, `getMetamorph()`, `getComputeUnits()`; any other field is
+still reachable via the inherited `getExtra()`), `getOptions()` (`ActorRunOptions`; the run
+configuration actually applied,
+which may differ from what was requested — see below), `getMeta()` (`ActorRunMeta`; `getOrigin()`,
+`getClientIp()`, `getUserAgent()`, `getScheduleId()`, `getScheduledAt()` — how and, if triggered by a
+schedule, when the run was initiated), `getBuildNumber()` (`String`; the
+build's semver-like number, e.g. `"0.0.36"`), `getExitCode()` (`Integer`; the process exit code once
+finished), `isContainerServerReady()` (`Boolean`; whether the container's HTTP server can accept
+requests), `getGitBranchName()` (`String`; the git branch the build was built from, if any), and
+`getStorageIds()` (`JsonNode`; a `{datasets, keyValueStores, requestQueues}` map of aliased storage
+IDs for the run, each with at least a `"default"` entry). Any field not covered by a typed getter is
+still available via the inherited `getExtra()` (see [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
+
+`ActorRunUsage` (`getUsage()`/`getUsageUsd()`) exposes one nullable `Double` getter per billable
+unit: `getActorComputeUnits()`, `getDatasetReads()`, `getDatasetWrites()`,
+`getKeyValueStoreReads()`, `getKeyValueStoreWrites()`, `getKeyValueStoreLists()`,
+`getRequestQueueReads()`, `getRequestQueueWrites()`, `getDataTransferInternalGbytes()`,
+`getDataTransferExternalGbytes()`, `getProxyResidentialTransferGbytes()`, `getProxySerps()`. Each is
+`null` when the run's Actor did not incur that kind of usage.
+
+`ActorRunOptions` (`getOptions()`) exposes: `getBuild()` (`String`), `getTimeoutSecs()` (`Long`,
+nullable), `getMemoryMbytes()` (`Long`, nullable), `getDiskMbytes()` (`Long`, nullable),
+`getMaxItems()` (`Long`, nullable), `getMaxTotalChargeUsd()` (`Double`, nullable),
+`getRestartOnError()` (`Boolean`, nullable).
+
 `RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)` and
 `idempotencyKey(String)` — the latter is auto-generated when unset so a transport-retried charge is
 applied at most once.
@@ -98,5 +149,5 @@ client.run("RUN_ID").charge(new RunChargeOptions("my-event").count(3L));
 ```
 
 `MetamorphOptions` uses plain values `build(String)` and `contentType(String)`.
-`RunResurrectOptions` fields: `build`, `memoryMbytes`, `timeoutSecs`, `maxItems`,
-`maxTotalChargeUsd`, `restartOnError`.
+`RunResurrectOptions` fields: `build(String)`, `memoryMbytes(Long)`, `timeoutSecs(Long)`,
+`maxItems(Long)`, `maxTotalChargeUsd(Double)`, `restartOnError(Boolean)`.

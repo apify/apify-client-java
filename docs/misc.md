@@ -1,9 +1,5 @@
 # Store, users & logs
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 ## Apify Store — `client.store()`
 
 Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollectionClient`.
@@ -31,14 +27,19 @@ while (shown < 5 && it.hasNext()) {
 }
 ```
 
-`ActorStoreListItem` fields: `getId()`, `getName()`, `getUsername()`, `getTitle()`.
+`ActorStoreListItem` fields: `getId()`, `getName()`, `getUsername()`, `getTitle()`,
+`getDescription()`, `getStats()` (`ActorStats`; see [Actors](actors.md#actorclient)),
+`getCurrentPricingInfo()` (`PricingInfo` — `getPricingModel()`), `getPictureUrl()`,
+`getUserPictureUrl()`, `getUrl()`, `getReadmeSummary()`. Any field not covered by a typed getter is
+still available via the inherited `getExtra()` (see
+[the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
 
 ## Users — `client.me()` / `client.user(id)`
 
 | Method | Description |
 |---|---|
 | `get()` | Fetch the user. Returns `Optional<User>` (private details for `me()` via `getExtra()`). |
-| `monthlyUsage()` / `monthlyUsage(String date)` | Account monthly usage (`me()` only). Returns `JsonNode`. |
+| `monthlyUsage()` / `monthlyUsage(String date)` | Account monthly usage (`me()` only). `date` (any day within the target month, formatted `YYYY-MM-DD`) reports that month; `null`/empty reports the current month. Returns `JsonNode`. |
 | `limits()` | Account resource limits (`me()` only). Returns `JsonNode`. |
 | `updateLimits(Object)` | Update account limits (`me()` only). No return value. |
 
@@ -50,15 +51,27 @@ Optional<User> me = client.me().get();
 me.ifPresent(
     u -> {
       System.out.println("Account: " + u.getId());
-      // Fields not modelled on User (email, plan, proxy, ...) are exposed through the untyped
-      // extras map, which getExtra() returns as a Map<String, Object>.
-      System.out.println("Email: " + u.getExtra().get("email"));
+      // email/plan/proxy/... are only populated for me() (not user(id)); use getExtra() for any
+      // remaining account field not modelled directly.
+      System.out.println("Email: " + u.getEmail());
     });
 JsonNode usage = client.me().monthlyUsage();
 ```
 
-`User` fields: `getId()`, `getUsername()`, plus `getExtra()` — a `Map<String, Object>` carrying any
-account fields not modelled directly (for `me()`, private details such as `email` and `plan`).
+`User` fields: `getId()`, `getUsername()`, `getProfile()` (`UserProfile` — `getBio()`, `getName()`,
+`getPictureUrl()`, `getGithubUsername()`, `getWebsiteUrl()`, `getTwitterUsername()`, all nullable).
+Only present for `me()`: `getEmail()`, `getProxy()` (`UserProxy` — `getPassword()`, `getGroups()`
+as `List<ProxyGroup>`, each with `getName()`/`getDescription()`/`getAvailableCount()` as `Long`),
+`getPlan()` (`UserPlan` — `getId()`, `getDescription()`, `getIsEnabled()`,
+`getMonthlyBasePriceUsd()`/`getMonthlyUsageCreditsUsd()`/`getUsageDiscountPercent()`/
+`getMaxMonthlyUsageUsd()`/`getMaxActorMemoryGbytes()`/`getMaxMonthlyActorComputeUnits()`/
+`getMaxMonthlyResidentialProxyGbytes()`/`getMaxMonthlyProxySerps()`/
+`getMaxMonthlyExternalDataTransferGbytes()` as `Double`, `getEnabledPlatformFeatures()` as
+`List<String>`, `getMaxActorCount()`/`getMaxActorTaskCount()`/`getDataRetentionDays()`/
+`getTeamAccountSeatCount()` as `Long`, `getAvailableProxyGroups()` as `JsonNode`,
+`getSupportLevel()`, `getAvailableAddOns()` as `List<JsonNode>`), `getEffectivePlatformFeatures()`
+(`JsonNode`), `getCreatedAt()` (`Instant`), `getIsPaying()` (`Boolean`). Plus `getExtra()` — a
+`Map<String, Object>` carrying any account field not modelled directly.
 
 ## Logs — `client.log(id)`
 

@@ -1,9 +1,17 @@
 package com.apify.client.integration;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.apify.client.ApifyClient;
+import com.apify.client.log.StreamedLog;
+import com.apify.client.log.StreamedLogOptions;
+import com.apify.client.run.RunClient;
 import java.security.SecureRandom;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BooleanSupplier;
 
 /**
  * Shared setup for the integration test suite.
@@ -15,10 +23,48 @@ import java.security.SecureRandom;
  * <p>Tests are designed to run concurrently — including against the same test account from several
  * language clients at once — so every test creates uniquely-named resources and cleans them up.
  */
-abstract class IntegrationBase {
+public abstract class IntegrationBase {
 
   /** The integration-test contract fallback base URL. */
   static final String DEFAULT_API_URL = "https://api.apify.com/v2";
+
+  /**
+   * The {@code waitSecs} budget used across this suite for a live {@code apify/hello-world} run (a
+   * "store Actor finishes in a couple of seconds" test fixture): generous enough to absorb
+   * queueing/build delays on the shared test account without making a genuinely stuck run block the
+   * suite indefinitely.
+   */
+  static final long TEST_ACTOR_WAIT_SECS = 120L;
+
+  /**
+   * Bounded window given to a just-finished run's live log stream to catch up and flush its last
+   * bytes: {@code streamedLogRedirection}-style assertions can otherwise race the background reader
+   * thread, which may not have pulled any bytes off the stream yet even though the log content
+   * itself is already fully available server-side (see {@code
+   * ActorRunIntegrationTest#streamedLogRedirection}). Shared by every test that needs the same
+   * catch-up wait, via {@link #STREAM_CATCH_UP_ATTEMPTS} + {@link #pollUntil}.
+   */
+  static final long STREAM_CATCH_UP_TIMEOUT_MILLIS = 15_000;
+
+  /** Poll interval used while waiting out {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS}. */
+  static final long STREAM_CATCH_UP_POLL_MILLIS = 250;
+
+  /** {@link #pollUntil} attempt count equivalent to {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS}. */
+  static final int STREAM_CATCH_UP_ATTEMPTS =
+      (int) (STREAM_CATCH_UP_TIMEOUT_MILLIS / STREAM_CATCH_UP_POLL_MILLIS);
+
+  /**
+   * {@link #pollUntil} attempt count bounding how long a CRUD-flow test waits for a just-created
+   * resource to surface in its own top-level collection {@code list()} (a write and the LIST
+   * endpoint's index can converge asynchronously - the same class of eventual-consistency race as
+   * {@link #STREAM_CATCH_UP_ATTEMPTS} and {@code ActorRunIntegrationTest#RUN_LIST_FIND_ATTEMPTS},
+   * just with a shorter budget since these are exclusively-owned resources, not entries in a
+   * heavily-shared public collection).
+   */
+  static final int LIST_FIND_ATTEMPTS = 5;
+
+  /** Poll interval used while waiting out {@link #LIST_FIND_ATTEMPTS}. */
+  static final long LIST_FIND_BACKOFF_MILLIS = 500L;
 
   private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -63,5 +109,133 @@ abstract class IntegrationBase {
       hex.append(String.format("%02x", b));
     }
     return "java-test-" + prefix + "-" + hex;
+  }
+
+  /**
+   * Polls {@code check} up to {@code maxAttempts} times, sleeping {@code backoffMillis} between
+   * attempts, returning as soon as it reports success (or once attempts are exhausted). Shared by
+   * every eventual-consistency wait in this suite (a write and a LIST/iterate endpoint's index can
+   * converge asynchronously, so a single-pass check right after a write can race that convergence)
+   * so the retry/backoff shape lives in exactly one place. Swallows {@link InterruptedException} by
+   * restoring the interrupt flag and returning {@code false} early, so callers don't need to
+   * declare a checked exception just for this bounded, best-effort wait.
+   */
+  public static boolean pollUntil(int maxAttempts, long backoffMillis, BooleanSupplier check) {
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      if (check.getAsBoolean()) {
+        return true;
+      }
+      if (attempt + 1 < maxAttempts) {
+        try {
+          Thread.sleep(backoffMillis);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          return false;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Opens a fresh {@link StreamedLog} against an already-finished run's static log (with {@link
+   * StreamedLogOptions#fromStart(boolean)} so the run's already-past-relative-to-construction
+   * messages are not filtered out) and waits up to {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS} for it
+   * to deliver the (now non-racing) content. Used by {@link #assertStreamedLogNonEmptyIfProduced}
+   * to retry once when a live-tail stream came up empty despite the run having produced a log:
+   * opening this stream strictly after the run is already finished means it is a plain GET against
+   * a static, fully-persisted log, not a live tail, so it cannot race the run's own writer the way
+   * the original stream could.
+   */
+  static List<String> collectFinishedRunLog(RunClient runClient) {
+    List<String> retryCollected = new CopyOnWriteArrayList<>();
+    try (StreamedLog retryStream =
+        runClient.getStreamedLog(
+            new StreamedLogOptions().toLog(retryCollected::add).fromStart(true))) {
+      retryStream.start();
+      pollUntil(
+          STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !retryCollected.isEmpty());
+    }
+    return retryCollected;
+  }
+
+  /**
+   * Asserts that {@code collected} - lines captured by an explicit, directly-tested {@link
+   * StreamedLog} for a now-finished run - is non-empty, but only when the run actually produced log
+   * output at all, per the authoritative, statically-persisted log ({@code runClient.log().get()}).
+   *
+   * <p>A fast Actor run (the store Actors this suite exercises routinely finish in a couple of
+   * seconds) can complete before the background reader has pulled any bytes off the live log stream
+   * yet, even though the log content itself is already fully available server-side once the run is
+   * done. This method first gives {@code collected} a bounded {@link
+   * #STREAM_CATCH_UP_TIMEOUT_MILLIS} window to catch up in-place. If it is still empty, it consults
+   * the authoritative persisted log to find out whether the run produced any log output at all: if
+   * it did not, there is nothing to have streamed and the assertion is skipped entirely (this is
+   * not a race, just an Actor that logged nothing); if it did, one more attempt is made via {@link
+   * #collectFinishedRunLog} (a brand-new, non-racing {@link StreamedLog}) before failing.
+   *
+   * <p>The {@link #collectFinishedRunLog} retry opens its own explicit {@code StreamedLog} against
+   * the finished run, so it is only safe to use when the test's subject under test <em>is</em> that
+   * same explicit {@code getStreamedLog} API (as {@code streamedLogRedirection} is) - a genuine
+   * break in that API still fails the assertion. For a test whose subject is instead a {@code
+   * call(...)} overload's own <em>internal, default</em> log-streaming wiring, use {@link
+   * #assertCallDefaultStreamedLogNonEmptyIfProduced} instead: retrying via a separate explicit
+   * stream there would bypass the very wiring under test, silently masking a genuinely broken
+   * default (e.g. log streaming not actually enabled by default) behind a green assertion sourced
+   * from a different code path.
+   */
+  static void assertStreamedLogNonEmptyIfProduced(RunClient runClient, List<String> collected) {
+    pollUntil(STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !collected.isEmpty());
+
+    Optional<String> authoritativeLog = runClient.log().get();
+    if (runProducedLog(authoritativeLog) && collected.isEmpty()) {
+      collected.addAll(collectFinishedRunLog(runClient));
+    }
+    assertNonEmptyIfLogProduced(authoritativeLog, collected);
+  }
+
+  /**
+   * Asserts that {@code collected} - lines captured by a {@code call(...)} overload's own internal,
+   * default log-streaming wiring for a now-finished run - is non-empty, but only when the run
+   * actually produced log output at all, per the authoritative, statically-persisted log ({@code
+   * runClient.log().get()}).
+   *
+   * <p>Like {@link #assertStreamedLogNonEmptyIfProduced}, this gives {@code collected} a bounded
+   * {@link #STREAM_CATCH_UP_TIMEOUT_MILLIS} window to catch up in-place and skips the assertion
+   * entirely if the authoritative log shows the run produced no output at all. Unlike that method,
+   * it does <em>not</em> retry via a separate, explicit {@link StreamedLog} on a mismatch: that
+   * retry goes through a different code path than the one under test here ({@code call(...)}'s own
+   * default-streaming wiring, not the standalone {@code getStreamedLog} API), so using it as a
+   * rescue would let a genuinely broken default (e.g. log streaming silently not enabled) pass by
+   * being quietly repopulated from the bypassing stream instead of failing. The bounded catch-up
+   * poll is kept as this variant's sole flake mitigation.
+   */
+  static void assertCallDefaultStreamedLogNonEmptyIfProduced(
+      RunClient runClient, List<String> collected) {
+    pollUntil(STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !collected.isEmpty());
+    assertNonEmptyIfLogProduced(runClient.log().get(), collected);
+  }
+
+  /** Whether the authoritative, statically-persisted log shows the run produced any output. */
+  private static boolean runProducedLog(Optional<String> authoritativeLog) {
+    return authoritativeLog.isPresent() && !authoritativeLog.get().isEmpty();
+  }
+
+  /**
+   * Shared assertion backing both {@link #assertStreamedLogNonEmptyIfProduced} and {@link
+   * #assertCallDefaultStreamedLogNonEmptyIfProduced}: fails if the run produced a non-empty
+   * authoritative log but nothing was collected, and is a no-op otherwise (including when the run
+   * produced no log at all, in which case there is nothing to have streamed).
+   */
+  private static void assertNonEmptyIfLogProduced(
+      Optional<String> authoritativeLog, List<String> collected) {
+    if (runProducedLog(authoritativeLog)) {
+      assertTrue(
+          !collected.isEmpty(),
+          "run produced a non-empty log ("
+              + authoritativeLog.get().length()
+              + " chars) but the streamed collector observed none - log streaming/redirection did"
+              + " not work");
+    }
   }
 }

@@ -5,9 +5,34 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.apify.client.actor.Actor;
+import com.apify.client.actor.ActorListOptions;
+import com.apify.client.actor.ActorVersion;
+import com.apify.client.dataset.DatasetDownloadOptions;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.dataset.DownloadItemsFormat;
+import com.apify.client.http.ApifyApiException;
+import com.apify.client.http.ApifyTransportException;
+import com.apify.client.keyvalue.KeyValueStore;
+import com.apify.client.keyvalue.KeyValueStoreRecord;
+import com.apify.client.keyvalue.ListKeysOptions;
+import com.apify.client.keyvalue.SetRecordOptions;
+import com.apify.client.requestqueue.BatchAddRequestsOptions;
+import com.apify.client.requestqueue.BatchAddResult;
+import com.apify.client.requestqueue.RequestQueueRequest;
+import com.apify.client.run.ActorRun;
+import com.apify.client.run.LastRunOptions;
+import com.apify.client.run.MetamorphOptions;
+import com.apify.client.run.RunChargeOptions;
+import com.apify.client.run.SetStatusMessageOptions;
+import com.apify.client.store.ActorStoreListItem;
+import com.apify.client.store.StoreListOptions;
+import com.apify.client.webhook.NestedWebhookCollectionClient;
+import com.apify.client.webhook.Webhook;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -18,14 +43,14 @@ import org.junit.jupiter.api.Test;
  */
 class ClientBehaviourRegressionTest {
 
-  private static ApifyClient client(MockBackend backend) {
+  private static ApifyClient client(MockTransport backend) {
     return client(backend, 0);
   }
 
-  private static ApifyClient client(MockBackend backend, int maxRetries) {
+  private static ApifyClient client(MockTransport backend, int maxRetries) {
     return ApifyClient.builder()
         .token("test-token")
-        .httpBackend(backend)
+        .httpTransport(backend)
         .maxRetries(maxRetries)
         .minDelayBetweenRetries(Duration.ofMillis(1))
         .build();
@@ -33,7 +58,7 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void chargeSendsIdempotencyKey() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{}}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
     client(backend).run("run123").charge(new RunChargeOptions("my-event"));
     String key = backend.lastHeaders.firstValue("idempotency-key").orElse("");
     assertTrue(
@@ -45,7 +70,7 @@ class ClientBehaviourRegressionTest {
   void lastRunForwardsStatusFilterToNestedStorages() {
     // A status/origin-filtered last-run client must forward those filters to its nested
     // dataset/key-value-store/request-queue/log accessors, so they resolve the same run.
-    MockBackend ds = MockBackend.ofConstant(200, "[]");
+    MockTransport ds = MockTransport.ofConstant(200, "[]");
     client(ds)
         .actor("me/x")
         .lastRun("SUCCEEDED")
@@ -54,7 +79,7 @@ class ClientBehaviourRegressionTest {
     assertTrue(ds.lastUrl.contains("runs/last/dataset/items"), ds.lastUrl);
     assertTrue(ds.lastUrl.contains("status=SUCCEEDED"), ds.lastUrl);
 
-    MockBackend log = MockBackend.ofConstant(200, "log-text");
+    MockTransport log = MockTransport.ofConstant(200, "log-text");
     client(log)
         .actor("me/x")
         .lastRun(new LastRunOptions().status("SUCCEEDED").origin("API"))
@@ -68,7 +93,7 @@ class ClientBehaviourRegressionTest {
   @Test
   void plainRunNestedStoragesCarryNoInheritedFilter() {
     // A non-last-run client has no pinned params, so nested accessors stay filter-free.
-    MockBackend ds = MockBackend.ofConstant(200, "[]");
+    MockTransport ds = MockTransport.ofConstant(200, "[]");
     client(ds).run("run123").dataset().listItems(new DatasetListItemsOptions());
     assertTrue(ds.lastUrl.contains("actor-runs/run123/dataset/items"), ds.lastUrl);
     assertFalse(ds.lastUrl.contains("status="), ds.lastUrl);
@@ -76,14 +101,14 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void chargeHonorsExplicitIdempotencyKey() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{}}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
     client(backend).run("run123").charge(new RunChargeOptions("e").idempotencyKey("fixed-key"));
     assertEquals("fixed-key", backend.lastHeaders.firstValue("idempotency-key").orElse(""));
   }
 
   @Test
   void chargeRejectsMissingEventName() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{}}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
     ApifyClient client = client(backend);
     assertThrows(
         IllegalArgumentException.class, () -> client.run("r").charge(new RunChargeOptions(null)));
@@ -93,15 +118,94 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void setStatusMessageThrowsWhenActorRunIdUnset() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
+    ApifyClient client = client(backend);
+    assertThrows(
+        IllegalStateException.class,
+        () -> client.setStatusMessage("hello", new SetStatusMessageOptions()));
+    assertEquals(0, backend.calls, "no request should be sent when ACTOR_RUN_ID is unset");
+  }
+
+  // Documented skip, mirroring this project's existing metamorph/reboot/charge live-skip
+  // convention (see ActorRunIntegrationTest's class-level comment): the ACTOR_RUN_ID-set success
+  // path (PUTs statusMessage/isStatusMessageTerminal to the run identified by that env var) is not
+  // covered here because the JVM's environment map is effectively immutable in-process without
+  // reflecting into JDK internals (fragile, and guarded by the module system since Java 9), and it
+  // is not live-testable either (a live integration test isn't itself an Actor run, so
+  // ACTOR_RUN_ID is never set there). The PUT-body construction it exercises — statusMessage
+  // always set, isStatusMessageTerminal only when non-null — is otherwise a straight-line, 3-line
+  // method body with no branch this test suite doesn't already cover elsewhere (RunClient.update's
+  // PUT is exercised by TaskIntegrationTest#taskCrudFlow and friends).
+
+  @Test
+  void metamorphSendsTargetActorIdBuildAndInputBody() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"run123\"}}");
+    client(backend)
+        .run("run123")
+        .metamorph(
+            "apify/other-actor", Map.of("foo", "bar"), new MetamorphOptions().build("1.2.3"));
+    assertTrue(backend.lastUrl.contains("actor-runs/run123/metamorph"), backend.lastUrl);
+    // targetActorId is normalized to the URL-safe username~actor-name form before sending
+    // (ResourceContext.toSafeId), matching the reference client's _toSafeId; '~' is then
+    // percent-encoded like any other query value.
+    assertTrue(backend.lastUrl.contains("targetActorId=apify%7Eother-actor"), backend.lastUrl);
+    assertTrue(backend.lastUrl.contains("build=1.2.3"), backend.lastUrl);
+    assertTrue(backend.lastBody.contains("\"foo\":\"bar\""), backend.lastBody);
+    assertEquals("POST", backend.lastMethod);
+  }
+
+  @Test
+  void metamorphRejectsMissingTargetActorId() {
+    // Mirrors chargeRejectsMissingEventName's validation of RunChargeOptions.eventName.
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"run123\"}}");
+    ApifyClient client = client(backend);
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> client.run("run123").metamorph(null, null, new MetamorphOptions()));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> client.run("run123").metamorph("", null, new MetamorphOptions()));
+    assertEquals(0, backend.calls, "no request should be sent for an invalid metamorph");
+  }
+
+  @Test
+  void requiredOptionsArgumentsRejectNullWithClearException() {
+    // metamorph/resurrect/build all use their options argument unconditionally, so a null would
+    // otherwise surface as a raw NullPointerException deep inside the method; guard it with a
+    // clear IllegalArgumentException instead, matching call()/validateInput()'s own null-defaulting
+    // (those default to an empty options instance because they are single-purpose convenience
+    // overloads; these three take options as their only way to configure a required action, so a
+    // missing options object is a caller error worth surfacing rather than silently defaulting).
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"run123\"}}");
+    ApifyClient client = client(backend);
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> client.run("run123").metamorph("apify/other-actor", null, null));
+    assertThrows(IllegalArgumentException.class, () -> client.run("run123").resurrect(null));
+    assertThrows(IllegalArgumentException.class, () -> client.actor("actor123").build("0.0", null));
+    assertEquals(0, backend.calls, "no request should be sent for a null required options arg");
+  }
+
+  @Test
+  void rebootSendsPostToRebootWithNoBody() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"run123\"}}");
+    ActorRun run = client(backend).run("run123").reboot();
+    assertEquals("run123", run.getId());
+    assertTrue(backend.lastUrl.contains("actor-runs/run123/reboot"), backend.lastUrl);
+    assertEquals("POST", backend.lastMethod);
+  }
+
+  @Test
   void getRecordDefaultsAttachment() {
-    MockBackend backend = MockBackend.ofConstant(200, "raw-bytes");
+    MockTransport backend = MockTransport.ofConstant(200, "raw-bytes");
     client(backend).keyValueStore("store1").getRecord("OUTPUT");
     assertTrue(backend.lastUrl.contains("attachment=1"), backend.lastUrl);
   }
 
   @Test
   void keyValueStoreRecordDefensivelyCopiesBytes() {
-    MockBackend backend = MockBackend.ofConstant(200, "raw-bytes");
+    MockTransport backend = MockTransport.ofConstant(200, "raw-bytes");
     KeyValueStoreRecord record =
         client(backend).keyValueStore("s").getRecord("OUTPUT").orElseThrow();
     byte[] first = record.getValue();
@@ -113,9 +217,9 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void setRecordDoesNotRetryTimeoutsWhenOptedOut() {
-    MockBackend timeouts = new MockBackend(List.of(MockBackend.timeoutError()));
+    MockTransport timeouts = new MockTransport(List.of(MockTransport.timeoutError()));
     assertThrows(
-        HttpClientCore.TransportException.class,
+        ApifyTransportException.class,
         () ->
             client(timeouts, 3)
                 .keyValueStore("s")
@@ -129,16 +233,16 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void setRecordRetriesTimeoutsByDefault() {
-    MockBackend timeouts = new MockBackend(List.of(MockBackend.timeoutError()));
+    MockTransport timeouts = new MockTransport(List.of(MockTransport.timeoutError()));
     assertThrows(
-        HttpClientCore.TransportException.class,
+        ApifyTransportException.class,
         () -> client(timeouts, 3).keyValueStore("s").setRecord("k", new byte[] {1}, "text/plain"));
     assertEquals(4, timeouts.calls, "timeouts should be retried (maxRetries + 1 attempts)");
   }
 
   @Test
   void createKeysPublicUrlForwardsFilterOptions() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{\"id\":\"store1\"}}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"store1\"}}");
     String url =
         client(backend)
             .keyValueStore("store1")
@@ -150,7 +254,7 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void downloadItemsForwardsItemSelectionParams() {
-    MockBackend backend = MockBackend.ofConstant(200, "col1,col2\n");
+    MockTransport backend = MockTransport.ofConstant(200, "col1,col2\n");
     client(backend)
         .dataset("d1")
         .downloadItems(
@@ -167,8 +271,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void batchAddRequestsChunks() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"processedRequests\":[],\"unprocessedRequests\":[]}}");
     List<RequestQueueRequest> requests = new ArrayList<>();
     for (int i = 0; i < 60; i++) {
@@ -184,15 +288,72 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void batchAddRequestsSplitsChunksByPayloadSize() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200, "{\"data\":{\"processedRequests\":[],\"unprocessedRequests\":[]}}");
+    // Five requests, each carrying a ~4 MiB payload: three of them already exceed the ~9 MiB
+    // per-call limit, so byte-size chunking must split this single 5-request batch (well under
+    // the 25-request count limit alone) into more than one HTTP call.
+    String bigPayload = "x".repeat(4 * 1024 * 1024);
+    List<RequestQueueRequest> requests = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      requests.add(new RequestQueueRequest("https://example.com", "k" + i).setPayload(bigPayload));
+    }
+    client(backend)
+        .requestQueue("q1")
+        .batchAddRequests(
+            requests,
+            false,
+            new BatchAddRequestsOptions().maxParallel(1).maxUnprocessedRequestsRetries(0));
+    assertTrue(backend.calls > 1, "large requests should be split across multiple batch calls");
+  }
+
+  @Test
+  void batchAddRequestsThrowsWhenSingleRequestExceedsPayloadLimit() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
+    String hugePayload = "x".repeat(10 * 1024 * 1024); // exceeds the ~9 MiB limit on its own
+    List<RequestQueueRequest> requests =
+        List.of(new RequestQueueRequest("https://example.com", "k0").setPayload(hugePayload));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> client(backend).requestQueue("q1").batchAddRequests(requests, false));
+  }
+
+  @Test
+  void paginateRequestsTrimsPageToTotalLimitWhenServerOvershoots() {
+    // If the server ignores (or overshoots) the requested per-page `limit` and returns more items
+    // than the caller's totalLimit cap allows, the iterator must still yield exactly totalLimit
+    // items, mirroring PaginatedIterator's own defensive trim.
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200,
+            "{\"data\":{\"items\":["
+                + "{\"id\":\"1\",\"url\":\"https://example.com/1\",\"uniqueKey\":\"k1\"},"
+                + "{\"id\":\"2\",\"url\":\"https://example.com/2\",\"uniqueKey\":\"k2\"},"
+                + "{\"id\":\"3\",\"url\":\"https://example.com/3\",\"uniqueKey\":\"k3\"},"
+                + "{\"id\":\"4\",\"url\":\"https://example.com/4\",\"uniqueKey\":\"k4\"},"
+                + "{\"id\":\"5\",\"url\":\"https://example.com/5\",\"uniqueKey\":\"k5\"}"
+                + "],\"limit\":3,\"nextCursor\":null}}");
+    java.util.Iterator<RequestQueueRequest> it =
+        client(backend).requestQueue("q1").paginateRequests(3L, null, null);
+    List<String> ids = new ArrayList<>();
+    while (it.hasNext()) {
+      ids.add(it.next().getId());
+    }
+    assertEquals(List.of("1", "2", "3"), ids);
+  }
+
+  @Test
   void batchAddRequestsRetriesUnprocessed() {
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"processedRequests\":[{\"uniqueKey\":\"k0\",\"requestId\":\"r0\"}],"
                         + "\"unprocessedRequests\":[{\"uniqueKey\":\"k1\",\"url\":\"https://example.com\"}]}}"),
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"processedRequests\":[{\"uniqueKey\":\"k1\",\"requestId\":\"r1\"}],"
                         + "\"unprocessedRequests\":[]}}")));
@@ -214,8 +375,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void getWithWaitForwardsWaitForFinish() {
-    MockBackend backend =
-        MockBackend.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
+    MockTransport backend =
+        MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
     Optional<ActorRun> run = client(backend).run("r1").getWithWait(30L);
     assertTrue(run.isPresent(), "run should be present");
     assertEquals("r1", run.get().getId());
@@ -225,14 +386,14 @@ class ClientBehaviourRegressionTest {
   @Test
   void getWithWaitClampsServerWaitToConfiguredTimeout() {
     // With a 10s per-request timeout, a caller asking for waitForFinish=60 must be clamped below
-    // the
-    // timeout (10 - 5s margin = 5) so the synchronous get can't abort itself on the socket timeout.
-    MockBackend backend =
-        MockBackend.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
+    // the timeout (10 - 5s margin = 5) so the synchronous get can't abort itself on the socket
+    // timeout.
+    MockTransport backend =
+        MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
     ApifyClient client =
         ApifyClient.builder()
             .token("t")
-            .httpBackend(backend)
+            .httpTransport(backend)
             .maxRetries(0)
             .timeout(Duration.ofSeconds(10))
             .build();
@@ -243,12 +404,12 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void waitForFinishClampsServerWaitToConfiguredTimeout() {
-    MockBackend backend =
-        MockBackend.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}");
+    MockTransport backend =
+        MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}");
     ApifyClient client =
         ApifyClient.builder()
             .token("t")
-            .httpBackend(backend)
+            .httpTransport(backend)
             .maxRetries(0)
             .minDelayBetweenRetries(Duration.ofMillis(1))
             .timeout(Duration.ofSeconds(20))
@@ -259,16 +420,28 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void builderRejectsZeroOrNegativeTimeout() {
+    // Unlike the delay params (where zero legitimately means "no delay"), a zero/negative timeout
+    // must be rejected at build time: it would otherwise build a client whose first request fails
+    // deep inside the transport (HttpRequest.Builder#timeout rejects a non-positive duration).
+    assertThrows(
+        IllegalArgumentException.class, () -> ApifyClient.builder().timeout(Duration.ZERO));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ApifyClient.builder().timeout(Duration.ofSeconds(-1)));
+  }
+
+  @Test
   void getResourceReturnsEmptyOnNullData() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":null}");
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":null}");
     Optional<KeyValueStore> store = client(backend).keyValueStore("s").get();
     assertTrue(store.isEmpty(), "a 200 with null data must map to an empty Optional, not throw");
   }
 
   @Test
   void storeIterateDoesNotMutateCallerOptionsAndHonorsOffset() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"items\":[],\"total\":0,\"offset\":0,\"limit\":0,\"count\":0}}");
     StoreListOptions options = new StoreListOptions().offset(100L).limit(50L);
     client(backend).store().iterate(options, null).hasNext();
@@ -279,19 +452,19 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void storeIterateWalksMultiplePages() {
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{},{}],\"total\":3,\"offset\":0,\"limit\":2,\"count\":2}}"),
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{}],\"total\":3,\"offset\":2,\"limit\":2,\"count\":1}}"),
                 // Trailing empty page: the iterator stops on an empty page (it does not trust the
                 // reported total, which some endpoints under-report), so a final empty page is
                 // required to terminate an uncapped walk.
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[],\"total\":3,\"offset\":3,\"limit\":2,\"count\":0}}")));
     // No total cap; page size 2 drives paging until the empty page.
@@ -309,13 +482,13 @@ class ClientBehaviourRegressionTest {
   @Test
   void collectionIterateSingleArgDelegatesToServerDefaultPageSize() {
     // The arg-less-chunkSize convenience overload must page correctly (delegates with null chunk).
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{},{}],\"total\":2,\"offset\":0,\"limit\":2,\"count\":2}}"),
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[],\"total\":2,\"offset\":2,\"limit\":2,\"count\":0}}")));
     java.util.Iterator<Actor> it = client(backend).actors().iterate(new ActorListOptions());
@@ -333,8 +506,8 @@ class ClientBehaviourRegressionTest {
   void iterateSnapshotsOptionsSoLaterMutationsDoNotLeak() {
     // The iterator must capture the options (offset/limit AND filters) at call time; mutating the
     // caller's options object afterwards must not change subsequent page requests.
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"items\":[{}],\"total\":1,\"offset\":0,\"limit\":0,\"count\":1}}");
     ActorListOptions options = new ActorListOptions().sortBy("createdAt");
     java.util.Iterator<Actor> it = client(backend).actors().iterate(options);
@@ -346,8 +519,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void runCollectionListToleratesNullOptionsAndFilter() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"items\":[],\"total\":0,\"offset\":0,\"limit\":0,\"count\":0}}");
     PaginationList<ActorRun> runs = client(backend).runs().list(null, null);
     assertEquals(0, runs.getItems().size());
@@ -355,8 +528,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void nestedWebhookCollectionListsWithoutCreate() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"items\":[],\"total\":0,\"offset\":0,\"limit\":0,\"count\":0}}");
     // Compile-time guarantee: the nested collection type has no create(); it only lists.
     NestedWebhookCollectionClient nested = client(backend).task("t1").webhooks();
@@ -365,45 +538,46 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void accountWebhookCollectionCanCreate() {
-    MockBackend backend = MockBackend.ofConstant(200, "{\"data\":{\"id\":\"wh1\"}}");
-    Webhook created = client(backend).webhooks().create(java.util.Map.of("eventTypes", List.of()));
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"wh1\"}}");
+    Webhook created = client(backend).webhooks().create(Map.of("eventTypes", List.of()));
     assertEquals("wh1", created.getId());
     assertTrue(backend.lastUrl.endsWith("/webhooks"), backend.lastUrl);
   }
 
   @Test
   void updateLimitsSendsPutToMeLimits() {
-    MockBackend backend = MockBackend.ofConstant(200, "{}");
-    client(backend).me().updateLimits(java.util.Map.of("maxMonthlyUsageUsd", 100));
+    MockTransport backend = MockTransport.ofConstant(200, "{}");
+    client(backend).me().updateLimits(Map.of("maxMonthlyUsageUsd", 100));
     assertTrue(backend.lastUrl.endsWith("/users/me/limits"), backend.lastUrl);
     assertTrue(backend.lastBody.contains("\"maxMonthlyUsageUsd\":100"), backend.lastBody);
     assertEquals(1, backend.calls);
   }
 
   @Test
-  void batchAddRequestsThrowsOnNonRetryableClientError() {
-    // A hard 4xx (e.g. bad token / insufficient permissions) must surface, not be masked as
-    // "unprocessed" — otherwise a caller cannot tell it apart from ordinary rate-limiting.
-    MockBackend backend =
-        MockBackend.ofConstant(
+  void batchAddRequestsNeverThrowsOnNonRetryableClientError() {
+    // Matches the reference client's `_batchAddRequestsWithRetries`: even a hard 4xx (e.g. bad
+    // token / insufficient permissions) must NOT be thrown. It is reported as unprocessed instead,
+    // keeping batchAddRequests' never-throws contract regardless of the failure cause.
+    MockTransport backend =
+        MockTransport.ofConstant(
             403, "{\"error\":{\"type\":\"insufficient-permissions\",\"message\":\"no\"}}");
-    ApifyApiException ex =
-        assertThrows(
-            ApifyApiException.class,
-            () ->
-                client(backend)
-                    .requestQueue("q1")
-                    .batchAddRequests(
-                        List.of(new RequestQueueRequest("https://example.com", "k0")),
-                        false,
-                        new BatchAddRequestsOptions().maxUnprocessedRequestsRetries(0)));
-    assertEquals(403, ex.getStatusCode());
+    RequestQueueRequest request = new RequestQueueRequest("https://example.com", "k0");
+    BatchAddResult result =
+        client(backend)
+            .requestQueue("q1")
+            .batchAddRequests(
+                List.of(request),
+                false,
+                new BatchAddRequestsOptions().maxUnprocessedRequestsRetries(0));
+    assertEquals(0, result.getProcessedRequests().size());
+    assertEquals(1, result.getUnprocessedRequests().size());
+    assertEquals("k0", result.getUnprocessedRequests().get(0).getUniqueKey());
   }
 
   @Test
   void batchAddRequestsRunsChunksInParallel() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"processedRequests\":[],\"unprocessedRequests\":[]}}");
     List<RequestQueueRequest> requests = new ArrayList<>();
     for (int i = 0; i < 60; i++) {
@@ -419,15 +593,60 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void batchAddRequestsNeverThrowsOnPersistentTransportFailure() {
+    // Sibling of `batchAddRequestsNeverThrowsOnNonRetryableClientError`: a transport-level failure
+    // (ApifyTransportException, e.g. connection refused/timeout — the request never reached the
+    // API at all) must be treated the same as an API-level failure (ApifyApiException). Both are
+    // ApifyClientException subtypes, and batchAddRequests' never-throws contract must hold across
+    // both, matching the reference client's `_batchAddRequestsWithRetries`. Sequential path
+    // (single chunk, default maxParallel).
+    MockTransport backend = new MockTransport(List.of(MockTransport.networkError()));
+    RequestQueueRequest request = new RequestQueueRequest("https://example.com", "k0");
+    BatchAddResult result =
+        client(backend)
+            .requestQueue("q1")
+            .batchAddRequests(
+                List.of(request),
+                false,
+                new BatchAddRequestsOptions().maxUnprocessedRequestsRetries(0));
+    assertEquals(0, result.getProcessedRequests().size());
+    assertEquals(1, result.getUnprocessedRequests().size());
+    assertEquals("k0", result.getUnprocessedRequests().get(0).getUniqueKey());
+  }
+
+  @Test
+  void batchAddRequestsNeverThrowsOnPersistentTransportFailureWithParallelChunks() {
+    // Same as above but exercising the `maxParallel > 1` path, where each chunk fails on its own
+    // executor thread — the never-throws contract must hold there too, and every request across
+    // every chunk must come back via getUnprocessedRequests().
+    MockTransport backend = new MockTransport(List.of(MockTransport.networkError()));
+    List<RequestQueueRequest> requests = new ArrayList<>();
+    for (int i = 0; i < 60; i++) {
+      requests.add(new RequestQueueRequest("https://example.com", "k" + i));
+    }
+    BatchAddResult result =
+        client(backend)
+            .requestQueue("q1")
+            .batchAddRequests(
+                requests,
+                false,
+                new BatchAddRequestsOptions().maxParallel(3).maxUnprocessedRequestsRetries(0));
+    assertEquals(0, result.getProcessedRequests().size());
+    assertEquals(60, result.getUnprocessedRequests().size());
+    assertEquals(
+        3, backend.calls, "60 requests must be sent as 3 parallel chunks, each failing once");
+  }
+
+  @Test
   void waitForFinishReturnsWhenResourceAppearsAfter404() {
     // A just-started run can transiently 404 (replica lag); the wait must keep polling until it
     // appears and reaches a terminal state rather than giving up on the first 404.
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}"),
-                MockBackend.ok(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}")));
+                MockTransport.ok(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}")));
     ActorRun run = client(backend).run("r1").waitForFinish(5L);
     assertEquals("r1", run.getId());
     assertEquals("SUCCEEDED", run.getStatus());
@@ -438,15 +657,15 @@ class ClientBehaviourRegressionTest {
   void waitForFinishThrowsWhenResourceNeverAppears() {
     // If the resource is never fetchable within the budget, the wait must fail loudly rather than
     // return a phantom result.
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}");
     assertThrows(IllegalStateException.class, () -> client(backend).run("r1").waitForFinish(0L));
   }
 
   @Test
   void logStreamThrowsOnNonSuccessStatus() {
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(
         403, "{\"error\":{\"type\":\"insufficient-permissions\",\"message\":\"no\"}}");
     ApifyApiException ex =
@@ -461,8 +680,8 @@ class ClientBehaviourRegressionTest {
     // that (same non-empty page for every call). Draining the iterator must terminate and yield
     // each version once. Routing this endpoint through the offset/limit paging engine looped
     // forever (empty-page termination never triggers), so this pins the single-fetch behaviour.
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200,
             "{\"data\":{\"total\":3,\"items\":["
                 + "{\"versionNumber\":\"0.1\"},"
@@ -484,8 +703,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void versionsIterateHonorsTotalLimitCap() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200,
             "{\"data\":{\"total\":3,\"items\":["
                 + "{\"versionNumber\":\"0.1\"},"

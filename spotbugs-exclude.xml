@@ -1,26 +1,169 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  SpotBugs exclude filter. Two narrow, documented exclusions only — no category-wide rule is
-  disabled:
+  SpotBugs exclude filter. Only narrow, documented exclusions — no category-wide rule is disabled.
+  Every entry below is verified live against the current source (removing an entry and re-running
+  `mvn spotbugs:check` reproduces the specific finding it suppresses); an entry that no longer
+  reproduces anything is dropped rather than kept "just in case", so this filter's actual scope
+  always matches what it documents.
 
-  1. EI_EXPOSE_REP/EI_EXPOSE_REP2 on the internal raw-bytes HTTP response body ({@code
-     ApiResponse}). Carrying the actual bytes rather than a defensive copy is the intended contract;
-     the payload can be large (dataset exports, records ZIPs) and copying it on every access would be
-     wasteful. {@code ApiResponse} is package-private (not user-facing). The user-facing {@code
-     KeyValueStoreRecord} value type does defensively copy its bytes. All other
-     representation-exposure warnings are fixed in code (unmodifiable getters / copy-on-set).
+  1. EI_EXPOSE_REP2 on {@code ActorClient}/{@code TaskClient}, whose single public constructor
+     assigns the caller-supplied {@code ApifyClient root} straight to a field (needed to reach
+     sibling resources, e.g. an Actor's build/run/version clients). {@code ApifyClient} is a
+     genuinely immutable service handle - a `final` class with only `final` fields and no mutator
+     methods - so storing the reference carries none of the aliasing risk the rule guards against;
+     there is nothing to defensively copy for a service object. {@code RunClient} has the identical
+     field but is not listed here: its public constructor delegates to a private one that does the
+     assignment, and SpotBugs' EI_EXPOSE_REP2 detector does not trace the parameter across that
+     constructor-chaining hop, so it is never flagged in the first place.
 
-  2. UWF_UNWRITTEN_FIELD on KeyValueStoreKey: a Jackson-populated DTO whose fields are written by
-     the deserializer via reflection, which SpotBugs cannot see — a known false positive for
+  2. UWF_UNWRITTEN_FIELD / UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD on Jackson-populated DTOs/response
+     shapes ({@code KeyValueStoreKey}, {@code DeletedRequestInfo}, {@code ActorRunMeta}, {@code
+     TaskOptions}, {@code WebhookLastDispatch}, {@code ActorDefaultRunOptions}, {@code BuildMeta},
+     {@code BuildOptions}, {@code BuildStats}, {@code PricingInfo}, {@code ProxyGroup}, {@code
+     UserProxy}, {@code WebhookDispatchEventData}, {@code WebhookDispatchWebhookInfo}, the internal
+     error-response mapping in {@code HttpClientCore}): their fields are written by the
+     deserializer via reflection, which SpotBugs cannot see - a known false positive for
      data-binding models.
+
+  3. EI_EXPOSE_REP / EI_EXPOSE_REP2 on {@code ApiResponse} and {@code HttpClientCore$Compressed}'s
+     {@code body} component: both are {@code record}s whose {@code byte[] body} intentionally holds
+     the raw payload without a defensive copy (the payload can be large, e.g. dataset exports, so
+     copying it on every construction/access would be wasteful). A plain field of the same shape is
+     not flagged (SpotBugs' constructor/getter analysis does not trace a raw public field the way it
+     traces a record's synthesized accessor and canonical constructor), so this pair of exclusions is
+     specific to the record form.
+
+  4. EI_EXPOSE_REP on the specific getters listed below, each returning a field whose type was just
+     changed (this PR) to extend the shared {@code ApifyResource} forward-compatibility base (an
+     {@code extra} catch-all map + package-private {@code @JsonAnySetter}), so unmodelled API fields
+     on nested value DTOs are preserved instead of silently dropped. That base class is not {@code
+     final} and holds a mutable {@code LinkedHashMap} field, which flips SpotBugs' mutability
+     heuristic for every subtype from "no public mutator -> immutable-enough, don't flag" to
+     "mutable -> flag every getter that returns one as a field of another class" - even though
+     nothing about this actually changed: {@code putExtra} stays package-private, {@code
+     getExtra()} still returns an unmodifiable view, and there is still no public way to mutate a
+     returned instance. Defensively copying on every getter call would require deep-cloning the
+     {@code extra} map each time, which is wasted work for a map that is (by construction) never
+     mutated after deserialization, so copying is not the fix here - the false positive is. Listed
+     per getter (not per class) to keep the exclusion exactly as narrow as the finding it suppresses.
 -->
 <FindBugsFilter>
   <Match>
-    <Class name="com.apify.client.ApiResponse"/>
-    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    <Or>
+      <Class name="com.apify.client.actor.ActorClient"/>
+      <Class name="com.apify.client.task.TaskClient"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
   <Match>
-    <Class name="com.apify.client.KeyValueStoreKey"/>
+    <Or>
+      <Class name="com.apify.client.keyvalue.KeyValueStoreKey"/>
+      <Class name="com.apify.client.requestqueue.DeletedRequestInfo"/>
+      <Class name="com.apify.client.run.ActorRunMeta"/>
+      <Class name="com.apify.client.task.TaskOptions"/>
+      <Class name="com.apify.client.webhook.WebhookLastDispatch"/>
+      <Class name="com.apify.client.actor.ActorDefaultRunOptions"/>
+      <Class name="com.apify.client.build.BuildMeta"/>
+      <Class name="com.apify.client.build.BuildOptions"/>
+      <Class name="com.apify.client.build.BuildStats"/>
+      <Class name="com.apify.client.store.PricingInfo"/>
+      <Class name="com.apify.client.user.ProxyGroup"/>
+      <Class name="com.apify.client.user.UserProxy"/>
+      <Class name="com.apify.client.webhook.WebhookDispatchEventData"/>
+      <Class name="com.apify.client.webhook.WebhookDispatchWebhookInfo"/>
+    </Or>
     <Bug pattern="UWF_UNWRITTEN_FIELD"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.internal.HttpClientCore$ErrorBody"/>
+    <Bug pattern="UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD"/>
+  </Match>
+  <Match>
+    <Or>
+      <Class name="com.apify.client.http.ApiResponse"/>
+      <Class name="com.apify.client.internal.HttpClientCore$Compressed"/>
+    </Or>
+    <Or>
+      <Bug pattern="EI_EXPOSE_REP"/>
+      <Bug pattern="EI_EXPOSE_REP2"/>
+    </Or>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.actor.Actor"/>
+    <Or>
+      <Method name="getActorStandby"/>
+      <Method name="getDefaultRunOptions"/>
+      <Method name="getStats"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.build.Build"/>
+    <Or>
+      <Method name="getMeta"/>
+      <Method name="getOptions"/>
+      <Method name="getStats"/>
+      <Method name="getUsage"/>
+      <Method name="getUsageUsd"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.run.ActorRun"/>
+    <Or>
+      <Method name="getMeta"/>
+      <Method name="getOptions"/>
+      <Method name="getStats"/>
+      <Method name="getUsage"/>
+      <Method name="getUsageUsd"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.schedule.Schedule"/>
+    <Method name="getNotifications"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.store.ActorStoreListItem"/>
+    <Or>
+      <Method name="getCurrentPricingInfo"/>
+      <Method name="getStats"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.task.Task"/>
+    <Or>
+      <Method name="getActorStandby"/>
+      <Method name="getOptions"/>
+      <Method name="getStats"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.user.User"/>
+    <Or>
+      <Method name="getPlan"/>
+      <Method name="getProfile"/>
+      <Method name="getProxy"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.webhook.Webhook"/>
+    <Or>
+      <Method name="getLastDispatch"/>
+      <Method name="getStats"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.webhook.WebhookDispatch"/>
+    <Or>
+      <Method name="getEventData"/>
+      <Method name="getWebhook"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
   </Match>
 </FindBugsFilter>

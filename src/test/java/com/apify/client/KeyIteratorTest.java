@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.apify.client.keyvalue.KeyValueStoreClient;
+import com.apify.client.keyvalue.KeyValueStoreKey;
+import com.apify.client.keyvalue.ListKeysOptions;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -12,15 +15,15 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Hermetic (token-free) tests for the cursor-based key iterator ({@link
- * KeyValueStoreClient#iterateKeys}), driven by a {@link MockBackend}: cursor chaining across pages,
- * the {@code limit} total-cap, and empty-page / empty-cursor termination.
+ * KeyValueStoreClient#iterateKeys}), driven by a {@link MockTransport}: cursor chaining across
+ * pages, the {@code limit} total-cap, and empty-page / empty-cursor termination.
  */
 class KeyIteratorTest {
 
-  private static ApifyClient client(MockBackend backend) {
+  private static ApifyClient client(MockTransport backend) {
     return ApifyClient.builder()
         .token("test-token")
-        .httpBackend(backend)
+        .httpTransport(backend)
         .maxRetries(0)
         .minDelayBetweenRetries(Duration.ofMillis(1))
         .build();
@@ -36,14 +39,14 @@ class KeyIteratorTest {
 
   @Test
   void chainsAcrossPagesUsingCursor() {
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{\"key\":\"a\",\"size\":1},{\"key\":\"b\",\"size\":1}],"
                         + "\"nextExclusiveStartKey\":\"b\",\"isTruncated\":true}}"),
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{\"key\":\"c\",\"size\":1}],"
                         + "\"nextExclusiveStartKey\":null,\"isTruncated\":false}}")));
@@ -55,8 +58,8 @@ class KeyIteratorTest {
 
   @Test
   void limitCapsTotalKeysYielded() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200,
             "{\"data\":{\"items\":[{\"key\":\"a\",\"size\":1},{\"key\":\"b\",\"size\":1},"
                 + "{\"key\":\"c\",\"size\":1}],\"nextExclusiveStartKey\":\"c\",\"isTruncated\":true}}");
@@ -69,18 +72,18 @@ class KeyIteratorTest {
 
   @Test
   void chunkSizeSetsPerRequestPageSize() {
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{\"key\":\"a\",\"size\":1},{\"key\":\"b\",\"size\":1}],"
                         + "\"nextExclusiveStartKey\":\"b\",\"isTruncated\":true}}"),
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{\"key\":\"c\",\"size\":1},{\"key\":\"d\",\"size\":1}],"
                         + "\"nextExclusiveStartKey\":\"d\",\"isTruncated\":true}}"),
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{\"key\":\"e\",\"size\":1}],"
                         + "\"nextExclusiveStartKey\":null,\"isTruncated\":false}}")));
@@ -94,14 +97,14 @@ class KeyIteratorTest {
   @Test
   void chunkSizeAndLimitCombine() {
     // limit=3 (total cap) with chunkSize=2: first page requests 2, second requests min(1,2)=1.
-    MockBackend backend =
-        new MockBackend(
+    MockTransport backend =
+        new MockTransport(
             List.of(
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{\"key\":\"a\",\"size\":1},{\"key\":\"b\",\"size\":1}],"
                         + "\"nextExclusiveStartKey\":\"b\",\"isTruncated\":true}}"),
-                MockBackend.ok(
+                MockTransport.ok(
                     200,
                     "{\"data\":{\"items\":[{\"key\":\"c\",\"size\":1},{\"key\":\"d\",\"size\":1}],"
                         + "\"nextExclusiveStartKey\":\"d\",\"isTruncated\":true}}")));
@@ -115,8 +118,8 @@ class KeyIteratorTest {
 
   @Test
   void stopsOnEmptyPage() {
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"items\":[],\"nextExclusiveStartKey\":\"z\",\"isTruncated\":true}}");
     Iterator<KeyValueStoreKey> it =
         client(backend).keyValueStore("s").iterateKeys(new ListKeysOptions());

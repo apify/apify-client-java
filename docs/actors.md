@@ -1,9 +1,5 @@
 # Actors, versions & environment variables
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Access the Actor collection with `client.actors()` and a single Actor with `client.actor(id)`,
 where `id` is an Actor ID or `username~name` (a `/` in the id is accepted and normalized).
 
@@ -51,8 +47,9 @@ Actor created = client.actors().create(Map.of(
 | `update(Object)` | Update the Actor with the given fields. Returns `Actor`. |
 | `delete()` | Delete the Actor. |
 | `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Returns `ActorRun`. |
-| `call(Object input, ActorStartOptions, Long waitSecs)` | Start a run and poll until it finishes (`null` waits indefinitely). Returns `ActorRun`. |
-| `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Returns `boolean`. `ValidateInputOptions` fields (optional): `build`, `contentType`. |
+| `call(Object input, ActorStartOptions, Long waitSecs)` | Start a run and poll until it finishes (`null` waits indefinitely); does **not** stream the run's log. Returns `ActorRun`. |
+| `call(Object input, ActorCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default (matching the reference client's `call` defaulting `options.log` to `'default'`). Use `ActorCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
+| `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Returns `boolean`. `ValidateInputOptions` fields (optional): `build` (`String`), `contentType` (`String`). |
 | `build(String versionNumber, ActorBuildOptions)` | Build a version. Returns `Build`. |
 | `defaultBuild(Long waitForFinish)` | Resolve the default build. Returns `BuildClient`. |
 | `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run. |
@@ -60,16 +57,24 @@ Actor created = client.actors().create(Map.of(
 | `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, `list` + `iterate`, no `create`). |
 | `version(String)` | An `ActorVersionClient`. |
 
-`ActorStartOptions` fields (all optional): `build` (the tag or number of the build to run, e.g.
-`latest`, `0.1.2`), `memoryMbytes` (memory in megabytes allocated for the run), `timeoutSecs` (run
-timeout in seconds; `0` means no timeout), `waitForFinish` (maximum seconds to wait server-side for
-the run to finish, max 60), `maxItems` (maximum dataset items to charge, pay-per-result Actors),
-`maxTotalChargeUsd` (maximum total charge in USD, pay-per-event Actors), `contentType` (content type
-of the input body, defaults to `application/json`), `restartOnError` (restart the run if it fails),
-`forcePermissionLevel` (override the Actor's permission level for this run:
+`ActorStartOptions` fields (all optional): `build(String)` (the tag or number of the build to run,
+e.g. `latest`, `0.1.2`), `memoryMbytes(Long)` (memory in megabytes allocated for the run),
+`timeoutSecs(Long)` (run timeout in seconds; `0` means no timeout), `waitForFinish(Long)` (maximum
+seconds to wait server-side for the run to finish, max 60), `maxItems(Long)` (maximum dataset items
+to charge, pay-per-result Actors), `maxTotalChargeUsd(Double)` (maximum total charge in USD,
+pay-per-event Actors), `contentType(String)` (content type of the input body, defaults to
+`application/json`), `restartOnError(Boolean)` (restart the run if it fails),
+`forcePermissionLevel(String)` (override the Actor's permission level for this run:
 `LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), and `webhooks(List<Object>)` — ad-hoc webhook definitions
 (each a JSON-serializable `Map`, as in [Webhooks](webhooks.md)) that the client base64-encodes on the
 wire.
+
+`ActorCallOptions` (for the log-streaming `call` overload) mirrors `ActorStartOptions` field for
+field, but omits `waitForFinish`: that field asks the API to hold the HTTP response open
+server-side while the run finishes, which is redundant with (and wastes a request slot next to)
+`call`'s own client-side `waitSecs` polling. It adds `disableLogStreaming()` (matching the
+reference client's `log: null`) and `logOptions(StreamedLogOptions)` (a custom destination/prefix,
+matching a custom `Log` instance) — see [Streamed log redirection](runs.md#streamed-log-redirection).
 
 `lastRun(String status)` filters only by status; `lastRun(LastRunOptions)` also accepts an origin
 filter. `LastRunOptions` has fluent setters `status(String)` (e.g. `SUCCEEDED`, `RUNNING`) and
@@ -87,7 +92,18 @@ System.out.println(run.getStatus());
 ```
 
 `Actor` fields: `getId()`, `getUserId()`, `getName()`, `getUsername()`, `getTitle()`,
-`getDescription()`, `isPublic()`, `getCreatedAt()`, `getModifiedAt()`, plus `getExtra()` for any
+`getDescription()`, `isPublic()`, `getCreatedAt()`, `getModifiedAt()`, `getStats()` (`ActorStats` —
+`getTotalBuilds()`/`getTotalRuns()`/`getTotalUsers()`/`getTotalUsers7Days()`/
+`getTotalUsers30Days()`/`getTotalUsers90Days()`/`getTotalMetamorphs()` as `Long`,
+`getLastRunStartedAt()` as `Instant`), `getVersions()` (`List<ActorVersion>`),
+`getPricingInfos()` (`List<JsonNode>`; shape depends on pricing model), `getDefaultRunOptions()`
+(`ActorDefaultRunOptions` — `getBuild()`, `getTimeoutSecs()`/`getMemoryMbytes()` as `Long`,
+`getRestartOnError()` as `Boolean`), `getTaggedBuilds()` (`JsonNode`; dynamic tag-name keys),
+`getIsDeprecated()` (`Boolean`), `getDeploymentKey()`, `getSeoTitle()`, `getSeoDescription()`,
+`getCategories()` (`List<String>`), `getActorStandby()` (`ActorStandby`, from
+`com.apify.client.actor`, nullable — see [Tasks](tasks.md) for its field list; only on `Actor` does
+it additionally expose
+`getIsEnabled()`), `getActorPermissionLevel()` (e.g. `"OWNER"`), plus `getExtra()` for any
 unmodelled fields.
 
 ## `ActorVersionClient` and `ActorVersionCollectionClient`
@@ -99,8 +115,8 @@ and deletes a single version and exposes its environment variables.
 
 | Method | Description |
 |---|---|
-| `list(ListOptions)` | List the Actor's versions. Returns `PaginationList<ActorVersion>`. |
-| `iterate(ListOptions)` | Lazy `Iterator<ActorVersion>` over all versions; `limit` caps the total (`null`/unset or non-positive = all). The versions endpoint is not paginated (one fetch returns every version), so `offset` has no effect and there is no page size to tune. |
+| `list(ListOptions)` | List the Actor's versions. Returns `PaginationList<ActorVersion>`. The endpoint takes no query parameters; `options` (`offset`/`limit`/`desc`) is accepted only for signature consistency with every other `list(ListOptions)` and has no effect — pass `null`. |
+| `iterate(ListOptions)` | Lazy `Iterator<ActorVersion>` over all versions; `limit` caps the total (`null`/unset or non-positive = all), applied client-side after the single fetch. `offset` has no effect and there is no page size to tune. |
 | `create(Object version)` | Create a version. Returns `ActorVersion`. |
 
 ### `ActorVersionClient` — `client.actor(id).version(v)`

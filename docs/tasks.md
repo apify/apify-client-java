@@ -1,9 +1,5 @@
 # Tasks
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Tasks are pre-configured Actor runs with stored input. Access the task collection with
 `client.tasks()` and a single task with `client.task(id)`.
 
@@ -29,7 +25,8 @@ Task task = client.tasks().create(Map.of(
 |---|---|
 | `get()` / `update(Object)` / `delete()` | CRUD. Return `Optional<Task>` / `Task` / `void`. |
 | `start(Object input, TaskStartOptions)` | Start a task run (input overrides stored input; `null` uses it). Returns `ActorRun`. |
-| `call(Object input, TaskStartOptions, Long waitSecs)` | Start and poll until finished. Returns `ActorRun`. |
+| `call(Object input, TaskStartOptions, Long waitSecs)` | Start and poll until finished; does **not** stream the run's log. Returns `ActorRun`. |
+| `call(Object input, TaskCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default (matching the reference client's `call` defaulting `options.log` to `'default'`). Use `TaskCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
 | `getInput()` | The stored input. Returns `Optional<JsonNode>`. |
 | `updateInput(Object)` | Replace the stored input. Returns `JsonNode`. |
 | `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run (see [`LastRunOptions`](actors.md#actorclient)). |
@@ -38,12 +35,31 @@ Task task = client.tasks().create(Map.of(
 
 `TaskStartOptions` mirrors `ActorStartOptions` but omits the Actor-only `contentType` and
 `forcePermissionLevel`: `build`, `memoryMbytes`, `timeoutSecs`, `waitForFinish`, `maxItems`,
-`maxTotalChargeUsd`, `restartOnError`, `webhooks`.
+`maxTotalChargeUsd`, `restartOnError`, `webhooks`. `TaskCallOptions` mirrors `TaskStartOptions` in
+turn, but additionally omits `waitForFinish`: that field asks the API to hold the HTTP response
+open server-side while the run finishes, which is redundant with (and wastes a request slot next
+to) `call`'s own client-side `waitSecs` polling.
 
 ```java
 ActorRun run = client.task("TASK_ID").call(null, new TaskStartOptions().memoryMbytes(512L), 120L);
 System.out.println(run.getStatus());
+
+// Streams the run's log to a default per-run logger for the duration of the wait.
+ActorRun streamed = client.task("TASK_ID").call(null, new TaskCallOptions().memoryMbytes(512L), 120L);
 ```
 
-`Task` fields: `getId()`, `getActId()`, `getUserId()`, `getName()`, `getTitle()`, `getCreatedAt()`,
-`getModifiedAt()`.
+`Task` fields: `getId()`, `getActId()`, `getUserId()`, `getName()`, `getTitle()`,
+`getDescription()`, `getCreatedAt()`, `getModifiedAt()`, `getStats()` (`TaskStats`, exposing
+`getTotalRuns()`), `getOptions()` (`TaskOptions`: the task's stored default run configuration —
+`getBuild()` (`String`), `getTimeoutSecs()` (`Long`), `getMemoryMbytes()` (`Long`),
+`getRestartOnError()` (`Boolean`)), `getInput()` (a `JsonNode` snapshot of the stored input, from
+whichever response last returned this `Task` object; prefer `TaskClient.getInput()` above to fetch
+it fresh on-demand), and `getActorStandby()` (`ActorStandby`, from `com.apify.client.actor`,
+standby-mode configuration overrides for this task, if any). Any field not covered by a typed
+getter is still available via the inherited `getExtra()` (see
+[the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
+
+`ActorStandby` fields (all optional; `null` when unset): `getBuild()` (tag/number of the build
+serving standby requests), `getDesiredRequestsPerActorRun()`, `getDisableStandbyFieldsOverride()`,
+`getIdleTimeoutSecs()`, `getMaxRequestsPerActorRun()`, `getMemoryMbytes()`,
+`getShouldPassActorInput()`.

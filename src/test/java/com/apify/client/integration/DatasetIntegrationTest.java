@@ -4,13 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.Dataset;
-import com.apify.client.DatasetClient;
-import com.apify.client.DatasetDownloadOptions;
-import com.apify.client.DatasetListItemsOptions;
-import com.apify.client.DownloadItemsFormat;
 import com.apify.client.PaginationList;
 import com.apify.client.StorageListOptions;
+import com.apify.client.dataset.Dataset;
+import com.apify.client.dataset.DatasetClient;
+import com.apify.client.dataset.DatasetDownloadOptions;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.dataset.DownloadItemsFormat;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -68,6 +68,21 @@ class DatasetIntegrationTest extends IntegrationBase {
 
       Dataset updated = dataset.update(Map.of("name", uniqueName("ds-renamed")));
       assertTrue(updated.getName() != null && !updated.getName().isEmpty());
+
+      // list() step of the create/get/modify/list/delete flow: verify the just-created dataset
+      // appears in the top-level collection listing.
+      boolean foundInList =
+          pollUntil(
+              LIST_FIND_ATTEMPTS,
+              LIST_FIND_BACKOFF_MILLIS,
+              () ->
+                  client
+                      .datasets()
+                      .list(new StorageListOptions().desc(true).limit(10L))
+                      .getItems()
+                      .stream()
+                      .anyMatch(d -> ds.getId().equals(d.getId())));
+      assertTrue(foundInList, "expected the just-created dataset to appear in the top-level list");
     } finally {
       client.dataset(ds.getId()).delete();
     }

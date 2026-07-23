@@ -3,14 +3,17 @@ package com.apify.client.integration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.apify.client.Actor;
-import com.apify.client.ActorClient;
-import com.apify.client.ActorEnvVar;
-import com.apify.client.ActorListOptions;
-import com.apify.client.ActorVersion;
 import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
 import com.apify.client.PaginationList;
+import com.apify.client.actor.Actor;
+import com.apify.client.actor.ActorBuildOptions;
+import com.apify.client.actor.ActorClient;
+import com.apify.client.actor.ActorEnvVar;
+import com.apify.client.actor.ActorListOptions;
+import com.apify.client.actor.ActorVersion;
+import com.apify.client.build.Build;
+import com.apify.client.build.BuildClient;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -75,6 +78,21 @@ class ActorIntegrationTest extends IntegrationBase {
       assertEquals("Updated Title", updated.getTitle());
       actor.builds().list(new ListOptions());
       actor.versions().list(new ListOptions());
+
+      // list() step of the create/get/modify/list/delete flow: verify the just-created Actor
+      // appears in the top-level collection listing.
+      boolean foundInList =
+          pollUntil(
+              LIST_FIND_ATTEMPTS,
+              LIST_FIND_BACKOFF_MILLIS,
+              () ->
+                  client
+                      .actors()
+                      .list(new ActorListOptions().my(true).desc(true).limit(10L))
+                      .getItems()
+                      .stream()
+                      .anyMatch(a -> created.getId().equals(a.getId())));
+      assertTrue(foundInList, "expected the just-created Actor to appear in the top-level list");
     } finally {
       client.actor(created.getId()).delete();
     }
@@ -115,6 +133,31 @@ class ActorIntegrationTest extends IntegrationBase {
     // {"valid": <bool>}. A well-formed input validates true.
     boolean valid = client.actor("apify/hello-world").validateInput(Map.of("firstNumber", 1));
     assertTrue(valid);
+  }
+
+  @Test
+  void actorDefaultBuildAndWebhooks() {
+    ApifyClient client = requireClient();
+    Actor created = client.actors().create(minimalActor(uniqueName("default-build")));
+    try {
+      ActorClient actor = client.actor(created.getId());
+      Build build = actor.build("0.0", new ActorBuildOptions());
+      client.build(build.getId()).waitForFinish(300L);
+
+      BuildClient defaultBuild = actor.defaultBuild(60L);
+      assertTrue(defaultBuild.get().isPresent());
+
+      // Read-only nested webhook collection (GET + iterate); the account has none registered for
+      // this fresh Actor, so this just exercises both calls succeeding against an empty result —
+      // not a multi-item case. `NestedWebhookCollectionClient` shares its `list`/`iterate`
+      // implementation with `AbstractWebhookCollectionClient`, whose paging/iteration behavior is
+      // already exercised with real multi-item data (2 created webhooks, paged one at a time) by
+      // `IterationIntegrationTest#iterateWebhooks` through the sibling `WebhookCollectionClient`.
+      assertTrue(actor.webhooks().list(new ListOptions()).getTotal() >= 0);
+      assertTrue(!actor.webhooks().iterate(new ListOptions()).hasNext());
+    } finally {
+      client.actor(created.getId()).delete();
+    }
   }
 
   @Test

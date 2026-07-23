@@ -1,5 +1,6 @@
 package com.apify.client;
 
+import static com.apify.client.integration.IntegrationBase.pollUntil;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -7,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.apify.client.log.StreamedLog;
+import com.apify.client.log.StreamedLogOptions;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -26,14 +29,24 @@ import org.junit.jupiter.api.Test;
  */
 class StreamedLogTest {
 
-  private static ApifyClient client(MockBackend backend) {
-    return ApifyClient.builder().token("test-token").httpBackend(backend).maxRetries(0).build();
+  /** Poll interval used while waiting for a background reader to redirect expected messages. */
+  private static final long REDIRECT_POLL_MILLIS = 5;
+
+  /**
+   * {@link #pollUntil} attempt count giving a 5-second total budget at {@link
+   * #REDIRECT_POLL_MILLIS} per attempt, used by every "wait for N messages to be redirected" check
+   * in this suite.
+   */
+  private static final int REDIRECT_POLL_ATTEMPTS = (int) (5_000 / REDIRECT_POLL_MILLIS);
+
+  private static ApifyClient client(MockTransport backend) {
+    return ApifyClient.builder().token("test-token").httpTransport(backend).maxRetries(0).build();
   }
 
   /** Drives a run's log stream from a scripted body and collects redirected messages. */
   private static List<String> redirect(String streamBody, StreamedLogOptions options)
       throws InterruptedException {
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(200, streamBody);
     List<String> collected = new CopyOnWriteArrayList<>();
     StreamedLog streamedLog =
@@ -88,14 +101,15 @@ class StreamedLogTest {
   @Test
   void defaultDestinationDoesNotThrow() throws InterruptedException {
     // With no toLog, getStreamedLog fetches the run + Actor to build the prefix, then logs to JUL.
-    MockBackend backend =
-        MockBackend.ofConstant(
+    MockTransport backend =
+        MockTransport.ofConstant(
             200, "{\"data\":{\"id\":\"run123\",\"actId\":\"act1\",\"name\":\"a\"}}");
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z hello\n");
     StreamedLog streamedLog = client(backend).run("run123").getStreamedLog();
     streamedLog.start();
     streamedLog.stop();
-    // No assertion on output (goes to java.util.logging); the point is it runs without throwing.
+    // No assertion on output (goes to the default SLF4J logger); the point is it runs without
+    // throwing.
   }
 
   @Test
@@ -117,7 +131,7 @@ class StreamedLogTest {
           }
         });
     try {
-      MockBackend backend = MockBackend.ofConstant(200, "");
+      MockTransport backend = MockTransport.ofConstant(200, "");
       backend.scriptStream(200, "2999-01-01T00:00:00.000Z boom\n2999-01-01T00:00:01.000Z after\n");
       AtomicInteger calls = new AtomicInteger();
       StreamedLog streamedLog =
@@ -147,7 +161,7 @@ class StreamedLogTest {
 
   @Test
   void startTwiceThrows() throws InterruptedException {
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
     StreamedLog streamedLog =
         client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
@@ -158,7 +172,7 @@ class StreamedLogTest {
 
   @Test
   void stopWithoutStartThrows() {
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     StreamedLog streamedLog =
         client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
     assertThrows(IllegalStateException.class, streamedLog::stop);
@@ -166,7 +180,7 @@ class StreamedLogTest {
 
   @Test
   void closeWithoutStartIsNoOp() {
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     StreamedLog streamedLog =
         client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
     // close() on a never-started helper must not throw (supports try-with-resources).
@@ -174,7 +188,7 @@ class StreamedLogTest {
   }
 
   @Test
-  void deliversLastMessageWhenStoppingLiveStream() throws InterruptedException {
+  void deliversLastMessageWhenStoppingLiveStream() {
     // Regression test for a live stream that never reaches end-of-stream on its own. The reader
     // buffers three complete lines (a, b, c): a and b are emitted immediately while c is retained
     // as the possibly-still-growing last message. Then the read blocks. stop() closes the stream,
@@ -186,7 +200,7 @@ class StreamedLogTest {
             + "2999-01-01T00:00:01.000Z b\n"
             + "2999-01-01T00:00:02.000Z c\n";
     BlockingStream stream = new BlockingStream(body);
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(200, stream);
     List<String> collected = new CopyOnWriteArrayList<>();
     StreamedLog streamedLog =
@@ -196,10 +210,7 @@ class StreamedLogTest {
     streamedLog.start();
     // Wait until a and b have been redirected, which proves the reader has consumed the body and is
     // now blocked with c held back as the pending last message.
-    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
-    while (collected.size() < 2 && System.nanoTime() < deadline) {
-      Thread.sleep(5);
-    }
+    pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> collected.size() >= 2);
     assertEquals(2, collected.size(), "a and b should be redirected before stop()");
     streamedLog.stop();
     assertEquals(
@@ -217,7 +228,7 @@ class StreamedLogTest {
     // close() - e.g. from try-with-resources - and any repeat close() must be no-ops, not throws,
     // honouring the documented "no-op otherwise" contract. (The concurrent stop()/close() race is
     // covered separately by concurrentCloseNeverThrowsWhileStopRaces.)
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
     StreamedLog streamedLog =
         client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
@@ -236,7 +247,7 @@ class StreamedLogTest {
     // close() could observe a non-null thread, release the lock, then call a stop() that had
     // already nulled the field and threw. Run several rounds to make the interleaving likely.
     for (int round = 0; round < 50; round++) {
-      MockBackend backend = MockBackend.ofConstant(200, "");
+      MockTransport backend = MockTransport.ofConstant(200, "");
       backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
       StreamedLog streamedLog =
           client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
@@ -283,7 +294,7 @@ class StreamedLogTest {
 
   @Test
   void closeStopsActiveRedirection() throws InterruptedException {
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
     List<String> collected = new CopyOnWriteArrayList<>();
     try (StreamedLog streamedLog =
@@ -298,7 +309,7 @@ class StreamedLogTest {
   }
 
   @Test
-  void stopFromInsideConsumerDoesNotDeadlock() throws InterruptedException {
+  void stopFromInsideConsumerDoesNotDeadlock() {
     // The destination consumer runs on the background reader thread. A user may stop redirection
     // from inside it ("stop once I see line X"). Because that calls stopStreaming() on the reader
     // thread itself, an unguarded streamingThread.join() would join the thread on itself and hang
@@ -307,7 +318,7 @@ class StreamedLogTest {
     // flushes the retained message. If it deadlocked, "b" would never be flushed and the poll below
     // would time out with only "a" collected. A blocking stream is required: a finite one would end
     // on its own and mask the hang.
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(
         200, new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n"));
     List<String> collected = new CopyOnWriteArrayList<>();
@@ -329,10 +340,7 @@ class StreamedLogTest {
                         }));
     ref.set(streamedLog);
     streamedLog.start();
-    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
-    while (collected.size() < 2 && System.nanoTime() < deadline) {
-      Thread.sleep(5);
-    }
+    pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> collected.size() >= 2);
     assertEquals(
         List.of("2999-01-01T00:00:00.000Z a", "2999-01-01T00:00:01.000Z b"),
         collected,
@@ -340,12 +348,12 @@ class StreamedLogTest {
   }
 
   @Test
-  void closeFromInsideConsumerDoesNotDeadlock() throws InterruptedException {
+  void closeFromInsideConsumerDoesNotDeadlock() {
     // Same self-join hazard as stopFromInsideConsumerDoesNotDeadlock, via close() (which routes
     // through the same stopStreaming()). close() is idempotent, so the consumer can call it on
     // every
     // message without guarding.
-    MockBackend backend = MockBackend.ofConstant(200, "");
+    MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(
         200, new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n"));
     List<String> collected = new CopyOnWriteArrayList<>();
@@ -362,10 +370,7 @@ class StreamedLogTest {
                         }));
     ref.set(streamedLog);
     streamedLog.start();
-    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
-    while (collected.size() < 2 && System.nanoTime() < deadline) {
-      Thread.sleep(5);
-    }
+    pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> collected.size() >= 2);
     assertEquals(
         List.of("2999-01-01T00:00:00.000Z a", "2999-01-01T00:00:01.000Z b"),
         collected,
@@ -378,7 +383,7 @@ class StreamedLogTest {
     // Actor). Those getters swallow only 404; a 401/403/5xx-after-retries would otherwise throw out
     // of getStreamedLog() and abort helper creation even though streaming might work. The lookup is
     // wrapped so it falls back to the runId-only prefix instead of failing.
-    MockBackend backend = new MockBackend(List.of(MockBackend.ok(401, "{\"error\":{}}")));
+    MockTransport backend = new MockTransport(List.of(MockTransport.ok(401, "{\"error\":{}}")));
     StreamedLog streamedLog =
         assertDoesNotThrow(() -> client(backend).run("run123").getStreamedLog());
     assertNotNull(streamedLog);

@@ -1,11 +1,14 @@
 package com.apify.client;
 
+import com.apify.client.internal.ListOptionsLike;
+import com.apify.client.internal.QueryParams;
+
 /**
  * Options for the storage collection list endpoints ({@code GET /v2/datasets}, {@code
  * /v2/key-value-stores}, {@code /v2/request-queues}), which add {@code unnamed} and {@code
  * ownership} filters on top of the standard pagination.
  */
-public final class StorageListOptions {
+public final class StorageListOptions implements ListOptionsLike {
   private Long offset;
   private Long limit;
   private Boolean desc;
@@ -46,15 +49,18 @@ public final class StorageListOptions {
     return this;
   }
 
-  Long offsetValue() {
+  @Override
+  public Long offsetValue() {
     return offset;
   }
 
-  Long limitValue() {
+  @Override
+  public Long limitValue() {
     return limit;
   }
 
-  void apply(QueryParams q) {
+  @Override
+  public void apply(QueryParams q) {
     q.addLong("offset", offset).addLong("limit", limit);
     applyFilters(q);
   }
@@ -62,7 +68,8 @@ public final class StorageListOptions {
   /**
    * Applies every filter except {@code offset}/{@code limit}, which the iterator drives per page.
    */
-  void applyFilters(QueryParams q) {
+  @Override
+  public void applyFilters(QueryParams q) {
     q.addBool("desc", desc).addBool("unnamed", unnamed).addString("ownership", ownership);
   }
 }

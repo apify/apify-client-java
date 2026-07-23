@@ -4,13 +4,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.BatchAddResult;
-import com.apify.client.ListRequestsOptions;
-import com.apify.client.RequestQueue;
-import com.apify.client.RequestQueueClient;
-import com.apify.client.RequestQueueOperationInfo;
-import com.apify.client.RequestQueueRequest;
 import com.apify.client.StorageListOptions;
+import com.apify.client.requestqueue.BatchAddResult;
+import com.apify.client.requestqueue.BatchDeleteResult;
+import com.apify.client.requestqueue.ListRequestsOptions;
+import com.apify.client.requestqueue.LockedRequestQueueHead;
+import com.apify.client.requestqueue.RequestLockInfo;
+import com.apify.client.requestqueue.RequestQueue;
+import com.apify.client.requestqueue.RequestQueueClient;
+import com.apify.client.requestqueue.RequestQueueOperationInfo;
+import com.apify.client.requestqueue.RequestQueueRequest;
+import com.apify.client.requestqueue.RequestsList;
+import com.apify.client.requestqueue.UnlockRequestsResult;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -60,6 +65,22 @@ class RequestQueueIntegrationTest extends IntegrationBase {
       assertTrue(!queue.listHead(10L).getItems().isEmpty());
       queue.update(Map.of("name", uniqueName("rq-renamed")));
       queue.deleteRequest(info.getRequestId());
+
+      // list() step of the create/get/modify/list/delete flow: verify the just-created request
+      // queue appears in the top-level collection listing.
+      boolean foundInList =
+          pollUntil(
+              LIST_FIND_ATTEMPTS,
+              LIST_FIND_BACKOFF_MILLIS,
+              () ->
+                  client
+                      .requestQueues()
+                      .list(new StorageListOptions().desc(true).limit(10L))
+                      .getItems()
+                      .stream()
+                      .anyMatch(q -> rq.getId().equals(q.getId())));
+      assertTrue(
+          foundInList, "expected the just-created request queue to appear in the top-level list");
     } finally {
       client.requestQueue(rq.getId()).delete();
     }
@@ -82,6 +103,30 @@ class RequestQueueIntegrationTest extends IntegrationBase {
         seen.add(it.next().getUrl());
       }
       assertEquals(total, seen.size());
+    } finally {
+      client.requestQueue(rq.getId()).delete();
+    }
+  }
+
+  @Test
+  void requestQueuePaginateWithTotalLimit() {
+    ApifyClient client = requireClient();
+    RequestQueue rq = client.requestQueues().getOrCreate(uniqueName("rq-page-limit"));
+    try {
+      RequestQueueClient queue = client.requestQueue(rq.getId());
+      for (int i = 0; i < 5; i++) {
+        String url = "https://example.com/" + i;
+        queue.addRequest(new RequestQueueRequest(url, url), false);
+      }
+      // totalLimit caps the number yielded across all pages, independent of the per-page chunk
+      // size (chunkSize=2 forces at least two page fetches to satisfy a totalLimit of 3).
+      Iterator<RequestQueueRequest> it = queue.paginateRequests(3L, 2L, null);
+      int count = 0;
+      while (it.hasNext()) {
+        it.next();
+        count++;
+      }
+      assertEquals(3, count);
     } finally {
       client.requestQueue(rq.getId()).delete();
     }
@@ -115,15 +160,49 @@ class RequestQueueIntegrationTest extends IntegrationBase {
           client.requestQueue(rq.getId()).withClientKey("java-test-client-key");
       RequestQueueOperationInfo info =
           queue.addRequest(new RequestQueueRequest("https://lock.example.com", "lock"), false);
-      queue.listRequests(new ListRequestsOptions());
+
+      RequestsList listed = queue.listRequests(new ListRequestsOptions());
+      assertTrue(listed.getLimit() > 0);
+      assertTrue(!listed.getItems().isEmpty());
       queue.listRequests(
           new ListRequestsOptions()
               .filter(
                   List.of(ListRequestsOptions.FILTER_LOCKED, ListRequestsOptions.FILTER_PENDING)));
-      queue.listAndLockHead(60, 10L);
-      queue.prolongRequestLock(info.getRequestId(), 30, false);
+
+      LockedRequestQueueHead locked = queue.listAndLockHead(60, 10L);
+      assertEquals(60, locked.getLockSecs());
+      assertTrue(!locked.getItems().isEmpty());
+      assertTrue(locked.getItems().get(0).getLockExpiresAt() != null);
+
+      RequestLockInfo prolonged = queue.prolongRequestLock(info.getRequestId(), 30, false);
+      assertTrue(prolonged.getLockExpiresAt() != null);
+
       queue.deleteRequestLock(info.getRequestId(), false);
-      queue.unlockRequests();
+      UnlockRequestsResult unlocked = queue.unlockRequests();
+      assertTrue(unlocked.getUnlockedCount() >= 0);
+    } finally {
+      client.requestQueue(rq.getId()).delete();
+    }
+  }
+
+  @Test
+  void requestQueueBatchDeleteRequests() {
+    ApifyClient client = requireClient();
+    RequestQueue rq = client.requestQueues().getOrCreate(uniqueName("rq-batch-delete"));
+    try {
+      RequestQueueClient queue = client.requestQueue(rq.getId());
+      RequestQueueOperationInfo first =
+          queue.addRequest(
+              new RequestQueueRequest("https://batch-delete.example.com/1", "bd1"), false);
+      RequestQueueOperationInfo second =
+          queue.addRequest(
+              new RequestQueueRequest("https://batch-delete.example.com/2", "bd2"), false);
+
+      BatchDeleteResult result =
+          queue.batchDeleteRequests(
+              List.of(Map.of("id", first.getRequestId()), Map.of("uniqueKey", "bd2")));
+      assertEquals(2, result.getProcessedRequests().size());
+      assertTrue(result.getUnprocessedRequests().isEmpty());
     } finally {
       client.requestQueue(rq.getId()).delete();
     }

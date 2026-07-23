@@ -1,8 +1,8 @@
 package com.apify.client.examples;
 
-import com.apify.client.ActorStoreListItem;
 import com.apify.client.ApifyClient;
-import com.apify.client.StoreListOptions;
+import com.apify.client.store.ActorStoreListItem;
+import com.apify.client.store.StoreListOptions;
 import java.util.Iterator;
 
 /**

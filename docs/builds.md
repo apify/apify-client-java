@@ -1,9 +1,5 @@
 # Builds
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Access the build collection with `client.builds()` (or `client.actor(id).builds()` for an Actor's
 builds) and a single build with `client.build(id)`.
 
@@ -26,9 +22,16 @@ builds) and a single build with `client.build(id)`.
 | `getOpenApiDefinition()` | The build's OpenAPI definition. Returns `Optional<JsonNode>`. |
 | `log()` | A `LogClient` for the build's log. |
 
-`Build` fields: `getId()`, `getActId()`, `getStatus()`, `getStartedAt()`, `getFinishedAt()`,
-`getBuildNumber()`, plus `isTerminal()` and `getExtra()`. The status is one of `READY`, `RUNNING`,
-`SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`, `ABORTING`, `ABORTED`.
+`Build` fields: `getId()`, `getActId()`, `getUserId()`, `getStatus()`, `getStartedAt()`,
+`getFinishedAt()`, `getBuildNumber()`, `getMeta()` (`BuildMeta` — `getOrigin()`, `getClientIp()`,
+`getUserAgent()`), `getStats()` (`BuildStats` — `getDurationMillis()`/`getRunTimeSecs()` as `Long`,
+`getComputeUnits()` as `Double`, `getImageSizeBytes()` as `Long`), `getOptions()` (`BuildOptions` —
+`getUseCache()`/`getBetaPackages()` as `Boolean`, `getMemoryMbytes()`/`getDiskMbytes()` as `Long`),
+`getUsage()` / `getUsageUsd()` (`BuildUsage` — `getActorComputeUnits()` as `Double`, the latter as
+its USD cost), `getUsageTotalUsd()` (`Double`), plus `isTerminal()` and `getExtra()`. The status is
+one of `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`, `ABORTING`, `ABORTED`.
+Every nested model above (`BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage`) also has its own
+`getExtra()`, so a field not yet listed here is still reachable rather than dropped.
 
 ```java
 Build build = client.actor("me/my-actor").build("0.0", new ActorBuildOptions().tag("latest"));
@@ -38,4 +41,29 @@ if (finished.isTerminal()) {
 }
 ```
 
-`ActorBuildOptions` fields (all optional): `betaPackages`, `tag`, `useCache`, `waitForFinish`.
+`build(versionNumber, options)`'s `versionNumber` (e.g. `"0.0"`) selects *which Actor version's
+source* to build, matching one of the version numbers under `client.actor(id).versions()`.
+`ActorBuildOptions.tag(...)` is unrelated to that: it is the *build tag* (e.g. `"latest"`, `"beta"`)
+stamped onto the resulting build, which is what `ActorStartOptions.build(...)` /
+`Actor.defaultBuild(...)` later resolve by name — a version can be rebuilt many times under the
+same tag, with each new build replacing which build that tag currently points to.
+
+`ActorBuildOptions` fields (all optional): `betaPackages` (`Boolean`; if `true`, use beta versions
+of Apify packages instead of the latest stable ones), `tag` (`String`; the build tag to apply, e.g.
+`"latest"` — see above), `useCache` (`Boolean`; whether to reuse the Docker build cache, default
+`true`), `waitForFinish` (`Long`; maximum seconds to wait server-side for the build to finish
+before the API responds, max 60 — see `defaultBuild` below for the same wait model).
+
+`ActorClient.defaultBuild(Long waitForFinish)` resolves the Actor's currently-tagged default build
+(the build behind the `"latest"`/`"default"` tag, i.e. what a plain `start`/`call` with no explicit
+`build` would run) and returns a `BuildClient` handle for it — it does not itself return the `Build`
+object. `waitForFinish` only bounds how long the *resolving GET* waits server-side for that build to
+finish before responding (`null`/`0` returns immediately with whatever state the build is
+currently in); it does not make `defaultBuild` block until the build is done. To actually observe
+the finished build, call `.get()` (or `.waitForFinish(...)` for client-side polling) on the returned
+handle:
+
+```java
+BuildClient defaultBuild = client.actor("me/my-actor").defaultBuild(30L);
+Build finished = defaultBuild.waitForFinish(300L);
+```

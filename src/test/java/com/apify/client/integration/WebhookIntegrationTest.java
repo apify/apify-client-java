@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
-import com.apify.client.Webhook;
-import com.apify.client.WebhookClient;
-import com.apify.client.WebhookDispatch;
+import com.apify.client.webhook.Webhook;
+import com.apify.client.webhook.WebhookClient;
+import com.apify.client.webhook.WebhookDispatch;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -76,6 +76,29 @@ class WebhookIntegrationTest extends IntegrationBase {
       assertEquals("https://example.com/updated", updated.getRequestUrl());
       webhook.dispatches().list(new ListOptions());
       webhook.test();
+
+      // list() step of the create/get/modify/list/delete flow: verify the just-created webhook
+      // appears in the top-level collection listing.
+      boolean foundInList =
+          pollUntil(
+              LIST_FIND_ATTEMPTS,
+              LIST_FIND_BACKOFF_MILLIS,
+              () ->
+                  client
+                      .webhooks()
+                      .list(new ListOptions().desc(true).limit(10L))
+                      .getItems()
+                      .stream()
+                      .anyMatch(w -> wh.getId().equals(w.getId())));
+      assertTrue(foundInList, "expected the just-created webhook to appear in the top-level list");
+
+      // Typed getters (previously only reachable via getExtra()): verify the API's response
+      // actually deserializes into them, not just that the code compiles.
+      assertTrue(wh.isAdHoc());
+      assertTrue(wh.getCondition() != null);
+      assertTrue(wh.getCreatedAt() != null);
+      assertTrue(wh.getModifiedAt() != null);
+      assertTrue(wh.getStats() != null);
     } finally {
       client.webhook(wh.getId()).delete();
     }

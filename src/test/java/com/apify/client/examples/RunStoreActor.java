@@ -1,9 +1,9 @@
 package com.apify.client.examples;
 
-import com.apify.client.ActorRun;
-import com.apify.client.ActorStartOptions;
 import com.apify.client.ApifyClient;
-import com.apify.client.DatasetListItemsOptions;
+import com.apify.client.actor.ActorStartOptions;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.run.ActorRun;
 
 /**
  * Runs an existing store Actor ({@code apify/hello-world}), waits for it to finish, and reads its

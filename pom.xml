@@ -6,7 +6,7 @@
 
     <groupId>com.apify</groupId>
     <artifactId>apify-client</artifactId>
-    <version>0.3.1</version>
+    <version>0.4.0</version>
     <packaging>jar</packaging>
 
     <name>Apify Java Client</name>
@@ -42,6 +42,7 @@
         <jackson.version>2.17.2</jackson.version>
         <junit.version>5.10.2</junit.version>
         <brotli4j.version>1.23.0</brotli4j.version>
+        <slf4j.version>2.0.13</slf4j.version>
     </properties>
 
     <dependencies>
@@ -56,50 +57,52 @@
             <version>${jackson.version}</version>
         </dependency>
 
+        <!-- Logging facade only: the client logs (default log-redirection destination, transport
+             warnings) through SLF4J's API and binds to whatever logging backend the consuming
+             application already uses. It ships no backend of its own; an application that wires no
+             SLF4J binding at all simply gets SLF4J's standard no-op-with-one-time-warning behavior. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+
         <!-- Brotli request-body compression. The client prefers brotli (Content-Encoding: br) and
-             falls back to gzip when no native codec is available for the running platform. The core
-             artifact provides the Java API; the native codecs are pulled in per platform at runtime
-             scope. Platforms without a bundled native transparently use the JDK's gzip codec. -->
+             falls back to gzip whenever no brotli native codec is on the classpath, which is the
+             case by default: this is the core Java API only, `optional` so it is not forced on
+             downstream consumers transitively. A consumer that wants brotli (instead of the always-
+             available gzip fallback) opts in by adding brotli4j's own platform-specific native
+             artifact (e.g. `native-linux-x86_64`) to their own project. -->
         <dependency>
             <groupId>com.aayushatharva.brotli4j</groupId>
             <artifactId>brotli4j</artifactId>
             <version>${brotli4j.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.aayushatharva.brotli4j</groupId>
-            <artifactId>native-linux-x86_64</artifactId>
-            <version>${brotli4j.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.aayushatharva.brotli4j</groupId>
-            <artifactId>native-linux-aarch64</artifactId>
-            <version>${brotli4j.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.aayushatharva.brotli4j</groupId>
-            <artifactId>native-osx-x86_64</artifactId>
-            <version>${brotli4j.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.aayushatharva.brotli4j</groupId>
-            <artifactId>native-osx-aarch64</artifactId>
-            <version>${brotli4j.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.aayushatharva.brotli4j</groupId>
-            <artifactId>native-windows-x86_64</artifactId>
-            <version>${brotli4j.version}</version>
-            <scope>runtime</scope>
+            <optional>true</optional>
         </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Test-only: exercises the real brotli path (CompressionTest) instead of always skipping
+             it via the gzip fallback, without forcing a native codec on every consumer's classpath. -->
+        <dependency>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>native-linux-x86_64</artifactId>
+            <version>${brotli4j.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Test-only SLF4J binding, so log-redirection output (e.g. the examples/tests exercising
+             the default destination) is visible on the console during a build, matching the previous
+             java.util.logging default's observable behavior. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>${slf4j.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -141,6 +144,11 @@
                     <!-- Be gentle on the shared integration-test account: run test classes serially. -->
                     <forkCount>1</forkCount>
                     <reuseForks>true</reuseForks>
+                    <!-- Keep running the test suite on the classpath, unaffected by module-info's
+                         `exports`: tests intentionally reach into com.apify.client.internal (e.g.
+                         HttpClientCore, ResourceContext) as white-box unit tests, which the module
+                         path would block since that package is not exported. -->
+                    <useModulePath>false</useModulePath>
                 </configuration>
             </plugin>
 

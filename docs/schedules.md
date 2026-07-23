@@ -1,9 +1,5 @@
 # Schedules
 
-> **Official, but experimental — AI-generated and AI-maintained.** This is an official Apify client,
-> but it is experimental: it is generated and maintained by AI. Review the code before relying on it
-> in production and report issues on the repository.
-
 Schedules automatically start Actor or task runs at specified times. Access the collection with
 `client.schedules()` and a single schedule with `client.schedule(id)`.
 
@@ -40,4 +36,11 @@ Optional<Schedule> s = client.schedule("SCHEDULE_ID").get();
 s.ifPresent(sched -> System.out.println(sched.getCronExpression()));
 ```
 
-`Schedule` fields: `getId()`, `getUserId()`, `getName()`, `getCronExpression()`, `isEnabled()`.
+`Schedule` fields: `getId()`, `getUserId()`, `getName()`, `getTitle()`, `getDescription()`,
+`getCronExpression()`, `getTimezone()` (IANA name, e.g. `UTC`), `isEnabled()`, `isExclusive()`
+(skip a new run while a previous one is still active), `getCreatedAt()` / `getModifiedAt()`
+(`Instant`), `getNextRunAt()` / `getLastRunAt()` (`Instant`, may be `null`), `getActions()`
+(`List<JsonNode>`, each entry's shape depends on its `type`), and `getNotifications()`
+(`ScheduleNotifications`, exposing `isEmail()`). Any field not covered by a typed getter is still
+available via the inherited `getExtra()` (see
+[the docs index](README.md#model-fields-and-unmodeled-data-getextra)).

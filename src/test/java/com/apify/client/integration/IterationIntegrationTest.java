@@ -3,26 +3,28 @@ package com.apify.client.integration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.apify.client.Actor;
-import com.apify.client.ActorEnvVar;
-import com.apify.client.ActorListOptions;
 import com.apify.client.ApifyClient;
-import com.apify.client.Build;
-import com.apify.client.Dataset;
-import com.apify.client.DatasetClient;
-import com.apify.client.DatasetListItemsOptions;
-import com.apify.client.KeyValueStore;
-import com.apify.client.KeyValueStoreClient;
-import com.apify.client.KeyValueStoreKey;
-import com.apify.client.ListKeysOptions;
 import com.apify.client.ListOptions;
-import com.apify.client.RequestQueue;
-import com.apify.client.RunListOptions;
-import com.apify.client.Schedule;
 import com.apify.client.StorageListOptions;
-import com.apify.client.Task;
-import com.apify.client.Webhook;
-import com.apify.client.WebhookDispatch;
+import com.apify.client.actor.Actor;
+import com.apify.client.actor.ActorEnvVar;
+import com.apify.client.actor.ActorListOptions;
+import com.apify.client.actor.ActorVersion;
+import com.apify.client.build.Build;
+import com.apify.client.dataset.Dataset;
+import com.apify.client.dataset.DatasetClient;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.keyvalue.KeyValueStore;
+import com.apify.client.keyvalue.KeyValueStoreClient;
+import com.apify.client.keyvalue.KeyValueStoreKey;
+import com.apify.client.keyvalue.ListKeysOptions;
+import com.apify.client.requestqueue.RequestQueue;
+import com.apify.client.run.ActorRun;
+import com.apify.client.run.RunListOptions;
+import com.apify.client.schedule.Schedule;
+import com.apify.client.task.Task;
+import com.apify.client.webhook.Webhook;
+import com.apify.client.webhook.WebhookDispatch;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -51,12 +53,19 @@ class IterationIntegrationTest extends IntegrationBase {
 
   private static final long ITER_FIND_BACKOFF_MILLIS = 1000L;
 
+  /**
+   * Upper bound on items scanned by {@link #findsAll}, purely as a safety net against an infinite
+   * loop if a collection endpoint's iterator ever misbehaves (e.g. never terminates); no assertion
+   * in this suite iterates anywhere near this many items.
+   */
+  private static final int FIND_ALL_SAFETY_LIMIT = 10_000;
+
   /** Iterates until every target id is seen (lazily; stops early) or the iterator is exhausted. */
   private static <T> boolean findsAll(
       Iterator<T> it, Function<T, String> idOf, Set<String> targets) {
     Set<String> remaining = new HashSet<>(targets);
     int safety = 0;
-    while (it.hasNext() && !remaining.isEmpty() && safety++ < 10000) {
+    while (it.hasNext() && !remaining.isEmpty() && safety++ < FIND_ALL_SAFETY_LIMIT) {
       remaining.remove(idOf.apply(it.next()));
     }
     return remaining.isEmpty();
@@ -67,28 +76,18 @@ class IterationIntegrationTest extends IntegrationBase {
    * resource created through a write endpoint is not always immediately reflected in its
    * collection's LIST response — the write and the list index converge asynchronously on the
    * server, so a create-then-iterate assertion that scans exactly once races that convergence and
-   * flakes when the just-created entity has not yet propagated. This helper rebuilds a fresh
-   * iterator via {@code newIterator} and re-scans up to {@link #ITER_FIND_ATTEMPTS} times, sleeping
-   * {@link #ITER_FIND_BACKOFF_MILLIS} between attempts, returning as soon as every target id is
-   * seen. An already-consistent account matches on the first pass with no sleeping. Mirrors the
-   * sibling Go and Rust clients' tolerance for this exact intermittent failure.
+   * flakes when the just-created entity has not yet propagated. Delegates the retry/backoff shape
+   * to {@link IntegrationBase#pollUntil}, rebuilding a fresh iterator via {@code newIterator} on
+   * every attempt (up to {@link #ITER_FIND_ATTEMPTS} times, sleeping {@link
+   * #ITER_FIND_BACKOFF_MILLIS} between attempts) and returning as soon as every target id is seen.
+   * An already-consistent account matches on the first pass with no sleeping.
    */
   private static <T> boolean findsAllEventually(
       Supplier<Iterator<T>> newIterator, Function<T, String> idOf, Set<String> targets) {
-    for (int attempt = 0; attempt < ITER_FIND_ATTEMPTS; attempt++) {
-      if (findsAll(newIterator.get(), idOf, targets)) {
-        return true;
-      }
-      if (attempt + 1 < ITER_FIND_ATTEMPTS) {
-        try {
-          Thread.sleep(ITER_FIND_BACKOFF_MILLIS);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          break;
-        }
-      }
-    }
-    return false;
+    return pollUntil(
+        ITER_FIND_ATTEMPTS,
+        ITER_FIND_BACKOFF_MILLIS,
+        () -> findsAll(newIterator.get(), idOf, targets));
   }
 
   @Test
@@ -322,8 +321,7 @@ class IterationIntegrationTest extends IntegrationBase {
       // version 0.0, so iteration yields at least one version, each exactly once.
       Set<String> versionNumbers = new HashSet<>();
       int versionCount = 0;
-      Iterator<com.apify.client.ActorVersion> versions =
-          actorClient.versions().iterate(new ListOptions());
+      Iterator<ActorVersion> versions = actorClient.versions().iterate(new ListOptions());
       while (versions.hasNext()) {
         versionCount++;
         versionNumbers.add(versions.next().getVersionNumber());
@@ -363,7 +361,7 @@ class IterationIntegrationTest extends IntegrationBase {
   @Test
   void iterateRunsBounded() {
     ApifyClient client = requireClient();
-    Iterator<com.apify.client.ActorRun> it =
+    Iterator<ActorRun> it =
         client.runs().iterate(new ListOptions().limit(5L), new RunListOptions(), 2L);
     int count = 0;
     while (it.hasNext()) {

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Locale;
 import java.util.Properties;
 import org.junit.jupiter.api.Test;
 
@@ -63,8 +64,7 @@ class ClientMetaTest {
     // the reference JS client's os.platform() output — never the human-readable os.name.
     String token = ApifyClientBuilder.platformToken();
     assertFalse(token.isEmpty(), "platform token must not be empty");
-    assertEquals(
-        token.toLowerCase(java.util.Locale.ROOT), token, "token must be lowercase: " + token);
+    assertEquals(token.toLowerCase(Locale.ROOT), token, "token must be lowercase: " + token);
     assertFalse(token.contains(" "), "token must not contain spaces: " + token);
 
     String ua = ApifyClient.create("token").getUserAgent();
