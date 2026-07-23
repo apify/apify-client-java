@@ -2,15 +2,13 @@ package com.apify.client.internal;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JavaType;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import java.io.IOException;
-import java.io.UncheckedIOException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.JavaType;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Shared JSON (de)serialization for the client, centered on a single configured {@link
@@ -19,48 +17,56 @@ import java.io.UncheckedIOException;
  * <p>The mapper ignores unknown properties (models also collect them in an {@code extra} map for
  * forward compatibility), renders dates as ISO-8601 strings, and omits {@code null} fields when
  * serializing request bodies.
+ *
+ * <p>Built with Jackson 3's immutable {@link JsonMapper.Builder}: unlike Jackson 2's mutable {@code
+ * ObjectMapper}, every setting is fixed at construction time, so the resulting mapper needs no
+ * further synchronization to be safely shared across threads. Java-time (de)serialization ({@code
+ * Instant}, {@code Duration}, ...) is built into jackson-databind itself in Jackson 3, so (unlike
+ * Jackson 2) no separate {@code JavaTimeModule} registration is needed.
  */
 public final class Json {
 
   static final ObjectMapper MAPPER =
-      new ObjectMapper()
-          .registerModule(new JavaTimeModule())
+      JsonMapper.builder()
           .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-          .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
-          .setSerializationInclusion(JsonInclude.Include.NON_NULL)
+          // Several model classes use primitive numeric fields (long/double) for API values that
+          // are usually present but can legitimately be absent/null early in a resource's
+          // lifecycle (e.g. ActorRunStats fields before a run's stats are fully populated).
+          // Jackson 2 coerced a JSON null into a primitive's zero value by default; Jackson 3 does
+          // not, so this is set explicitly to keep that lenient, non-throwing behavior against the
+          // live API instead of every such field having to be widened to a boxed type.
+          .configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false)
+          .configure(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS, false)
+          .changeDefaultPropertyInclusion(
+              incl -> incl.withValueInclusion(JsonInclude.Include.NON_NULL))
           // Bind directly to (private) fields so models need no setters — getters remain the
           // public read surface. Any-getters/setters are still honored for the `extra` map.
-          .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY)
-          .setVisibility(PropertyAccessor.GETTER, JsonAutoDetect.Visibility.NONE)
-          .setVisibility(PropertyAccessor.IS_GETTER, JsonAutoDetect.Visibility.NONE);
+          .changeDefaultVisibility(
+              vc ->
+                  vc.withFieldVisibility(JsonAutoDetect.Visibility.ANY)
+                      .withGetterVisibility(JsonAutoDetect.Visibility.NONE)
+                      .withIsGetterVisibility(JsonAutoDetect.Visibility.NONE))
+          .build();
 
   private Json() {}
 
-  /** Serializes a value to JSON bytes. */
+  /**
+   * Serializes a value to JSON bytes.
+   *
+   * @throws JacksonException (unchecked, per Jackson 3) if serialization fails
+   */
   public static byte[] toBytes(Object value) {
-    try {
-      return MAPPER.writeValueAsBytes(value);
-    } catch (IOException e) {
-      throw new UncheckedIOException("failed to serialize request body", e);
-    }
+    return MAPPER.writeValueAsBytes(value);
   }
 
   /** Parses JSON bytes into the given type. */
   public static <T> T parse(byte[] body, JavaType type) {
-    try {
-      return MAPPER.readValue(body, type);
-    } catch (IOException e) {
-      throw new UncheckedIOException("failed to parse API response", e);
-    }
+    return MAPPER.readValue(body, type);
   }
 
   /** Parses JSON bytes into the given class. */
   public static <T> T parse(byte[] body, Class<T> type) {
-    try {
-      return MAPPER.readValue(body, type);
-    } catch (IOException e) {
-      throw new UncheckedIOException("failed to parse API response", e);
-    }
+    return MAPPER.readValue(body, type);
   }
 
   /**
@@ -74,18 +80,14 @@ public final class Json {
     }
     try {
       return MAPPER.readValue(body, type);
-    } catch (IOException e) {
+    } catch (JacksonException e) {
       return null;
     }
   }
 
   /** Parses JSON bytes into the given {@link TypeReference} (for generic types). */
   public static <T> T parse(byte[] body, TypeReference<T> type) {
-    try {
-      return MAPPER.readValue(body, type);
-    } catch (IOException e) {
-      throw new UncheckedIOException("failed to parse API response", e);
-    }
+    return MAPPER.readValue(body, type);
   }
 
   /** Constructs a {@link JavaType} for a raw class. */

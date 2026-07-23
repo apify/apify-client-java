@@ -28,36 +28,37 @@ public final class Storages {
     String suffix = UUID.randomUUID().toString().substring(0, 8);
 
     // Dataset: create, push items, read them back.
-    Dataset dataset = client.datasets().getOrCreate("java-example-ds-" + suffix);
+    Dataset dataset = client.datasets().getOrCreate("java-example-ds-" + suffix).join();
     try {
-      client.dataset(dataset.getId()).pushItems(List.of(Map.of("hello", "world")));
-      var items = client.dataset(dataset.getId()).listItems(new DatasetListItemsOptions());
+      client.dataset(dataset.getId()).pushItems(List.of(Map.of("hello", "world"))).join();
+      var items = client.dataset(dataset.getId()).listItems(new DatasetListItemsOptions()).join();
       System.out.println("Dataset items: " + items.getItems());
     } finally {
-      client.dataset(dataset.getId()).delete();
+      client.dataset(dataset.getId()).delete().join();
     }
 
     // Key-value store: create, set a record, read it back.
-    KeyValueStore store = client.keyValueStores().getOrCreate("java-example-kvs-" + suffix);
+    KeyValueStore store = client.keyValueStores().getOrCreate("java-example-kvs-" + suffix).join();
     try {
-      client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42));
+      client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42)).join();
       Optional<KeyValueStoreRecord> record =
-          client.keyValueStore(store.getId()).getRecord("OUTPUT");
+          client.keyValueStore(store.getId()).getRecord("OUTPUT").join();
       record.ifPresent(r -> System.out.println("KVS record bytes: " + r.getValue().length));
     } finally {
-      client.keyValueStore(store.getId()).delete();
+      client.keyValueStore(store.getId()).delete().join();
     }
 
     // Request queue: create, add a request, read the head.
-    RequestQueue queue = client.requestQueues().getOrCreate("java-example-rq-" + suffix);
+    RequestQueue queue = client.requestQueues().getOrCreate("java-example-rq-" + suffix).join();
     try {
       client
           .requestQueue(queue.getId())
-          .addRequest(new RequestQueueRequest("https://example.com", "example"), false);
-      var head = client.requestQueue(queue.getId()).listHead(10L);
+          .addRequest(new RequestQueueRequest("https://example.com", "example"), false)
+          .join();
+      var head = client.requestQueue(queue.getId()).listHead(10L).join();
       System.out.println("Request queue head size: " + head.getItems().size());
     } finally {
-      client.requestQueue(queue.getId()).delete();
+      client.requestQueue(queue.getId()).delete().join();
     }
   }
 }

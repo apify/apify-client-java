@@ -16,14 +16,14 @@ public final class LogRedirection {
   public static void main(String[] args) {
     ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
 
-    // Start the Actor and return immediately (do not wait for it to finish).
-    ActorRun run = client.actor("apify/hello-world").start(null, new ActorStartOptions());
+    // Start the Actor and complete as soon as the run exists (do not wait for it to finish).
+    ActorRun run = client.actor("apify/hello-world").start(null, new ActorStartOptions()).join();
     RunClient runClient = client.run(run.getId());
 
     // Redirect the run's live log to the default per-run logger while we wait for it to finish.
-    try (StreamedLog streamedLog = runClient.getStreamedLog()) {
-      streamedLog.start();
-      runClient.waitForFinish(120L);
+    try (StreamedLog streamedLog = runClient.getStreamedLog().join()) {
+      streamedLog.start().join();
+      runClient.waitForFinish(120L).join();
     }
   }
 }

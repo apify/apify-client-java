@@ -1,6 +1,5 @@
 package com.apify.client.keyvalue;
 
-import com.apify.client.http.ApiResponse;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.Extras;
 import com.apify.client.internal.HttpClientCore;
@@ -10,10 +9,12 @@ import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import com.apify.client.internal.Signatures;
 import java.time.Duration;
-import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** A client for a specific key-value store (and run-nested variants). */
 public final class KeyValueStoreClient {
@@ -51,35 +52,36 @@ public final class KeyValueStoreClient {
   }
 
   /** Fetches the store metadata, or empty if it does not exist. */
-  public Optional<KeyValueStore> get() {
+  public CompletableFuture<Optional<KeyValueStore>> get() {
     return ctx.getResource("", new QueryParams(), KeyValueStore.class);
   }
 
   /** Updates the store metadata (e.g. name) and returns the updated object. */
-  public KeyValueStore update(Object newFields) {
+  public CompletableFuture<KeyValueStore> update(Object newFields) {
     return ctx.updateResource("", newFields, KeyValueStore.class);
   }
 
   /** Deletes the store. */
-  public void delete() {
-    ctx.deleteResource("");
+  public CompletableFuture<Void> delete() {
+    return ctx.deleteResource("");
   }
 
   /** Lists the keys stored in this key-value store. */
-  public KeyValueStoreKeysPage listKeys(ListKeysOptions options) {
+  public CompletableFuture<KeyValueStoreKeysPage> listKeys(ListKeysOptions options) {
     QueryParams params = new QueryParams();
     options.apply(params);
     return ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class);
   }
 
   /**
-   * Returns a lazy iterator over this store's keys, fetching pages on demand via the cursor-based
-   * ({@code exclusiveStartKey}) listing endpoint. The options' {@code limit} caps the total number
-   * of keys yielded ({@code null} or non-positive = all); any {@code exclusiveStartKey} sets the
-   * starting point. The per-request page size is left to the server (bounded by any {@code limit}
-   * cap); use {@link #iterateKeys(ListKeysOptions, Long)} to set it explicitly.
+   * Returns a lazy, backpressure-aware publisher over this store's keys, fetching pages on demand
+   * via the cursor-based ({@code exclusiveStartKey}) listing endpoint. The options' {@code limit}
+   * caps the total number of keys yielded ({@code null} or non-positive = all); any {@code
+   * exclusiveStartKey} sets the starting point. The per-request page size is left to the server
+   * (bounded by any {@code limit} cap); use {@link #iterateKeys(ListKeysOptions, Long)} to set it
+   * explicitly.
    */
-  public Iterator<KeyValueStoreKey> iterateKeys(ListKeysOptions options) {
+  public Flow.Publisher<KeyValueStoreKey> iterateKeys(ListKeysOptions options) {
     return iterateKeys(options, null);
   }
 
@@ -88,91 +90,181 @@ public final class KeyValueStoreClient {
    * ({@code null} = server default). Provided for consistency with the collection {@code iterate}
    * helpers; key listing is cursor-based, so the options' {@code limit} remains a total-items cap.
    */
-  public Iterator<KeyValueStoreKey> iterateKeys(ListKeysOptions options, Long chunkSize) {
-    return new KeysIterator(options != null ? options : new ListKeysOptions(), chunkSize);
+  public Flow.Publisher<KeyValueStoreKey> iterateKeys(ListKeysOptions options, Long chunkSize) {
+    return new KeysPublisher(options != null ? options : new ListKeysOptions(), chunkSize);
   }
 
   /**
-   * Lazily iterates over a store's keys via the cursor-based ({@code exclusiveStartKey}) listing.
+   * Lazily publishes a store's keys via the cursor-based ({@code exclusiveStartKey}) listing,
+   * fetching a page only once the subscriber has signalled demand for it. Supports a single
+   * subscriber, like {@link com.apify.client.internal.AsyncPaginatedPublisher}, whose draining
+   * design this mirrors (cursor pagination instead of offset/limit is the only real difference).
    */
-  private final class KeysIterator implements Iterator<KeyValueStoreKey> {
+  private final class KeysPublisher implements Flow.Publisher<KeyValueStoreKey> {
     private final Long chunkSize;
     private final QueryParams filters;
-    private List<KeyValueStoreKey> buffer = List.of();
-    private int pos;
-    private String cursor;
-    private Long remaining;
-    private boolean exhausted;
+    private final String initialCursor;
+    private final Long initialRemaining;
+    private final AtomicBoolean subscribed = new AtomicBoolean();
 
-    KeysIterator(ListKeysOptions options, Long chunkSize) {
+    KeysPublisher(ListKeysOptions options, Long chunkSize) {
       this.chunkSize = chunkSize != null && chunkSize > 0 ? chunkSize : null;
-      this.cursor = options.exclusiveStartKeyValue();
+      this.initialCursor = options.exclusiveStartKeyValue();
       Long limit = options.limitValue();
-      this.remaining = limit != null && limit > 0 ? limit : null;
-      // Snapshot the filters once so mutating the options mid-iteration cannot leak into later
-      // pages.
+      this.initialRemaining = limit != null && limit > 0 ? limit : null;
       this.filters = new QueryParams();
       options.applyFilters(this.filters);
     }
 
     @Override
-    public boolean hasNext() {
-      while (pos >= buffer.size()) {
+    public void subscribe(Flow.Subscriber<? super KeyValueStoreKey> subscriber) {
+      if (!subscribed.compareAndSet(false, true)) {
+        subscriber.onSubscribe(
+            new Flow.Subscription() {
+              @Override
+              public void request(long n) {}
+
+              @Override
+              public void cancel() {}
+            });
+        subscriber.onError(
+            new IllegalStateException(
+                "This publisher supports only a single subscriber (already subscribed)"));
+        return;
+      }
+      subscriber.onSubscribe(new Session(subscriber));
+    }
+
+    private final class Session implements Flow.Subscription {
+      private final Flow.Subscriber<? super KeyValueStoreKey> subscriber;
+      private final AtomicLong requested = new AtomicLong();
+      private final AtomicBoolean draining = new AtomicBoolean();
+      private final AtomicBoolean cancelled = new AtomicBoolean();
+      private final AtomicBoolean terminated = new AtomicBoolean();
+
+      // Only touched from within the draining-guarded section; see AsyncPaginatedPublisher.Session.
+      private List<KeyValueStoreKey> buffer = List.of();
+      private int pos;
+      private String cursor;
+      private Long remaining;
+      private boolean exhausted;
+
+      Session(Flow.Subscriber<? super KeyValueStoreKey> subscriber) {
+        this.subscriber = subscriber;
+        this.cursor = initialCursor;
+        this.remaining = initialRemaining;
+      }
+
+      @Override
+      public void request(long n) {
+        if (n <= 0) {
+          if (terminated.compareAndSet(false, true)) {
+            subscriber.onError(
+                new IllegalArgumentException(
+                    "Reactive Streams violation: requested amount must be positive, was " + n));
+          }
+          return;
+        }
+        requested.updateAndGet(current -> current + n < 0 ? Long.MAX_VALUE : current + n);
+        drain();
+      }
+
+      @Override
+      public void cancel() {
+        cancelled.set(true);
+      }
+
+      private void drain() {
+        if (draining.compareAndSet(false, true)) {
+          drainLoop();
+        }
+      }
+
+      private void drainLoop() {
+        while (!cancelled.get() && requested.get() > 0 && pos < buffer.size()) {
+          KeyValueStoreKey item = buffer.get(pos++);
+          requested.decrementAndGet();
+          subscriber.onNext(item);
+        }
+        if (cancelled.get()) {
+          draining.set(false);
+          return;
+        }
+        if (pos < buffer.size()) {
+          draining.set(false);
+          if (requested.get() > 0 && pos < buffer.size()) {
+            drain();
+          }
+          return;
+        }
         if (exhausted) {
-          return false;
+          if (terminated.compareAndSet(false, true)) {
+            subscriber.onComplete();
+          }
+          draining.set(false);
+          return;
         }
         fetchPage();
       }
-      return true;
-    }
 
-    @Override
-    public KeyValueStoreKey next() {
-      if (!hasNext()) {
-        throw new NoSuchElementException();
-      }
-      return buffer.get(pos++);
-    }
-
-    private void fetchPage() {
-      QueryParams params = new QueryParams();
-      // Request the smaller of the remaining cap and the page size, so the last page never
-      // overshoots the caller's total cap; a null limit lets the server choose its default page.
-      Long pageLimit = remaining;
-      if (chunkSize != null && (pageLimit == null || chunkSize < pageLimit)) {
-        pageLimit = chunkSize;
-      }
-      params.addLong("limit", pageLimit);
-      params.addString("exclusiveStartKey", cursor);
-      params.extend(filters);
-      KeyValueStoreKeysPage page =
-          ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class);
-      buffer = page.getItems();
-      pos = 0;
-      cursor = page.getNextExclusiveStartKey();
-      boolean truncated = page.isTruncated();
-      if (remaining != null) {
-        // Defensively trim the last page to the cap in case the server returned more than
-        // requested.
-        if (buffer.size() > remaining) {
-          buffer = buffer.subList(0, remaining.intValue());
+      private void fetchPage() {
+        QueryParams params = new QueryParams();
+        // Request the smaller of the remaining cap and the page size, so the last page never
+        // overshoots the caller's total cap; a null limit lets the server choose its default page.
+        Long pageLimit = remaining;
+        if (chunkSize != null && (pageLimit == null || chunkSize < pageLimit)) {
+          pageLimit = chunkSize;
         }
-        remaining -= buffer.size();
+        params.addLong("limit", pageLimit);
+        params.addString("exclusiveStartKey", cursor);
+        params.extend(filters);
+        ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class)
+            .whenComplete(
+                (page, error) -> {
+                  if (cancelled.get()) {
+                    draining.set(false);
+                    return;
+                  }
+                  if (error != null) {
+                    if (terminated.compareAndSet(false, true)) {
+                      subscriber.onError(HttpClientCore.unwrapCompletion(error));
+                    }
+                    draining.set(false);
+                    return;
+                  }
+                  applyPage(page);
+                  drainLoop();
+                });
       }
-      // Stop when the API reports the listing is not truncated (no more keys), there is no next
-      // cursor, the page is empty, or the total cap is reached.
-      if (!truncated
-          || cursor == null
-          || cursor.isEmpty()
-          || buffer.isEmpty()
-          || (remaining != null && remaining <= 0)) {
-        exhausted = true;
+
+      private void applyPage(KeyValueStoreKeysPage page) {
+        buffer = page.getItems();
+        pos = 0;
+        cursor = page.getNextExclusiveStartKey();
+        boolean truncated = page.isTruncated();
+        if (remaining != null) {
+          // Defensively trim the last page to the cap in case the server returned more than
+          // requested.
+          if (buffer.size() > remaining) {
+            buffer = buffer.subList(0, remaining.intValue());
+          }
+          remaining -= buffer.size();
+        }
+        // Stop when the API reports the listing is not truncated (no more keys), there is no next
+        // cursor, the page is empty, or the total cap is reached.
+        if (!truncated
+            || cursor == null
+            || cursor.isEmpty()
+            || buffer.isEmpty()
+            || (remaining != null && remaining <= 0)) {
+          exhausted = true;
+        }
       }
     }
   }
 
   /** Reports whether a record with the given key exists. */
-  public boolean recordExists(String key) {
+  public CompletableFuture<Boolean> recordExists(String key) {
     return ctx.headExists("records/" + ResourceContext.encodePathSegment(key), new QueryParams());
   }
 
@@ -180,37 +272,42 @@ public final class KeyValueStoreClient {
    * Fetches a record by key, or empty if it does not exist. Like the reference client, it requests
    * the record as an attachment so the API returns the raw bytes directly rather than redirecting.
    */
-  public Optional<KeyValueStoreRecord> getRecord(String key) {
+  public CompletableFuture<Optional<KeyValueStoreRecord>> getRecord(String key) {
     return getRecord(key, new GetRecordOptions().attachment(true));
   }
 
   /** Fetches a record with explicit options (attachment, signature). */
-  public Optional<KeyValueStoreRecord> getRecord(String key, GetRecordOptions options) {
+  public CompletableFuture<Optional<KeyValueStoreRecord>> getRecord(
+      String key, GetRecordOptions options) {
     QueryParams params = new QueryParams();
     options.apply(params);
-    ApiResponse resp = ctx.getRaw("records/" + ResourceContext.encodePathSegment(key), params);
-    if (resp == null) {
-      return Optional.empty();
-    }
-    String contentType = resp.headers().firstValue(HttpHeaders.CONTENT_TYPE).orElse(null);
-    return Optional.of(new KeyValueStoreRecord(key, resp.body(), contentType));
+    return ctx.getRaw("records/" + ResourceContext.encodePathSegment(key), params)
+        .thenApply(
+            resp -> {
+              if (resp == null) {
+                return Optional.empty();
+              }
+              String contentType = resp.headers().firstValue(HttpHeaders.CONTENT_TYPE).orElse(null);
+              return Optional.of(new KeyValueStoreRecord(key, resp.body(), contentType));
+            });
   }
 
   /** Stores a record with raw bytes and the given content type. */
-  public void setRecord(String key, byte[] value, String contentType) {
-    setRecord(key, value, contentType, new SetRecordOptions());
+  public CompletableFuture<Void> setRecord(String key, byte[] value, String contentType) {
+    return setRecord(key, value, contentType, new SetRecordOptions());
   }
 
   /**
    * Stores a record with raw bytes and the given content type, honoring the given write options
    * ({@code timeoutSecs}, {@code doNotRetryTimeouts}).
    */
-  public void setRecord(String key, byte[] value, String contentType, SetRecordOptions options) {
+  public CompletableFuture<Void> setRecord(
+      String key, byte[] value, String contentType, SetRecordOptions options) {
     Duration timeout =
         options.timeoutSecsValue() != null
             ? Duration.ofSeconds(options.timeoutSecsValue())
             : ctx.http.baseRequestTimeout();
-    ctx.putRaw(
+    return ctx.putRaw(
         "records/" + ResourceContext.encodePathSegment(key),
         new QueryParams(),
         value,
@@ -220,13 +317,13 @@ public final class KeyValueStoreClient {
   }
 
   /** Stores a record holding the JSON serialization of {@code value}. */
-  public void setRecordJson(String key, Object value) {
-    setRecord(key, Json.toBytes(value), ResourceContext.CONTENT_TYPE_JSON_CHARSET);
+  public CompletableFuture<Void> setRecordJson(String key, Object value) {
+    return setRecord(key, Json.toBytes(value), ResourceContext.CONTENT_TYPE_JSON_CHARSET);
   }
 
   /** Deletes a record by key. */
-  public void deleteRecord(String key) {
-    ctx.deleteResource("records/" + ResourceContext.encodePathSegment(key));
+  public CompletableFuture<Void> deleteRecord(String key) {
+    return ctx.deleteResource("records/" + ResourceContext.encodePathSegment(key));
   }
 
   /**
@@ -234,19 +331,23 @@ public final class KeyValueStoreClient {
    * exposes a URL-signing secret key (i.e. it is private), appends an HMAC-SHA256 signature so the
    * URL grants access without an API token. The URL is built from the configured public base URL.
    */
-  public String getRecordPublicUrl(String key) {
+  public CompletableFuture<String> getRecordPublicUrl(String key) {
     QueryParams params = new QueryParams();
-    Optional<KeyValueStore> store = get();
-    if (store.isPresent()) {
-      String secret = Extras.extractString(store.get().getExtra(), "urlSigningSecretKey");
-      if (secret != null) {
-        params.addString("signature", Signatures.createHmacSignature(secret, key));
-      }
-    }
-    // Public URL = resource path + signature only, matching the JS reference.
-    // Seeded filters are not carried; see DatasetClient.createItemsPublicUrl and
-    // docs/storages.md for the last-run caveat.
-    return params.applyToUrl(ctx.publicUrl("records/" + ResourceContext.encodePathSegment(key)));
+    return get()
+        .thenApply(
+            store -> {
+              if (store.isPresent()) {
+                String secret = Extras.extractString(store.get().getExtra(), "urlSigningSecretKey");
+                if (secret != null) {
+                  params.addString("signature", Signatures.createHmacSignature(secret, key));
+                }
+              }
+              // Public URL = resource path + signature only, matching the JS reference.
+              // Seeded filters are not carried; see DatasetClient.createItemsPublicUrl and
+              // docs/storages.md for the last-run caveat.
+              return params.applyToUrl(
+                  ctx.publicUrl("records/" + ResourceContext.encodePathSegment(key)));
+            });
   }
 
   /**
@@ -254,7 +355,7 @@ public final class KeyValueStoreClient {
    * signature is appended for private stores. {@code expiresInSecs} optionally bounds the validity
    * of a signed URL ({@code null} for non-expiring).
    */
-  public String createKeysPublicUrl(Long expiresInSecs) {
+  public CompletableFuture<String> createKeysPublicUrl(Long expiresInSecs) {
     return createKeysPublicUrl(new ListKeysOptions(), expiresInSecs);
   }
 
@@ -265,22 +366,27 @@ public final class KeyValueStoreClient {
    * already supplied one. {@code expiresInSecs} optionally bounds the validity of a signed URL
    * ({@code null} for non-expiring).
    */
-  public String createKeysPublicUrl(ListKeysOptions options, Long expiresInSecs) {
+  public CompletableFuture<String> createKeysPublicUrl(
+      ListKeysOptions options, Long expiresInSecs) {
     QueryParams params = new QueryParams();
     options.apply(params);
-    if (options.signatureValue() == null) {
-      Optional<KeyValueStore> store = get();
-      if (store.isPresent()) {
-        String secret = Extras.extractString(store.get().getExtra(), "urlSigningSecretKey");
-        if (secret != null) {
-          params.addString(
-              "signature",
-              Signatures.signStorageContent(secret, store.get().getId(), expiresInSecs));
-        }
-      }
+    if (options.signatureValue() != null) {
+      return CompletableFuture.completedFuture(params.applyToUrl(ctx.publicUrl("keys")));
     }
-    // Public URL = resource path + the explicit key-listing options + signature, matching the JS
-    // reference (see the last-run caveat documented in docs/storages.md).
-    return params.applyToUrl(ctx.publicUrl("keys"));
+    return get()
+        .thenApply(
+            store -> {
+              if (store.isPresent()) {
+                String secret = Extras.extractString(store.get().getExtra(), "urlSigningSecretKey");
+                if (secret != null) {
+                  params.addString(
+                      "signature",
+                      Signatures.signStorageContent(secret, store.get().getId(), expiresInSecs));
+                }
+              }
+              // Public URL = resource path + the explicit key-listing options + signature, matching
+              // the JS reference (see the last-run caveat documented in docs/storages.md).
+              return params.applyToUrl(ctx.publicUrl("keys"));
+            });
   }
 }

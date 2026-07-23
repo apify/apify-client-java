@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
 import com.apify.client.PaginationList;
+import com.apify.client.Publishers;
 import com.apify.client.actor.Actor;
 import com.apify.client.actor.ActorBuildOptions;
 import com.apify.client.actor.ActorClient;
@@ -50,34 +51,35 @@ class ActorIntegrationTest extends IntegrationBase {
   @Test
   void listActors() {
     ApifyClient client = requireClient();
-    PaginationList<Actor> page = client.actors().list(new ActorListOptions().my(true).limit(5L));
+    PaginationList<Actor> page =
+        client.actors().list(new ActorListOptions().my(true).limit(5L)).join();
     assertTrue(page.getTotal() >= 0);
   }
 
   @Test
   void getActor() {
     ApifyClient client = requireClient();
-    Actor created = client.actors().create(minimalActor(uniqueName("get")));
+    Actor created = client.actors().create(minimalActor(uniqueName("get"))).join();
     try {
-      var got = client.actor(created.getId()).get();
+      var got = client.actor(created.getId()).get().join();
       assertTrue(got.isPresent());
       assertEquals(created.getId(), got.get().getId());
     } finally {
-      client.actor(created.getId()).delete();
+      client.actor(created.getId()).delete().join();
     }
   }
 
   @Test
   void actorCrudFlow() {
     ApifyClient client = requireClient();
-    Actor created = client.actors().create(minimalActor(uniqueName("crud")));
+    Actor created = client.actors().create(minimalActor(uniqueName("crud"))).join();
     try {
       ActorClient actor = client.actor(created.getId());
-      assertTrue(actor.get().isPresent());
-      Actor updated = actor.update(Map.of("title", "Updated Title"));
+      assertTrue(actor.get().join().isPresent());
+      Actor updated = actor.update(Map.of("title", "Updated Title")).join();
       assertEquals("Updated Title", updated.getTitle());
-      actor.builds().list(new ListOptions());
-      actor.versions().list(new ListOptions());
+      actor.builds().list(new ListOptions()).join();
+      actor.versions().list(new ListOptions()).join();
 
       // list() step of the create/get/modify/list/delete flow: verify the just-created Actor
       // appears in the top-level collection listing.
@@ -89,19 +91,20 @@ class ActorIntegrationTest extends IntegrationBase {
                   client
                       .actors()
                       .list(new ActorListOptions().my(true).desc(true).limit(10L))
+                      .join()
                       .getItems()
                       .stream()
                       .anyMatch(a -> created.getId().equals(a.getId())));
       assertTrue(foundInList, "expected the just-created Actor to appear in the top-level list");
     } finally {
-      client.actor(created.getId()).delete();
+      client.actor(created.getId()).delete().join();
     }
   }
 
   @Test
   void actorVersionCrudFlow() {
     ApifyClient client = requireClient();
-    Actor created = client.actors().create(minimalActor(uniqueName("ver")));
+    Actor created = client.actors().create(minimalActor(uniqueName("ver"))).join();
     try {
       ActorClient actor = client.actor(created.getId());
       ActorVersion version =
@@ -112,17 +115,19 @@ class ActorIntegrationTest extends IntegrationBase {
                       "versionNumber", "0.1",
                       "sourceType", "SOURCE_FILES",
                       "buildTag", "latest",
-                      "sourceFiles", List.of()));
+                      "sourceFiles", List.of()))
+              .join();
       assertEquals("0.1", version.getVersionNumber());
-      assertTrue(actor.version("0.1").get().isPresent());
-      actor.versions().list(new ListOptions());
+      assertTrue(actor.version("0.1").get().join().isPresent());
+      actor.versions().list(new ListOptions()).join();
       actor
           .version("0.1")
           .update(
-              Map.of("buildTag", "beta", "sourceType", "SOURCE_FILES", "sourceFiles", List.of()));
-      actor.version("0.1").delete();
+              Map.of("buildTag", "beta", "sourceType", "SOURCE_FILES", "sourceFiles", List.of()))
+          .join();
+      actor.version("0.1").delete().join();
     } finally {
-      client.actor(created.getId()).delete();
+      client.actor(created.getId()).delete().join();
     }
   }
 
@@ -131,21 +136,22 @@ class ActorIntegrationTest extends IntegrationBase {
     ApifyClient client = requireClient();
     // apify/hello-world is a public store Actor; validate-input is read-only and returns
     // {"valid": <bool>}. A well-formed input validates true.
-    boolean valid = client.actor("apify/hello-world").validateInput(Map.of("firstNumber", 1));
+    boolean valid =
+        client.actor("apify/hello-world").validateInput(Map.of("firstNumber", 1)).join();
     assertTrue(valid);
   }
 
   @Test
   void actorDefaultBuildAndWebhooks() {
     ApifyClient client = requireClient();
-    Actor created = client.actors().create(minimalActor(uniqueName("default-build")));
+    Actor created = client.actors().create(minimalActor(uniqueName("default-build"))).join();
     try {
       ActorClient actor = client.actor(created.getId());
-      Build build = actor.build("0.0", new ActorBuildOptions());
-      client.build(build.getId()).waitForFinish(300L);
+      Build build = actor.build("0.0", new ActorBuildOptions()).join();
+      client.build(build.getId()).waitForFinish(300L).join();
 
-      BuildClient defaultBuild = actor.defaultBuild(60L);
-      assertTrue(defaultBuild.get().isPresent());
+      BuildClient defaultBuild = actor.defaultBuild(60L).join();
+      assertTrue(defaultBuild.get().join().isPresent());
 
       // Read-only nested webhook collection (GET + iterate); the account has none registered for
       // this fresh Actor, so this just exercises both calls succeeding against an empty result —
@@ -153,27 +159,27 @@ class ActorIntegrationTest extends IntegrationBase {
       // implementation with `AbstractWebhookCollectionClient`, whose paging/iteration behavior is
       // already exercised with real multi-item data (2 created webhooks, paged one at a time) by
       // `IterationIntegrationTest#iterateWebhooks` through the sibling `WebhookCollectionClient`.
-      assertTrue(actor.webhooks().list(new ListOptions()).getTotal() >= 0);
-      assertTrue(!actor.webhooks().iterate(new ListOptions()).hasNext());
+      assertTrue(actor.webhooks().list(new ListOptions()).join().getTotal() >= 0);
+      assertTrue(Publishers.collect(actor.webhooks().iterate(new ListOptions())).join().isEmpty());
     } finally {
-      client.actor(created.getId()).delete();
+      client.actor(created.getId()).delete().join();
     }
   }
 
   @Test
   void actorEnvVarCrudFlow() {
     ApifyClient client = requireClient();
-    Actor created = client.actors().create(minimalActor(uniqueName("env")));
+    Actor created = client.actors().create(minimalActor(uniqueName("env"))).join();
     try {
       ActorClient actor = client.actor(created.getId());
       var envVars = actor.version("0.0").envVars();
-      envVars.create(new ActorEnvVar("MY_VAR", "value1"));
-      assertTrue(actor.version("0.0").envVar("MY_VAR").get().isPresent());
-      envVars.list();
-      actor.version("0.0").envVar("MY_VAR").update(new ActorEnvVar("MY_VAR", "value2"));
-      actor.version("0.0").envVar("MY_VAR").delete();
+      envVars.create(new ActorEnvVar("MY_VAR", "value1")).join();
+      assertTrue(actor.version("0.0").envVar("MY_VAR").get().join().isPresent());
+      envVars.list().join();
+      actor.version("0.0").envVar("MY_VAR").update(new ActorEnvVar("MY_VAR", "value2")).join();
+      actor.version("0.0").envVar("MY_VAR").delete().join();
     } finally {
-      client.actor(created.getId()).delete();
+      client.actor(created.getId()).delete().join();
     }
   }
 }

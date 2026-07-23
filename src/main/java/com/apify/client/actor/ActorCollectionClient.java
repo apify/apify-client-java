@@ -5,6 +5,7 @@ import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
+import java.util.concurrent.CompletableFuture;
 
 /** A client for the Actor collection ({@code GET/POST /v2/actors}). */
 public final class ActorCollectionClient extends AbstractCollectionClient<Actor, ActorListOptions> {
@@ -17,7 +18,7 @@ public final class ActorCollectionClient extends AbstractCollectionClient<Actor,
   }
 
   /** Creates a new Actor. {@code actor} is any JSON-serializable Actor definition. */
-  public Actor create(Object actor) {
+  public CompletableFuture<Actor> create(Object actor) {
     return ctx.createResource(new QueryParams(), actor, Actor.class);
   }
 }

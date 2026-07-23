@@ -7,19 +7,19 @@ builds) and a single build with `client.build(id)`.
 
 | Method | Description |
 |---|---|
-| `list(ListOptions)` | List builds. Returns `PaginationList<Build>`. |
-| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Build>` over all builds; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
+| `list(ListOptions)` | List builds. Completes with `PaginationList<Build>`. |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Flow.Publisher<Build>` over all builds; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 
 ## `BuildClient`
 
 | Method | Description |
 |---|---|
-| `get()` | Fetch the build. Returns `Optional<Build>`. |
-| `getWithWait(Long waitForFinishSecs)` | Fetch, optionally waiting server-side for the build to finish (clamped to the request timeout; the API caps server-side waiting at 60s). Returns `Optional<Build>`. |
-| `abort()` | Abort the build. Returns `Build`. |
+| `get()` | Fetch the build. Completes with `Optional<Build>`. |
+| `getWithWait(Long waitForFinishSecs)` | Fetch, optionally waiting server-side for the build to finish (clamped to the request timeout; the API caps server-side waiting at 60s). Completes with `Optional<Build>`. |
+| `abort()` | Abort the build. Completes with `Build`. |
 | `delete()` | Delete the build. |
-| `waitForFinish(Long waitSecs)` | Poll until the build finishes (`null` waits indefinitely). Returns `Build`. |
-| `getOpenApiDefinition()` | The build's OpenAPI definition. Returns `Optional<JsonNode>`. |
+| `waitForFinish(Long waitSecs)` | Poll until the build finishes (`null` waits indefinitely). Completes with `Build`. |
+| `getOpenApiDefinition()` | The build's OpenAPI definition. Completes with `Optional<JsonNode>`. |
 | `log()` | A `LogClient` for the build's log. |
 
 `Build` fields: `getId()`, `getActId()`, `getUserId()`, `getStatus()`, `getStartedAt()`,
@@ -34,8 +34,8 @@ Every nested model above (`BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage
 `getExtra()`, so a field not yet listed here is still reachable rather than dropped.
 
 ```java
-Build build = client.actor("me/my-actor").build("0.0", new ActorBuildOptions().tag("latest"));
-Build finished = client.build(build.getId()).waitForFinish(300L);
+Build build = client.actor("me/my-actor").build("0.0", new ActorBuildOptions().tag("latest")).join();
+Build finished = client.build(build.getId()).waitForFinish(300L).join();
 if (finished.isTerminal()) {
   System.out.println("built " + finished.getBuildNumber());
 }
@@ -56,14 +56,14 @@ before the API responds, max 60 — see `defaultBuild` below for the same wait m
 
 `ActorClient.defaultBuild(Long waitForFinish)` resolves the Actor's currently-tagged default build
 (the build behind the `"latest"`/`"default"` tag, i.e. what a plain `start`/`call` with no explicit
-`build` would run) and returns a `BuildClient` handle for it — it does not itself return the `Build`
-object. `waitForFinish` only bounds how long the *resolving GET* waits server-side for that build to
+`build` would run) and completes with a `BuildClient` handle for it — it does not itself return the
+`Build` object. `waitForFinish` only bounds how long the *resolving GET* waits server-side for that build to
 finish before responding (`null`/`0` returns immediately with whatever state the build is
 currently in); it does not make `defaultBuild` block until the build is done. To actually observe
 the finished build, call `.get()` (or `.waitForFinish(...)` for client-side polling) on the returned
 handle:
 
 ```java
-BuildClient defaultBuild = client.actor("me/my-actor").defaultBuild(30L);
-Build finished = defaultBuild.waitForFinish(300L);
+BuildClient defaultBuild = client.actor("me/my-actor").defaultBuild(30L).join();
+Build finished = defaultBuild.waitForFinish(300L).join();
 ```

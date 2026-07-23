@@ -1,12 +1,12 @@
 package com.apify.client.requestqueue;
 
 import com.apify.client.ApifyResource;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import tools.jackson.databind.JsonNode;
 
 /**
  * A single request stored in a request queue. Fields left {@code null} are omitted when the request

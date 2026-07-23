@@ -1,7 +1,8 @@
 package com.apify.client.internal;
 
 import com.apify.client.PaginationList;
-import java.util.Iterator;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -34,7 +35,7 @@ public abstract class AbstractCollectionClient<T, O extends ListOptionsLike> {
   }
 
   /** Lists the collection's items for one page. {@code options} may be {@code null} (defaults). */
-  public PaginationList<T> list(O options) {
+  public CompletableFuture<PaginationList<T>> list(O options) {
     O opts = options != null ? options : defaultOptions.get();
     QueryParams params = new QueryParams();
     opts.apply(params);
@@ -42,16 +43,16 @@ public abstract class AbstractCollectionClient<T, O extends ListOptionsLike> {
   }
 
   /**
-   * Returns a lazy iterator over the collection. The options' {@code limit} caps the total number
-   * yielded ({@code null} or non-positive = all); {@code chunkSize} is the per-request page size
-   * ({@code null} = server default).
+   * Returns a lazy, backpressure-aware {@link Flow.Publisher} over the collection. The options'
+   * {@code limit} caps the total number yielded ({@code null} or non-positive = all); {@code
+   * chunkSize} is the per-request page size ({@code null} = server default).
    */
-  public Iterator<T> iterate(O options) {
+  public Flow.Publisher<T> iterate(O options) {
     return iterate(options, null);
   }
 
   /** As {@link #iterate(ListOptionsLike)}, but {@code chunkSize} sets the per-request page size. */
-  public Iterator<T> iterate(O options, Long chunkSize) {
+  public Flow.Publisher<T> iterate(O options, Long chunkSize) {
     O opts = options != null ? options : defaultOptions.get();
     return iterateWithFilters(opts.limitValue(), chunkSize, opts.offsetValue(), opts::applyFilters);
   }
@@ -61,15 +62,15 @@ public abstract class AbstractCollectionClient<T, O extends ListOptionsLike> {
    * subclasses (e.g. {@code RunCollectionClient}) that need to merge in an extra filter ({@code
    * options} alone cannot express) before delegating to the same {@code ctx}/item-class.
    */
-  protected final PaginationList<T> listWithParams(QueryParams params) {
+  protected final CompletableFuture<PaginationList<T>> listWithParams(QueryParams params) {
     return ctx.listResource("", params, itemClass);
   }
 
   /**
    * As {@link #listWithParams}, but for lazy iteration: {@code applyFilters} supplies every filter
-   * except {@code offset}/{@code limit}, which the iterator drives per page.
+   * except {@code offset}/{@code limit}, which the publisher drives per page.
    */
-  protected final Iterator<T> iterateWithFilters(
+  protected final Flow.Publisher<T> iterateWithFilters(
       Long limit, Long chunkSize, Long offset, Consumer<QueryParams> applyFilters) {
     return ctx.iterateResource("", limit, chunkSize, offset, applyFilters, itemClass);
   }

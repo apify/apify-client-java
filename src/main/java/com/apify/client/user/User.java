@@ -1,8 +1,8 @@
 package com.apify.client.user;
 
 import com.apify.client.ApifyResource;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
+import tools.jackson.databind.JsonNode;
 
 /**
  * An Apify user account. Private account details (available only for {@code me}) are typed below

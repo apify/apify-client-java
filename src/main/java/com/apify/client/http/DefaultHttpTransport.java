@@ -1,14 +1,16 @@
 package com.apify.client.http;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
- * The default {@link HttpTransport}, backed by the JDK's {@link java.net.http.HttpClient}.
+ * The default {@link HttpTransport}, backed by the JDK's {@link java.net.http.HttpClient} and its
+ * native non-blocking {@code sendAsync}.
  *
  * <p>The per-attempt timeout is applied to each {@link HttpRequest} by the orchestrating client, so
  * this transport sets only a connection timeout of its own. It follows normal redirects and reuses
@@ -51,21 +53,35 @@ public final class DefaultHttpTransport implements HttpTransport {
   }
 
   @Override
-  public HttpResponse<byte[]> send(HttpRequest request) throws IOException, InterruptedException {
-    try {
-      return client.send(request, HttpResponse.BodyHandlers.ofByteArray());
-    } catch (java.net.http.HttpTimeoutException e) {
-      throw new HttpTimeoutException(e.getMessage(), e);
-    }
+  public CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request) {
+    return unwrapTimeout(client.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray()));
   }
 
   @Override
-  public HttpResponse<InputStream> sendStreamingResponse(HttpRequest request)
-      throws IOException, InterruptedException {
-    try {
-      return client.send(request, HttpResponse.BodyHandlers.ofInputStream());
-    } catch (java.net.http.HttpTimeoutException e) {
-      throw new HttpTimeoutException(e.getMessage(), e);
-    }
+  public CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request) {
+    return unwrapTimeout(client.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()));
+  }
+
+  /**
+   * Rewrites a {@link java.net.http.HttpTimeoutException} the JDK client fails the future with into
+   * this contract's transport-agnostic {@link HttpTimeoutException}, unwrapping the {@link
+   * CompletionException} {@code sendAsync} wraps it in.
+   */
+  private static <T> CompletableFuture<T> unwrapTimeout(CompletableFuture<T> future) {
+    CompletableFuture<T> result = new CompletableFuture<>();
+    future.whenComplete(
+        (value, error) -> {
+          if (error == null) {
+            result.complete(value);
+            return;
+          }
+          Throwable cause = error instanceof CompletionException ? error.getCause() : error;
+          if (cause instanceof java.net.http.HttpTimeoutException timeout) {
+            result.completeExceptionally(new HttpTimeoutException(timeout.getMessage(), timeout));
+          } else {
+            result.completeExceptionally(cause);
+          }
+        });
+    return result;
   }
 }

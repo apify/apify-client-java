@@ -1,7 +1,6 @@
 package com.apify.client.run;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.actor.Actor;
 import com.apify.client.dataset.DatasetClient;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
@@ -15,6 +14,7 @@ import com.apify.client.requestqueue.RequestQueueClient;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
@@ -75,7 +75,7 @@ public final class RunClient {
   }
 
   /** Fetches the run object, or empty if it does not exist. */
-  public Optional<ActorRun> get() {
+  public CompletableFuture<Optional<ActorRun>> get() {
     return getWithWait(null);
   }
 
@@ -85,7 +85,7 @@ public final class RunClient {
    * responds before the client's per-request timeout; the API itself caps server-side waiting at 60
    * seconds. Pass {@code null} for an immediate fetch.
    */
-  public Optional<ActorRun> getWithWait(Long waitForFinishSecs) {
+  public CompletableFuture<Optional<ActorRun>> getWithWait(Long waitForFinishSecs) {
     QueryParams params = new QueryParams();
     // Clamp to the client's per-request timeout so a short custom timeout doesn't abort the call.
     params.addLong("waitForFinish", ctx.clampServerWait(waitForFinishSecs));
@@ -93,13 +93,13 @@ public final class RunClient {
   }
 
   /** Updates the run with the given fields and returns the updated object. */
-  public ActorRun update(Object newFields) {
+  public CompletableFuture<ActorRun> update(Object newFields) {
     return ctx.updateResource("", newFields, ActorRun.class);
   }
 
   /** Deletes the run. */
-  public void delete() {
-    ctx.deleteResource("");
+  public CompletableFuture<Void> delete() {
+    return ctx.deleteResource("");
   }
 
   /**
@@ -107,7 +107,7 @@ public final class RunClient {
    * the current request before terminating; if {@code false} it is aborted immediately. Pass {@code
    * null} to omit the parameter and let the server apply its default (immediate abort).
    */
-  public ActorRun abort(Boolean gracefully) {
+  public CompletableFuture<ActorRun> abort(Boolean gracefully) {
     QueryParams params = new QueryParams();
     params.addBool("gracefully", gracefully);
     return ctx.postWithBody("abort", params, null, "", ActorRun.class);
@@ -119,7 +119,8 @@ public final class RunClient {
    * URL-safe {@code username~actor-name} form before sending, matching the reference client's
    * {@code _toSafeId}); {@code input} is the new input ({@code null} for none).
    */
-  public ActorRun metamorph(String targetActorId, Object input, MetamorphOptions options) {
+  public CompletableFuture<ActorRun> metamorph(
+      String targetActorId, Object input, MetamorphOptions options) {
     if (targetActorId == null || targetActorId.isEmpty()) {
       throw new IllegalArgumentException("targetActorId is required and must not be empty");
     }
@@ -137,12 +138,12 @@ public final class RunClient {
   }
 
   /** Reboots the run (restarts its container while keeping the same run). */
-  public ActorRun reboot() {
+  public CompletableFuture<ActorRun> reboot() {
     return ctx.postWithBody("reboot", new QueryParams(), null, "", ActorRun.class);
   }
 
   /** Resurrects a finished run, starting it again from the beginning. */
-  public ActorRun resurrect(RunResurrectOptions options) {
+  public CompletableFuture<ActorRun> resurrect(RunResurrectOptions options) {
     if (options == null) {
       throw new IllegalArgumentException("options is required and must not be null");
     }
@@ -158,7 +159,7 @@ public final class RunClient {
    * <p>An idempotency key is always sent (auto-generated if not provided), so a charge that is
    * retried by the transport is applied at most once, matching the reference client.
    */
-  public void charge(RunChargeOptions options) {
+  public CompletableFuture<Void> charge(RunChargeOptions options) {
     String eventName = options.eventNameValue();
     if (eventName == null || eventName.isEmpty()) {
       throw new IllegalArgumentException(
@@ -175,13 +176,15 @@ public final class RunClient {
     // Route through mergedParams like the run's other actions, so a last-run-seeded context charges
     // the same run its read methods resolve to (its pinned status/origin filters are preserved).
     String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("charge"));
-    ctx.http.call(
-        "POST",
-        url,
-        Json.toBytes(body),
-        ResourceContext.CONTENT_TYPE_JSON,
-        headers,
-        ctx.http.baseRequestTimeout());
+    return ctx.http
+        .call(
+            "POST",
+            url,
+            Json.toBytes(body),
+            ResourceContext.CONTENT_TYPE_JSON,
+            headers,
+            ctx.http.baseRequestTimeout())
+        .thenApply(resp -> null);
   }
 
   /**
@@ -201,12 +204,12 @@ public final class RunClient {
 
   /**
    * Polls until the run reaches a terminal state or {@code waitSecs} elapses ({@code null} waits
-   * indefinitely). Returns the latest run fetched, whether or not it is terminal: if the wait
-   * budget runs out first, this returns the still-running run as of the last poll rather than
-   * throwing or blocking further — check {@link ActorRun#isTerminal()} on the result if the
-   * distinction matters to the caller.
+   * indefinitely). Completes with the latest run fetched, whether or not it is terminal: if the
+   * wait budget runs out first, this completes with the still-running run as of the last poll
+   * rather than failing or waiting further — check {@link ActorRun#isTerminal()} on the result if
+   * the distinction matters to the caller.
    */
-  public ActorRun waitForFinish(Long waitSecs) {
+  public CompletableFuture<ActorRun> waitForFinish(Long waitSecs) {
     return ctx.waitForFinish(waitSecs, "run", Json.type(ActorRun.class), ActorRun::isTerminal);
   }
 
@@ -234,8 +237,8 @@ public final class RunClient {
   private static final String REDIRECT_LOGGER_NAME = "com.apify.client.ActorRunLog";
 
   /**
-   * Returns a {@link StreamedLog} that redirects this run's live log to a default per-run SLF4J
-   * logger.
+   * Completes with a {@link StreamedLog} that redirects this run's live log to a default per-run
+   * SLF4J logger.
    *
    * <p>The default destination is a {@link Logger} that receives each message at {@code INFO}
    * level, prefixed with the Actor name and run id (built by fetching the run and its Actor). Call
@@ -246,27 +249,35 @@ public final class RunClient {
    * #getStreamedLog(StreamedLogOptions)}. For raw stream access without redirection, use {@link
    * #log()}{@code .stream(...)}.
    */
-  public StreamedLog getStreamedLog() {
+  public CompletableFuture<StreamedLog> getStreamedLog() {
     return getStreamedLog(new StreamedLogOptions());
   }
 
   /**
-   * Returns a {@link StreamedLog} that redirects this run's live log according to {@code options}.
+   * Completes with a {@link StreamedLog} that redirects this run's live log according to {@code
+   * options}.
    *
    * <p>If {@link StreamedLogOptions#toLog(Consumer)} is set, each complete log message is passed to
    * that consumer; otherwise a default {@link Logger} destination is used with a per-run prefix (an
-   * explicit {@link StreamedLogOptions#prefix(String)} overrides the auto-built one). {@link
-   * StreamedLogOptions#fromStart(boolean)} controls whether log lines produced before redirection
-   * started are included.
+   * explicit {@link StreamedLogOptions#prefix(String)} overrides the auto-built one, in which case
+   * this completes without needing to fetch the run). {@link StreamedLogOptions#fromStart(boolean)}
+   * controls whether log lines produced before redirection started are included.
    */
-  public StreamedLog getStreamedLog(StreamedLogOptions options) {
+  public CompletableFuture<StreamedLog> getStreamedLog(StreamedLogOptions options) {
     Consumer<String> destination = options.destination();
-    if (destination == null) {
-      String prefix =
-          options.prefixValue() != null ? options.prefixValue() : buildDefaultLogPrefix();
-      destination = defaultLogDestination(prefix);
+    if (destination != null) {
+      return CompletableFuture.completedFuture(
+          new StreamedLog(log(), destination, options.fromStartValue()));
     }
-    return new StreamedLog(log(), destination, options.fromStartValue());
+    if (options.prefixValue() != null) {
+      return CompletableFuture.completedFuture(
+          new StreamedLog(
+              log(), defaultLogDestination(options.prefixValue()), options.fromStartValue()));
+    }
+    return buildDefaultLogPrefix()
+        .thenApply(
+            prefix ->
+                new StreamedLog(log(), defaultLogDestination(prefix), options.fromStartValue()));
   }
 
   /**
@@ -274,30 +285,40 @@ public final class RunClient {
    * client: the Actor name (looked up from the run) and {@code runId:{id}}, joined with a space and
    * followed by {@code " -> "}. Falls back to just the run id when the Actor name is unavailable.
    */
-  private String buildDefaultLogPrefix() {
+  private CompletableFuture<String> buildDefaultLogPrefix() {
     // Fall back to the field `id`: correct for a direct run client, but it is the literal string
     // "last" for a `runs/last` accessor (see #lastRun) — replaced with the resolved run's real id
     // below as soon as the fetch succeeds.
-    String resolvedId = id;
-    String actorName = "";
-    try {
-      Optional<ActorRun> run = get();
-      if (run.isPresent()) {
-        resolvedId = run.get().getId();
-        if (run.get().getActId() != null && !run.get().getActId().isEmpty()) {
-          Optional<Actor> actor = root.actor(run.get().getActId()).get();
-          if (actor.isPresent() && actor.get().getName() != null) {
-            actorName = actor.get().getName();
-          }
-        }
-      }
-    } catch (RuntimeException e) {
-      // The Actor-name lookup is cosmetic. The getters swallow 404, but an auth (401/403),
-      // transport, or 5xx-after-retries failure would otherwise throw out of getStreamedLog() and
-      // abort helper creation even though streaming itself might have worked. Fall back to the
-      // runId-only prefix (actorName stays "", resolvedId stays the unresolved field) so the helper
-      // is always created.
-    }
+    return get()
+        .thenCompose(
+            run -> {
+              if (run.isEmpty()) {
+                return CompletableFuture.completedFuture(formatPrefix(id, ""));
+              }
+              String resolvedId = run.get().getId();
+              String actId = run.get().getActId();
+              if (actId == null || actId.isEmpty()) {
+                return CompletableFuture.completedFuture(formatPrefix(resolvedId, ""));
+              }
+              return root.actor(actId)
+                  .get()
+                  .thenApply(
+                      actor -> {
+                        String actorName =
+                            (actor.isPresent() && actor.get().getName() != null)
+                                ? actor.get().getName()
+                                : "";
+                        return formatPrefix(resolvedId, actorName);
+                      });
+            })
+        // The Actor-name lookup is cosmetic. The getters treat 404 as empty, but an auth (401/403),
+        // transport, or 5xx-after-retries failure would otherwise fail getStreamedLog() and abort
+        // helper creation even though streaming itself might have worked. Fall back to the
+        // runId-only prefix so the helper is always created.
+        .exceptionally(error -> formatPrefix(id, ""));
+  }
+
+  private static String formatPrefix(String resolvedId, String actorName) {
     String runPart = "runId:" + resolvedId;
     String name = actorName.isEmpty() ? runPart : actorName + " " + runPart;
     return name + " -> ";

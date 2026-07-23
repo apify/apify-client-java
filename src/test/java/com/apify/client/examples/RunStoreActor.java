@@ -15,10 +15,12 @@ public final class RunStoreActor {
   public static void main(String[] args) {
     ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
 
-    ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
+    ActorRun run =
+        client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L).join();
     System.out.println("Run " + run.getId() + " finished with status " + run.getStatus());
 
-    var items = client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
+    var items =
+        client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions()).join();
     System.out.println("Items in this page of the default dataset: " + items.getCount());
   }
 }

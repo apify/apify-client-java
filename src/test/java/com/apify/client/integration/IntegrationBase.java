@@ -150,9 +150,10 @@ public abstract class IntegrationBase {
   static List<String> collectFinishedRunLog(RunClient runClient) {
     List<String> retryCollected = new CopyOnWriteArrayList<>();
     try (StreamedLog retryStream =
-        runClient.getStreamedLog(
-            new StreamedLogOptions().toLog(retryCollected::add).fromStart(true))) {
-      retryStream.start();
+        runClient
+            .getStreamedLog(new StreamedLogOptions().toLog(retryCollected::add).fromStart(true))
+            .join()) {
+      retryStream.start().join();
       pollUntil(
           STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !retryCollected.isEmpty());
     }
@@ -187,7 +188,7 @@ public abstract class IntegrationBase {
   static void assertStreamedLogNonEmptyIfProduced(RunClient runClient, List<String> collected) {
     pollUntil(STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !collected.isEmpty());
 
-    Optional<String> authoritativeLog = runClient.log().get();
+    Optional<String> authoritativeLog = runClient.log().get().join();
     if (runProducedLog(authoritativeLog) && collected.isEmpty()) {
       collected.addAll(collectFinishedRunLog(runClient));
     }
@@ -213,7 +214,7 @@ public abstract class IntegrationBase {
   static void assertCallDefaultStreamedLogNonEmptyIfProduced(
       RunClient runClient, List<String> collected) {
     pollUntil(STREAM_CATCH_UP_ATTEMPTS, STREAM_CATCH_UP_POLL_MILLIS, () -> !collected.isEmpty());
-    assertNonEmptyIfLogProduced(runClient.log().get(), collected);
+    assertNonEmptyIfLogProduced(runClient.log().get().join(), collected);
   }
 
   /** Whether the authoritative, statically-persisted log shows the run produced any output. */

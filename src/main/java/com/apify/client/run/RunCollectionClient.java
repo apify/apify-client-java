@@ -6,7 +6,8 @@ import com.apify.client.internal.AbstractCollectionClient;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import java.util.Iterator;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
 
 /**
  * A client for a run collection: the account-wide collection ({@code GET /v2/actor-runs}), an
@@ -29,7 +30,8 @@ public final class RunCollectionClient extends AbstractCollectionClient<ActorRun
    * Lists runs, applying the standard pagination and the run-specific filters. Both {@code options}
    * and {@code filter} may be {@code null}, which is treated as "no options"/"no filter".
    */
-  public PaginationList<ActorRun> list(ListOptions options, RunListOptions filter) {
+  public CompletableFuture<PaginationList<ActorRun>> list(
+      ListOptions options, RunListOptions filter) {
     QueryParams params = new QueryParams();
     if (options != null) {
       options.apply(params);
@@ -41,12 +43,12 @@ public final class RunCollectionClient extends AbstractCollectionClient<ActorRun
   }
 
   /**
-   * Returns a lazy iterator over the runs, applying the standard pagination and run-specific
-   * filters. The options' {@code limit} caps the total number yielded ({@code null} or non-positive
-   * = all); {@code chunkSize} is the per-request page size ({@code null} = server default). Both
-   * {@code options} and {@code filter} may be {@code null}.
+   * Returns a lazy, backpressure-aware publisher over the runs, applying the standard pagination
+   * and run-specific filters. The options' {@code limit} caps the total number yielded ({@code
+   * null} or non-positive = all); {@code chunkSize} is the per-request page size ({@code null} =
+   * server default). Both {@code options} and {@code filter} may be {@code null}.
    */
-  public Iterator<ActorRun> iterate(ListOptions options, RunListOptions filter) {
+  public Flow.Publisher<ActorRun> iterate(ListOptions options, RunListOptions filter) {
     return iterate(options, filter, null);
   }
 
@@ -54,7 +56,8 @@ public final class RunCollectionClient extends AbstractCollectionClient<ActorRun
    * As {@link #iterate(ListOptions, RunListOptions)}, but {@code chunkSize} sets the per-request
    * page size.
    */
-  public Iterator<ActorRun> iterate(ListOptions options, RunListOptions filter, Long chunkSize) {
+  public Flow.Publisher<ActorRun> iterate(
+      ListOptions options, RunListOptions filter, Long chunkSize) {
     ListOptions opts = options != null ? options : new ListOptions();
     return iterateWithFilters(
         opts.limitValue(),

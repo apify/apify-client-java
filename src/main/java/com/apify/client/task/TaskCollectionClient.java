@@ -6,6 +6,7 @@ import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
+import java.util.concurrent.CompletableFuture;
 
 /** A client for the Actor task collection ({@code GET/POST /v2/actor-tasks}). */
 public final class TaskCollectionClient extends AbstractCollectionClient<Task, ListOptions> {
@@ -18,7 +19,7 @@ public final class TaskCollectionClient extends AbstractCollectionClient<Task, L
   }
 
   /** Creates a new task. {@code task} is any JSON-serializable task definition. */
-  public Task create(Object task) {
+  public CompletableFuture<Task> create(Object task) {
     return ctx.createResource(new QueryParams(), task, Task.class);
   }
 }

@@ -2,10 +2,10 @@ package com.apify.client.run;
 
 import com.apify.client.ApifyResource;
 import com.apify.client.internal.Statuses;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Map;
+import tools.jackson.databind.JsonNode;
 
 /** A single execution of an Actor. */
 public final class ActorRun extends ApifyResource {

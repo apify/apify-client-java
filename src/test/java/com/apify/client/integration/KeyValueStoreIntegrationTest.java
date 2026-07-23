@@ -25,57 +25,58 @@ class KeyValueStoreIntegrationTest extends IntegrationBase {
   @Test
   void listKeyValueStores() {
     ApifyClient client = requireClient();
-    assertTrue(client.keyValueStores().list(new StorageListOptions().limit(5L)).getTotal() >= 0);
+    assertTrue(
+        client.keyValueStores().list(new StorageListOptions().limit(5L)).join().getTotal() >= 0);
   }
 
   @Test
   void getKeyValueStore() {
     ApifyClient client = requireClient();
-    KeyValueStore store = client.keyValueStores().getOrCreate(uniqueName("kvs-get"));
+    KeyValueStore store = client.keyValueStores().getOrCreate(uniqueName("kvs-get")).join();
     try {
-      var got = client.keyValueStore(store.getId()).get();
+      var got = client.keyValueStore(store.getId()).get().join();
       assertTrue(got.isPresent());
       assertEquals(store.getId(), got.get().getId());
     } finally {
-      client.keyValueStore(store.getId()).delete();
+      client.keyValueStore(store.getId()).delete().join();
     }
   }
 
   @Test
   void recordKeyWithSpecialChars() {
     ApifyClient client = requireClient();
-    KeyValueStore store = client.keyValueStores().getOrCreate(uniqueName("kvs-special"));
+    KeyValueStore store = client.keyValueStores().getOrCreate(uniqueName("kvs-special")).join();
     try {
       KeyValueStoreClient kvs = client.keyValueStore(store.getId());
       String key = "weird-key!'()";
-      kvs.setRecordJson(key, Map.of("ok", true));
-      assertTrue(kvs.recordExists(key));
-      Optional<KeyValueStoreRecord> rec = kvs.getRecord(key);
+      kvs.setRecordJson(key, Map.of("ok", true)).join();
+      assertTrue(kvs.recordExists(key).join());
+      Optional<KeyValueStoreRecord> rec = kvs.getRecord(key).join();
       assertTrue(rec.isPresent());
-      kvs.deleteRecord(key);
+      kvs.deleteRecord(key).join();
     } finally {
-      client.keyValueStore(store.getId()).delete();
+      client.keyValueStore(store.getId()).delete().join();
     }
   }
 
   @Test
   void keyValueStoreCrudFlow() throws Exception {
     ApifyClient client = requireClient();
-    KeyValueStore store = client.keyValueStores().getOrCreate(uniqueName("kvs-crud"));
+    KeyValueStore store = client.keyValueStores().getOrCreate(uniqueName("kvs-crud")).join();
     try {
       KeyValueStoreClient kvs = client.keyValueStore(store.getId());
-      assertTrue(kvs.get().isPresent());
-      kvs.setRecordJson("OUTPUT", Map.of("hello", "world"));
-      assertTrue(kvs.recordExists("OUTPUT"));
-      Optional<KeyValueStoreRecord> rec = kvs.getRecord("OUTPUT");
+      assertTrue(kvs.get().join().isPresent());
+      kvs.setRecordJson("OUTPUT", Map.of("hello", "world")).join();
+      assertTrue(kvs.recordExists("OUTPUT").join());
+      Optional<KeyValueStoreRecord> rec = kvs.getRecord("OUTPUT").join();
       assertTrue(rec.isPresent());
       String value = new String(rec.get().getValue(), StandardCharsets.UTF_8);
       assertTrue(value.contains("world"), value);
-      kvs.getRecord("OUTPUT", new GetRecordOptions().attachment(false));
-      var keys = kvs.listKeys(new ListKeysOptions());
+      kvs.getRecord("OUTPUT", new GetRecordOptions().attachment(false)).join();
+      var keys = kvs.listKeys(new ListKeysOptions()).join();
       assertTrue(!keys.getItems().isEmpty());
-      kvs.update(Map.of("name", uniqueName("kvs-renamed")));
-      kvs.deleteRecord("OUTPUT");
+      kvs.update(Map.of("name", uniqueName("kvs-renamed"))).join();
+      kvs.deleteRecord("OUTPUT").join();
 
       // list() step of the create/get/modify/list/delete flow: verify the just-created key-value
       // store appears in the top-level collection listing.
@@ -87,24 +88,25 @@ class KeyValueStoreIntegrationTest extends IntegrationBase {
                   client
                       .keyValueStores()
                       .list(new StorageListOptions().desc(true).limit(10L))
+                      .join()
                       .getItems()
                       .stream()
                       .anyMatch(s -> store.getId().equals(s.getId())));
       assertTrue(
           foundInList, "expected the just-created key-value store to appear in the top-level list");
     } finally {
-      client.keyValueStore(store.getId()).delete();
+      client.keyValueStore(store.getId()).delete().join();
     }
   }
 
   @Test
   void recordPublicUrlIsFetchable() throws IOException, InterruptedException {
     ApifyClient client = requireClient();
-    KeyValueStore store = client.keyValueStores().getOrCreate(uniqueName("kvs-pub"));
+    KeyValueStore store = client.keyValueStores().getOrCreate(uniqueName("kvs-pub")).join();
     try {
       KeyValueStoreClient kvs = client.keyValueStore(store.getId());
-      kvs.setRecordJson("OUTPUT", Map.of("pub", true));
-      String url = kvs.getRecordPublicUrl("OUTPUT");
+      kvs.setRecordJson("OUTPUT", Map.of("pub", true)).join();
+      String url = kvs.getRecordPublicUrl("OUTPUT").join();
       assertTrue(url != null && !url.isEmpty());
 
       HttpResponse<byte[]> resp =
@@ -116,7 +118,7 @@ class KeyValueStoreIntegrationTest extends IntegrationBase {
           resp.statusCode() < 300,
           "expected success fetching public url, got " + resp.statusCode());
     } finally {
-      client.keyValueStore(store.getId()).delete();
+      client.keyValueStore(store.getId()).delete().join();
     }
   }
 }

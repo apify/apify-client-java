@@ -4,6 +4,7 @@ import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * A client for a single environment variable ({@code GET/PUT/DELETE
@@ -17,17 +18,17 @@ public final class ActorEnvVarClient {
   }
 
   /** Fetches the environment variable, or empty if it does not exist. */
-  public Optional<ActorEnvVar> get() {
+  public CompletableFuture<Optional<ActorEnvVar>> get() {
     return ctx.getResource("", new QueryParams(), ActorEnvVar.class);
   }
 
   /** Updates the environment variable and returns the updated object. */
-  public ActorEnvVar update(ActorEnvVar envVar) {
+  public CompletableFuture<ActorEnvVar> update(ActorEnvVar envVar) {
     return ctx.updateResource("", envVar, ActorEnvVar.class);
   }
 
   /** Deletes the environment variable. */
-  public void delete() {
-    ctx.deleteResource("");
+  public CompletableFuture<Void> delete() {
+    return ctx.deleteResource("");
   }
 }

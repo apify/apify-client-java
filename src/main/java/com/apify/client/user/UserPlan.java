@@ -1,9 +1,9 @@
 package com.apify.client.user;
 
 import com.apify.client.ApifyResource;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Collections;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
 
 /** A {@link User}'s subscription plan and its associated limits. */
 public final class UserPlan extends ApifyResource {

@@ -31,6 +31,7 @@ import com.apify.client.webhook.WebhookDispatchClient;
 import com.apify.client.webhook.WebhookDispatchCollectionClient;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * The entry point for interacting with the Apify API.
@@ -39,13 +40,20 @@ import java.util.Map;
  * resource clients via the accessor methods, e.g. {@link #actor(String)}, {@link #dataset(String)},
  * {@link #run(String)}. It is safe for concurrent use.
  *
+ * <p>Every network-calling method is asynchronous and non-blocking: it returns a {@link
+ * java.util.concurrent.CompletableFuture} (or, for a paginated collection's lazy iteration, a
+ * {@link java.util.concurrent.Flow.Publisher}) instead of blocking the calling thread on the HTTP
+ * exchange.
+ *
  * <h2>Quick start</h2>
  *
  * <pre>{@code
  * ApifyClient client = ApifyClient.create("my-api-token");
- * ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), null);
- * PaginationList<JsonNode> items = client.dataset(run.getDefaultDatasetId())
- *     .listItems(new DatasetListItemsOptions());
+ * client.actor("apify/hello-world").call(null, new ActorStartOptions(), null)
+ *     .thenCompose(run -> client.dataset(run.getDefaultDatasetId())
+ *         .listItems(new DatasetListItemsOptions()))
+ *     .thenAccept(items -> System.out.println(items.getItems()))
+ *     .join();
  * }</pre>
  *
  * <h2>Architecture</h2>
@@ -55,7 +63,7 @@ import java.util.Map;
  *   <li>Replaceable transport: the {@link HttpTransport} interface, with a default {@link
  *       DefaultHttpTransport}; swap it via {@link ApifyClientBuilder#httpTransport(HttpTransport)}.
  *   <li>Cross-cutting behaviour (auth, User-Agent, retries with exponential backoff, timeouts)
- *       lives in the internal HTTP client and is applied to every request.
+ *       lives in the internal HTTP client and is applied to every request, non-blocking end to end.
  * </ul>
  *
  * <p>Every resource client's constructor is public, but that is an artifact of each living in its
@@ -256,7 +264,8 @@ public final class ApifyClient {
    * IllegalStateException} if {@code ACTOR_RUN_ID} is not set. Matches the reference client's
    * top-level {@code setStatusMessage}.
    */
-  public ActorRun setStatusMessage(String message, SetStatusMessageOptions options) {
+  public CompletableFuture<ActorRun> setStatusMessage(
+      String message, SetStatusMessageOptions options) {
     String runId = System.getenv(ACTOR_RUN_ID_ENV_VAR);
     if (runId == null || runId.isEmpty()) {
       throw new IllegalStateException(ACTOR_RUN_ID_ENV_VAR + " environment variable is not set");

@@ -5,12 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.dataset.DatasetClient;
 import com.apify.client.dataset.DatasetListItemsOptions;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Flow;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
 
 /**
  * Hermetic (token-free) tests for {@link DatasetClient#iterateItems} and its {@code fetchItemsPage}
@@ -29,6 +28,10 @@ class DatasetItemsIteratorTest {
         .build();
   }
 
+  private static <T> List<T> collect(Flow.Publisher<T> publisher) {
+    return Publishers.collect(publisher).join();
+  }
+
   @Test
   void pagesBareArrayBodyAndStopsOnEmptyPage() {
     MockTransport backend =
@@ -37,13 +40,10 @@ class DatasetItemsIteratorTest {
                 MockTransport.ok(200, "[{\"n\":1},{\"n\":2}]"),
                 MockTransport.ok(200, "[{\"n\":3}]"),
                 MockTransport.ok(200, "[]")));
-    List<Integer> seen = new ArrayList<>();
-    Iterator<JsonNode> it =
-        client(backend).dataset("d1").iterateItems(new DatasetListItemsOptions(), 2L);
-    while (it.hasNext()) {
-      seen.add(it.next().get("n").asInt());
-    }
-    assertEquals(List.of(1, 2, 3), seen, "iterateItems should page the bare-array endpoint");
+    List<JsonNode> seen =
+        collect(client(backend).dataset("d1").iterateItems(new DatasetListItemsOptions(), 2L));
+    List<Integer> ns = seen.stream().map(n -> n.get("n").asInt()).toList();
+    assertEquals(List.of(1, 2, 3), ns, "iterateItems should page the bare-array endpoint");
     assertEquals(3, backend.calls, "two data pages plus the terminating empty page");
     assertTrue(backend.lastUrl.contains("datasets/d1/items"), backend.lastUrl);
     assertTrue(backend.lastUrl.contains("limit=2"), "chunkSize drives the per-request page size");
@@ -58,13 +58,13 @@ class DatasetItemsIteratorTest {
     MockTransport backend =
         new MockTransport(
             List.of(MockTransport.ok(200, "[{\"n\":1},{\"n\":2}]"), MockTransport.ok(200, "[]")));
-    List<Integer> seen = new ArrayList<>();
-    Iterator<Row> it =
-        client(backend).dataset("d1").iterateItems(new DatasetListItemsOptions(), null, Row.class);
-    while (it.hasNext()) {
-      seen.add(it.next().n);
-    }
-    assertEquals(List.of(1, 2), seen, "typed iteration at default page size yields decoded items");
+    List<Row> seen =
+        collect(
+            client(backend)
+                .dataset("d1")
+                .iterateItems(new DatasetListItemsOptions(), null, Row.class));
+    List<Integer> ns = seen.stream().map(row -> row.n).toList();
+    assertEquals(List.of(1, 2), ns, "typed iteration at default page size yields decoded items");
     assertTrue(backend.lastUrl.contains("datasets/d1/items"), backend.lastUrl);
   }
 
@@ -77,13 +77,13 @@ class DatasetItemsIteratorTest {
   void totalCapTrimsDatasetItems() {
     // The cap wins even though the server would return more; only the first page is requested.
     MockTransport backend = MockTransport.ofConstant(200, "[{\"n\":1},{\"n\":2},{\"n\":3}]");
-    List<Integer> seen = new ArrayList<>();
-    Iterator<JsonNode> it =
-        client(backend).dataset("d1").iterateItems(new DatasetListItemsOptions().limit(2L), 5L);
-    while (it.hasNext()) {
-      seen.add(it.next().get("n").asInt());
-    }
-    assertEquals(List.of(1, 2), seen, "limit caps the total items yielded");
+    List<JsonNode> seen =
+        collect(
+            client(backend)
+                .dataset("d1")
+                .iterateItems(new DatasetListItemsOptions().limit(2L), 5L));
+    List<Integer> ns = seen.stream().map(n -> n.get("n").asInt()).toList();
+    assertEquals(List.of(1, 2), ns, "limit caps the total items yielded");
     assertEquals(1, backend.calls);
   }
 
@@ -95,12 +95,11 @@ class DatasetItemsIteratorTest {
     MockTransport backend =
         new MockTransport(
             List.of(MockTransport.ok(200, "[{\"n\":7}]"), MockTransport.ok(200, "[]")));
-    List<Item> seen = new ArrayList<>();
-    Iterator<Item> it =
-        client(backend).dataset("d1").iterateItems(new DatasetListItemsOptions(), 2L, Item.class);
-    while (it.hasNext()) {
-      seen.add(it.next());
-    }
+    List<Item> seen =
+        collect(
+            client(backend)
+                .dataset("d1")
+                .iterateItems(new DatasetListItemsOptions(), 2L, Item.class));
     assertEquals(1, seen.size(), "typed iteration should decode and yield the item");
     assertEquals(7, seen.get(0).n());
   }

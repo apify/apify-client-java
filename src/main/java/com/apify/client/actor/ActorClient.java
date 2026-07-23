@@ -15,8 +15,9 @@ import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
 import com.apify.client.run.RunCollectionClient;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import tools.jackson.databind.JsonNode;
 
 /**
  * A client for a specific Actor.
@@ -45,54 +46,54 @@ public final class ActorClient {
   }
 
   /** Fetches the Actor object, or empty if it does not exist. */
-  public Optional<Actor> get() {
+  public CompletableFuture<Optional<Actor>> get() {
     return ctx.getResource("", new QueryParams(), Actor.class);
   }
 
   /** Updates the Actor with the given fields and returns the updated object. */
-  public Actor update(Object newFields) {
+  public CompletableFuture<Actor> update(Object newFields) {
     return ctx.updateResource("", newFields, Actor.class);
   }
 
   /** Deletes the Actor. */
-  public void delete() {
-    ctx.deleteResource("");
+  public CompletableFuture<Void> delete() {
+    return ctx.deleteResource("");
   }
 
   /**
-   * Starts the Actor and returns immediately with the created run. {@code input} is any
-   * JSON-serializable value (or {@code null} for no input).
+   * Starts the Actor and completes with the created run as soon as it exists (no waiting). {@code
+   * input} is any JSON-serializable value (or {@code null} for no input).
    */
-  public ActorRun start(Object input, ActorStartOptions options) {
+  public CompletableFuture<ActorRun> start(Object input, ActorStartOptions options) {
     return RunStartSupport.start(ctx, input, options::apply, options.contentTypeOrDefault());
   }
 
   /**
-   * Starts the Actor and waits (client-side polling) for it to finish. {@code waitSecs} bounds the
-   * wait; {@code null} waits indefinitely. Returns the finished run (or the still-running run if
-   * the wait budget was exhausted).
+   * Starts the Actor and waits (non-blocking, polling) for it to finish. {@code waitSecs} bounds
+   * the wait; {@code null} waits indefinitely. Completes with the finished run (or the
+   * still-running run if the wait budget was exhausted).
    *
    * <p>This overload does not stream the run's log; use {@link #call(Object, ActorCallOptions,
    * Long)} for that (matching the reference client's default {@code call} behavior).
    */
-  public ActorRun call(Object input, ActorStartOptions options, Long waitSecs) {
+  public CompletableFuture<ActorRun> call(Object input, ActorStartOptions options, Long waitSecs) {
     return RunStartSupport.call(
         root, ctx, input, options::apply, options.contentTypeOrDefault(), waitSecs);
   }
 
   /**
-   * Starts the Actor and waits (client-side polling) for it to finish, additionally streaming the
+   * Starts the Actor and waits (non-blocking, polling) for it to finish, additionally streaming the
    * run's log for the duration of the wait — matching the reference client's {@code call}, whose
    * {@code options.log} defaults to {@code 'default'}. {@code waitSecs} bounds the wait; {@code
-   * null} waits indefinitely. Returns the finished run (or the still-running run if the wait budget
-   * was exhausted).
+   * null} waits indefinitely. Completes with the finished run (or the still-running run if the wait
+   * budget was exhausted).
    *
    * <p>Log streaming is best-effort: if starting it fails (e.g. the log is not yet available), the
    * run still starts and is still waited for, just without redirected log output. Use {@link
    * ActorCallOptions#disableLogStreaming()} to opt out entirely, or {@link
    * ActorCallOptions#logOptions(com.apify.client.log.StreamedLogOptions)} for a custom destination.
    */
-  public ActorRun call(Object input, ActorCallOptions options, Long waitSecs) {
+  public CompletableFuture<ActorRun> call(Object input, ActorCallOptions options, Long waitSecs) {
     ActorCallOptions opts = options != null ? options : new ActorCallOptions();
     ActorStartOptions startOptions = opts.toStartOptions();
     return RunStartSupport.callWithLogStreaming(
@@ -107,31 +108,33 @@ public final class ActorClient {
   }
 
   /** Validates the given input against the Actor's default-build input schema. */
-  public boolean validateInput(Object input) {
+  public CompletableFuture<Boolean> validateInput(Object input) {
     return validateInput(input, new ValidateInputOptions());
   }
 
   /**
-   * Validates {@code input} against the Actor's input schema and returns whether it is valid.
-   * {@code input} is any JSON-serializable value (or {@code null}). {@code options} may pin the
-   * build whose schema is used and the content type of the input body.
+   * Validates {@code input} against the Actor's input schema and completes with whether it is
+   * valid. {@code input} is any JSON-serializable value (or {@code null}). {@code options} may pin
+   * the build whose schema is used and the content type of the input body.
    */
-  public boolean validateInput(Object input, ValidateInputOptions options) {
+  public CompletableFuture<Boolean> validateInput(Object input, ValidateInputOptions options) {
     ValidateInputOptions opts = options == null ? new ValidateInputOptions() : options;
     QueryParams params = new QueryParams();
     opts.apply(params);
     byte[] body = input == null ? null : Json.toBytes(input);
     // The validate-input endpoint returns a bare {"valid": <bool>} object, not the standard
     // {"data": ...} envelope, so parse it without unwrapping.
-    JsonNode result =
-        ctx.postWithBodyNoEnvelope(
-            "validate-input", params, body, opts.contentTypeOrDefault(), JsonNode.class);
-    JsonNode valid = result == null ? null : result.get("valid");
-    return valid != null && valid.asBoolean();
+    return ctx.postWithBodyNoEnvelope(
+            "validate-input", params, body, opts.contentTypeOrDefault(), JsonNode.class)
+        .thenApply(
+            result -> {
+              JsonNode valid = result == null ? null : result.get("valid");
+              return valid != null && valid.asBoolean();
+            });
   }
 
-  /** Builds the given version of the Actor and returns the created build. */
-  public Build build(String versionNumber, ActorBuildOptions options) {
+  /** Builds the given version of the Actor and completes with the created build. */
+  public CompletableFuture<Build> build(String versionNumber, ActorBuildOptions options) {
     if (options == null) {
       throw new IllegalArgumentException("options is required and must not be null");
     }
@@ -142,17 +145,17 @@ public final class ActorClient {
   }
 
   /**
-   * Resolves the Actor's default build and returns a client for it. {@code waitForFinish}
+   * Resolves the Actor's default build and completes with a client for it. {@code waitForFinish}
    * optionally bounds how long (in seconds) the API waits for the build to finish before
    * responding.
    */
-  public BuildClient defaultBuild(Long waitForFinish) {
+  public CompletableFuture<BuildClient> defaultBuild(Long waitForFinish) {
     QueryParams params = new QueryParams();
     // Clamp like the getWithWait twins so a large wait paired with a short client timeout cannot
     // abort every attempt and burn the retry budget (the API caps server-side waiting at 60s).
     params.addLong("waitForFinish", ctx.clampServerWait(waitForFinish));
-    Build build = ctx.getResourceRequired("builds/default", params, Build.class);
-    return new BuildClient(http, baseUrl, build.getId());
+    return ctx.getResourceRequired("builds/default", params, Build.class)
+        .thenApply(build -> new BuildClient(http, baseUrl, build.getId()));
   }
 
   /**

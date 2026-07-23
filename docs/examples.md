@@ -11,9 +11,9 @@ rendered docs as well as the repository.
 ## Run a store Actor and read its default dataset
 
 ```java
-ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
+ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L).join();
 PaginationList<JsonNode> items =
-    client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
+    client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions()).join();
 System.out.println("Items in this page: " + items.getCount());
 ```
 
@@ -26,40 +26,43 @@ System.out.println("Items in this page: " + items.getCount());
 String suffix = UUID.randomUUID().toString().substring(0, 8);
 
 // Dataset: create, push items, read them back.
-Dataset dataset = client.datasets().getOrCreate("java-example-ds-" + suffix);
+Dataset dataset = client.datasets().getOrCreate("java-example-ds-" + suffix).join();
 try {
-  client.dataset(dataset.getId()).pushItems(List.of(Map.of("hello", "world")));
-  PaginationList<JsonNode> items = client.dataset(dataset.getId()).listItems(new DatasetListItemsOptions());
+  client.dataset(dataset.getId()).pushItems(List.of(Map.of("hello", "world"))).join();
+  PaginationList<JsonNode> items =
+      client.dataset(dataset.getId()).listItems(new DatasetListItemsOptions()).join();
   System.out.println("Dataset items: " + items.getItems());
 } finally {
-  client.dataset(dataset.getId()).delete();
+  client.dataset(dataset.getId()).delete().join();
 }
 
 // Key-value store: create, set a record, read it back.
-KeyValueStore store = client.keyValueStores().getOrCreate("java-example-kvs-" + suffix);
+KeyValueStore store = client.keyValueStores().getOrCreate("java-example-kvs-" + suffix).join();
 try {
-  client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42));
-  Optional<KeyValueStoreRecord> record = client.keyValueStore(store.getId()).getRecord("OUTPUT");
+  client.keyValueStore(store.getId()).setRecordJson("OUTPUT", Map.of("answer", 42)).join();
+  Optional<KeyValueStoreRecord> record = client.keyValueStore(store.getId()).getRecord("OUTPUT").join();
   record.ifPresent(r -> System.out.println("KVS record bytes: " + r.getValue().length));
 } finally {
-  client.keyValueStore(store.getId()).delete();
+  client.keyValueStore(store.getId()).delete().join();
 }
 
 // Request queue: create, add a request, read the head.
-RequestQueue queue = client.requestQueues().getOrCreate("java-example-rq-" + suffix);
+RequestQueue queue = client.requestQueues().getOrCreate("java-example-rq-" + suffix).join();
 try {
-  client.requestQueue(queue.getId()).addRequest(new RequestQueueRequest("https://example.com", "example"), false);
-  RequestQueueHead head = client.requestQueue(queue.getId()).listHead(10L);
+  client.requestQueue(queue.getId())
+      .addRequest(new RequestQueueRequest("https://example.com", "example"), false)
+      .join();
+  RequestQueueHead head = client.requestQueue(queue.getId()).listHead(10L).join();
   System.out.println("Request queue head size: " + head.getItems().size());
 } finally {
-  client.requestQueue(queue.getId()).delete();
+  client.requestQueue(queue.getId()).delete().join();
 }
 ```
 
 ## Get own account details
 
 ```java
-Optional<User> user = client.me().get();
+Optional<User> user = client.me().get().join();
 user.ifPresent(u -> {
   System.out.println("Account ID: " + u.getId());
   System.out.println("Username:   " + u.getUsername());
@@ -82,55 +85,81 @@ Actor created = client.actors().create(Map.of(
         "sourceFiles", List.of(
             Map.of("name", "Dockerfile", "format", "TEXT",
                    "content", "FROM apify/actor-node:20\nCOPY . ./\nCMD node main.js"),
-            Map.of("name", "main.js", "format", "TEXT", "content", "console.log('hi');"))))));
+            Map.of("name", "main.js", "format", "TEXT", "content", "console.log('hi');")))))).join();
 try {
-  Build build = client.actor(created.getId()).build("0.0", new ActorBuildOptions());
-  client.build(build.getId()).waitForFinish(300L);
-  ActorRun run = client.actor(created.getId()).call(null, new ActorStartOptions(), 120L);
-  Optional<String> log = client.run(run.getId()).log().get();
+  Build build = client.actor(created.getId()).build("0.0", new ActorBuildOptions()).join();
+  client.build(build.getId()).waitForFinish(300L).join();
+  ActorRun run = client.actor(created.getId()).call(null, new ActorStartOptions(), 120L).join();
+  Optional<String> log = client.run(run.getId()).log().get().join();
   log.ifPresent(System.out::println);
 } finally {
-  client.actor(created.getId()).delete();
+  client.actor(created.getId()).delete().join();
 }
 ```
 
 ## Start a run, wait, then fetch the Actor's last run and its storages
 
 ```java
-client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
-Optional<ActorRun> last = client.actor("apify/hello-world").lastRun("SUCCEEDED").get();
+client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L).join();
+Optional<ActorRun> last = client.actor("apify/hello-world").lastRun("SUCCEEDED").get().join();
 if (last.isPresent()) {
   ActorRun run = last.get();
-  client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
-  client.keyValueStore(run.getDefaultKeyValueStoreId()).getRecord("OUTPUT");
+  client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions()).join();
+  client.keyValueStore(run.getDefaultKeyValueStoreId()).getRecord("OUTPUT").join();
 }
 ```
 
 ## Lazy iteration of Store Actors
 
 ```java
-Iterator<ActorStoreListItem> it = client.store().iterate(new StoreListOptions().limit(10L), 10L);
-int count = 0;
-while (count < 5 && it.hasNext()) {
-  ActorStoreListItem item = it.next();
-  System.out.println((count + 1) + ". " + item.getUsername() + "/" + item.getName());
-  count++;
-}
+// Requests one item at a time (real backpressure) and cancels once 5 have been seen, so no more
+// pages are fetched than needed. See IterateStore.java in the examples for the full Flow.Subscriber.
+CountDownLatch done = new CountDownLatch(1);
+client.store().iterate(new StoreListOptions().limit(10L), 10L)
+    .subscribe(new Flow.Subscriber<ActorStoreListItem>() {
+      private Flow.Subscription subscription;
+      private int count;
+
+      public void onSubscribe(Flow.Subscription subscription) {
+        this.subscription = subscription;
+        subscription.request(1);
+      }
+
+      public void onNext(ActorStoreListItem item) {
+        count++;
+        System.out.println(count + ". " + item.getUsername() + "/" + item.getName());
+        if (count >= 5) {
+          subscription.cancel();
+          done.countDown();
+        } else {
+          subscription.request(1);
+        }
+      }
+
+      public void onError(Throwable throwable) {
+        done.countDown();
+      }
+
+      public void onComplete() {
+        done.countDown();
+      }
+    });
+done.await();
 ```
 
 ## Run an Actor with log redirection
 
-`getStreamedLog()` returns a [`StreamedLog`](runs.md#streamed-log-redirection) that follows the
+`getStreamedLog()` completes with a [`StreamedLog`](runs.md#streamed-log-redirection) that follows the
 run's live log and redirects each message to a destination (by default a per-run prefixed logger).
 It is `AutoCloseable`, so a try-with-resources block stops redirection when the run finishes. The
 complete program lives in
 [`LogRedirection.java`](https://github.com/apify/apify-client-java/blob/master/src/test/java/com/apify/client/examples/LogRedirection.java).
 
 ```java
-ActorRun run = client.actor("apify/hello-world").start(null, new ActorStartOptions());
+ActorRun run = client.actor("apify/hello-world").start(null, new ActorStartOptions()).join();
 RunClient runClient = client.run(run.getId());
-try (StreamedLog streamedLog = runClient.getStreamedLog()) {
-  streamedLog.start();
-  runClient.waitForFinish(120L);
+try (StreamedLog streamedLog = runClient.getStreamedLog().join()) {
+  streamedLog.start().join();
+  runClient.waitForFinish(120L).join();
 }
 ```

@@ -1,14 +1,14 @@
 package com.apify.client.build;
 
-import com.apify.client.http.ApiResponse;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import com.apify.client.log.LogClient;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import tools.jackson.databind.JsonNode;
 
 /** A client for a specific Actor build ({@code /v2/actor-builds/{buildId}}). */
 public final class BuildClient {
@@ -21,7 +21,7 @@ public final class BuildClient {
   }
 
   /** Fetches the build object, or empty if it does not exist. */
-  public Optional<Build> get() {
+  public CompletableFuture<Optional<Build>> get() {
     return getWithWait(null);
   }
 
@@ -31,7 +31,7 @@ public final class BuildClient {
    * before the client's per-request timeout; the API itself caps server-side waiting at 60 seconds.
    * Pass {@code null} for an immediate fetch.
    */
-  public Optional<Build> getWithWait(Long waitForFinishSecs) {
+  public CompletableFuture<Optional<Build>> getWithWait(Long waitForFinishSecs) {
     QueryParams params = new QueryParams();
     // Clamp to the client's per-request timeout so a short custom timeout doesn't abort the call.
     params.addLong("waitForFinish", ctx.clampServerWait(waitForFinishSecs));
@@ -39,20 +39,20 @@ public final class BuildClient {
   }
 
   /** Aborts the build and returns its updated state. */
-  public Build abort() {
+  public CompletableFuture<Build> abort() {
     return ctx.postWithBody("abort", new QueryParams(), null, "", Build.class);
   }
 
   /** Deletes the build. */
-  public void delete() {
-    ctx.deleteResource("");
+  public CompletableFuture<Void> delete() {
+    return ctx.deleteResource("");
   }
 
   /**
    * Polls until the build reaches a terminal state or {@code waitSecs} elapses ({@code null} waits
    * indefinitely). Returns the latest build.
    */
-  public Build waitForFinish(Long waitSecs) {
+  public CompletableFuture<Build> waitForFinish(Long waitSecs) {
     return ctx.waitForFinish(waitSecs, "build", Json.type(Build.class), Build::isTerminal);
   }
 
@@ -60,12 +60,13 @@ public final class BuildClient {
    * Returns the OpenAPI definition generated for the build, or empty if it is not available. The
    * result is the raw OpenAPI document.
    */
-  public Optional<JsonNode> getOpenApiDefinition() {
-    ApiResponse resp = ctx.getRaw("openapi.json", new QueryParams());
-    if (resp == null) {
-      return Optional.empty();
-    }
-    return Optional.of(Json.parse(resp.body(), JsonNode.class));
+  public CompletableFuture<Optional<JsonNode>> getOpenApiDefinition() {
+    return ctx.getRaw("openapi.json", new QueryParams())
+        .thenApply(
+            resp ->
+                resp == null
+                    ? Optional.empty()
+                    : Optional.of(Json.parse(resp.body(), JsonNode.class)));
   }
 
   /** A client for accessing this build's log. */
