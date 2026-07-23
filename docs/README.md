@@ -117,16 +117,10 @@ Object plan = me.getExtra().get("plan");
 ## Setting the current run's status message
 
 `client.setStatusMessage(String message, SetStatusMessageOptions)` (import from
-`com.apify.client.run`) updates the status message of the current Actor run (identified by the
+`com.apify.client.run`) sets the status message of the current Actor run (identified by the
 `ACTOR_RUN_ID` environment variable); it only works from inside a run and throws
 `IllegalStateException` otherwise. `SetStatusMessageOptions.isStatusMessageTerminal(boolean)` marks
-the message as final so it won't be overwritten. Returns the updated `ActorRun`.
-
-Note: `isStatusMessageTerminal(boolean)` takes a primitive `boolean`, not a boxed `Boolean` — an
-intentional exception to the "optional fields are boxed so they can stay unset" convention used
-elsewhere in this client's options classes, since this field always has a concrete on/off meaning
-with no useful "unset" state (the field is simply omitted from the request body when the setter is
-never called).
+the message as final.
 
 ```java
 client.setStatusMessage("half way there", new SetStatusMessageOptions().isStatusMessageTerminal(false));
