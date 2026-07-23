@@ -6,6 +6,7 @@ import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
+import java.util.concurrent.CompletableFuture;
 
 /** A client for the schedule collection ({@code GET/POST /v2/schedules}). */
 public final class ScheduleCollectionClient
@@ -19,7 +20,7 @@ public final class ScheduleCollectionClient
   }
 
   /** Creates a new schedule. {@code schedule} is any JSON-serializable schedule definition. */
-  public Schedule create(Object schedule) {
+  public CompletableFuture<Schedule> create(Object schedule) {
     return ctx.createResource(new QueryParams(), schedule, Schedule.class);
   }
 }

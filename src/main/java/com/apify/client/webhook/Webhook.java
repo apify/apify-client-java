@@ -1,10 +1,10 @@
 package com.apify.client.webhook;
 
 import com.apify.client.ApifyResource;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
 
 /** A webhook notifies an external service when specific events occur. */
 public final class Webhook extends ApifyResource {
@@ -88,7 +88,10 @@ public final class Webhook extends ApifyResource {
     return doNotRetry;
   }
 
-  /** The URL the webhook posts to. */
+  /**
+   * The URL the webhook posts to. {@code null} for a hook action other than the conventional HTTP
+   * case (e.g. a Slack or email notification).
+   */
   public String getRequestUrl() {
     return requestUrl;
   }

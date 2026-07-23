@@ -30,47 +30,47 @@ class ScheduleIntegrationTest extends IntegrationBase {
   @Test
   void listSchedules() {
     ApifyClient client = requireClient();
-    assertTrue(client.schedules().list(new ListOptions().limit(5L)).getTotal() >= 0);
+    assertTrue(client.schedules().list(new ListOptions().limit(5L)).join().getTotal() >= 0);
   }
 
   @Test
   void getSchedule() {
     ApifyClient client = requireClient();
-    Schedule sch = client.schedules().create(scheduleDef(uniqueName("sch-get")));
+    Schedule sch = client.schedules().create(scheduleDef(uniqueName("sch-get"))).join();
     try {
-      var got = client.schedule(sch.getId()).get();
+      var got = client.schedule(sch.getId()).get().join();
       assertTrue(got.isPresent());
       assertEquals(sch.getId(), got.get().getId());
     } finally {
-      client.schedule(sch.getId()).delete();
+      client.schedule(sch.getId()).delete().join();
     }
   }
 
   @Test
   void getScheduleLog() {
     ApifyClient client = requireClient();
-    Schedule sch = client.schedules().create(scheduleDef(uniqueName("sch-log")));
+    Schedule sch = client.schedules().create(scheduleDef(uniqueName("sch-log"))).join();
     try {
       // Simple GET on the schedule-log endpoint; a fresh schedule may have no log yet (empty
       // Optional), which is a valid result — we only assert the call itself succeeds.
-      client.schedule(sch.getId()).getLog();
+      client.schedule(sch.getId()).getLog().join();
     } finally {
-      client.schedule(sch.getId()).delete();
+      client.schedule(sch.getId()).delete().join();
     }
   }
 
   @Test
   void scheduleCrudFlow() {
     ApifyClient client = requireClient();
-    Schedule sch = client.schedules().create(scheduleDef(uniqueName("sch-crud")));
+    Schedule sch = client.schedules().create(scheduleDef(uniqueName("sch-crud"))).join();
     try {
       ScheduleClient schedule = client.schedule(sch.getId());
-      assertTrue(schedule.get().isPresent());
-      Schedule updated = schedule.update(Map.of("cronExpression", "0 12 * * *"));
+      assertTrue(schedule.get().join().isPresent());
+      Schedule updated = schedule.update(Map.of("cronExpression", "0 12 * * *")).join();
       assertEquals("0 12 * * *", updated.getCronExpression());
-      schedule.getLog();
+      schedule.getLog().join();
       // list() step of the create/get/modify/list/delete flow.
-      assertTrue(client.schedules().list(new ListOptions().limit(5L)).getTotal() >= 0);
+      assertTrue(client.schedules().list(new ListOptions().limit(5L)).join().getTotal() >= 0);
 
       // Typed getters (previously only reachable via getExtra()): verify the API's response
       // actually deserializes into them, not just that the code compiles.
@@ -81,7 +81,7 @@ class ScheduleIntegrationTest extends IntegrationBase {
       assertTrue(sch.getNotifications() != null);
       assertTrue(sch.getActions() != null && sch.getActions().isEmpty());
     } finally {
-      client.schedule(sch.getId()).delete();
+      client.schedule(sch.getId()).delete().join();
     }
   }
 }

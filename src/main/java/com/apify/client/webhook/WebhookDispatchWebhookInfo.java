@@ -10,7 +10,10 @@ public final class WebhookDispatchWebhookInfo extends ApifyResource {
   private String requestUrl;
   private boolean isAdHoc;
 
-  /** The URL the webhook posts to. */
+  /**
+   * The URL the webhook posts to. {@code null} for a hook action other than the conventional HTTP
+   * case (e.g. a Slack or email notification).
+   */
   public String getRequestUrl() {
     return requestUrl;
   }

@@ -6,7 +6,8 @@ import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import java.util.Iterator;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
 
 /**
  * Shared read-only behavior for webhook collections. Both the account-wide collection ({@link
@@ -22,23 +23,23 @@ abstract class AbstractWebhookCollectionClient {
   }
 
   /** Lists webhooks. */
-  public PaginationList<Webhook> list(ListOptions options) {
+  public CompletableFuture<PaginationList<Webhook>> list(ListOptions options) {
     QueryParams params = new QueryParams();
     options.apply(params);
     return ctx.listResource("", params, Webhook.class);
   }
 
   /**
-   * Returns a lazy iterator over the webhooks. The options' {@code limit} caps the total number
-   * yielded ({@code null} or non-positive = all); {@code chunkSize} is the per-request page size
-   * ({@code null} = server default).
+   * Returns a lazy, backpressure-aware publisher over the webhooks. The options' {@code limit} caps
+   * the total number yielded ({@code null} or non-positive = all); {@code chunkSize} is the
+   * per-request page size ({@code null} = server default).
    */
-  public Iterator<Webhook> iterate(ListOptions options) {
+  public Flow.Publisher<Webhook> iterate(ListOptions options) {
     return iterate(options, null);
   }
 
   /** As {@link #iterate(ListOptions)}, but {@code chunkSize} sets the per-request page size. */
-  public Iterator<Webhook> iterate(ListOptions options, Long chunkSize) {
+  public Flow.Publisher<Webhook> iterate(ListOptions options, Long chunkSize) {
     ListOptions opts = options != null ? options : new ListOptions();
     return ctx.iterateResource(
         "", opts.limitValue(), chunkSize, opts.offsetValue(), opts::applyFilters, Webhook.class);

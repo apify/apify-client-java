@@ -5,6 +5,7 @@ import com.apify.client.log.StreamedLog;
 import com.apify.client.log.StreamedLogOptions;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.RunClient;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
@@ -28,12 +29,13 @@ public final class RunStartSupport {
   private RunStartSupport() {}
 
   /**
-   * Starts a run on {@code ctx}'s {@code runs} sub-resource and returns immediately with the
-   * created run. {@code input} is any JSON-serializable value, or {@code null} for no input. {@code
-   * applyParams} applies every start-option query parameter (build, memory, timeout, ...) the
-   * caller's options type configures; {@code contentType} is the input body's content type.
+   * Starts a run on {@code ctx}'s {@code runs} sub-resource and completes with the created run as
+   * soon as it exists (no waiting). {@code input} is any JSON-serializable value, or {@code null}
+   * for no input. {@code applyParams} applies every start-option query parameter (build, memory,
+   * timeout, ...) the caller's options type configures; {@code contentType} is the input body's
+   * content type.
    */
-  public static ActorRun start(
+  public static CompletableFuture<ActorRun> start(
       ResourceContext ctx, Object input, Consumer<QueryParams> applyParams, String contentType) {
     QueryParams params = new QueryParams();
     applyParams.accept(params);
@@ -42,19 +44,19 @@ public final class RunStartSupport {
   }
 
   /**
-   * Starts a run and waits (client-side polling) for it to finish, without log streaming.
+   * Starts a run and waits (non-blocking, polling) for it to finish, without log streaming.
    *
    * @param waitSecs bounds the wait; {@code null} waits indefinitely
    */
-  public static ActorRun call(
+  public static CompletableFuture<ActorRun> call(
       ApifyClient root,
       ResourceContext ctx,
       Object input,
       Consumer<QueryParams> applyParams,
       String contentType,
       Long waitSecs) {
-    ActorRun run = start(ctx, input, applyParams, contentType);
-    return root.run(run.getId()).waitForFinish(waitSecs);
+    return start(ctx, input, applyParams, contentType)
+        .thenCompose(run -> root.run(run.getId()).waitForFinish(waitSecs));
   }
 
   /**
@@ -71,7 +73,7 @@ public final class RunStartSupport {
    * @param logOptions a custom log-streaming destination, or {@code null} for the default
    * @param waitSecs bounds the wait; {@code null} waits indefinitely
    */
-  public static ActorRun callWithLogStreaming(
+  public static CompletableFuture<ActorRun> callWithLogStreaming(
       ApifyClient root,
       ResourceContext ctx,
       Object input,
@@ -80,35 +82,40 @@ public final class RunStartSupport {
       boolean logStreamingEnabled,
       StreamedLogOptions logOptions,
       Long waitSecs) {
-    ActorRun run = start(ctx, input, applyParams, contentType);
-    RunClient runClient = root.run(run.getId());
-
-    StreamedLog streamedLog = null;
-    if (logStreamingEnabled) {
-      streamedLog = startStreamedLogQuietly(runClient, logOptions);
-    }
-    try {
-      return runClient.waitForFinish(waitSecs);
-    } finally {
-      if (streamedLog != null) {
-        streamedLog.close();
-      }
-    }
+    return start(ctx, input, applyParams, contentType)
+        .thenCompose(
+            run -> {
+              RunClient runClient = root.run(run.getId());
+              CompletableFuture<StreamedLog> streamedLogFuture =
+                  logStreamingEnabled
+                      ? startStreamedLogQuietly(runClient, logOptions)
+                      : CompletableFuture.completedFuture(null);
+              return streamedLogFuture.thenCompose(
+                  streamedLog ->
+                      runClient
+                          .waitForFinish(waitSecs)
+                          .whenComplete(
+                              (result, error) -> {
+                                if (streamedLog != null) {
+                                  streamedLog.close();
+                                }
+                              }));
+            });
   }
 
   /**
    * Starts {@code call}'s default log streaming, swallowing (rather than propagating) any failure
    * to open the live log stream, so a transient log-endpoint issue cannot abort the run itself.
+   * Completes with the started {@link StreamedLog}, or {@code null} if it could not be started.
    */
-  private static StreamedLog startStreamedLogQuietly(
+  private static CompletableFuture<StreamedLog> startStreamedLogQuietly(
       RunClient runClient, StreamedLogOptions logOptions) {
-    try {
-      StreamedLog streamedLog =
-          logOptions != null ? runClient.getStreamedLog(logOptions) : runClient.getStreamedLog();
-      streamedLog.start();
-      return streamedLog;
-    } catch (RuntimeException e) {
-      return null;
-    }
+    CompletableFuture<StreamedLog> created =
+        logOptions != null ? runClient.getStreamedLog(logOptions) : runClient.getStreamedLog();
+    return created
+        .thenCompose(
+            streamedLog ->
+                streamedLog.start().handle((unused, error) -> error == null ? streamedLog : null))
+        .exceptionally(error -> null);
   }
 }

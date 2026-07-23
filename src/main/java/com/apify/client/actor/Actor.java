@@ -1,10 +1,10 @@
 package com.apify.client.actor;
 
 import com.apify.client.ApifyResource;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
 
 /** An Actor on the Apify platform. */
 public final class Actor extends ApifyResource {

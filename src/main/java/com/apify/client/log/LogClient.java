@@ -1,15 +1,14 @@
 package com.apify.client.log;
 
-import com.apify.client.http.ApiResponse;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * A client for accessing the log of an Actor build or run ({@code /v2/logs/{buildOrRunId}}, or the
@@ -37,47 +36,52 @@ public final class LogClient {
   }
 
   /** Fetches the entire log as text, or empty if the log does not exist. */
-  public Optional<String> get() {
+  public CompletableFuture<Optional<String>> get() {
     return get(new LogOptions());
   }
 
   /** Fetches the log with explicit options (raw, download). */
-  public Optional<String> get(LogOptions options) {
+  public CompletableFuture<Optional<String>> get(LogOptions options) {
     QueryParams params = new QueryParams();
     options.apply(params);
-    ApiResponse resp = ctx.getRaw("", params);
-    if (resp == null) {
-      return Optional.empty();
-    }
-    return Optional.of(new String(resp.body(), StandardCharsets.UTF_8));
+    return ctx.getRaw("", params)
+        .thenApply(
+            resp ->
+                resp == null
+                    ? Optional.empty()
+                    : Optional.of(new String(resp.body(), StandardCharsets.UTF_8)));
   }
 
   /**
-   * Opens a live, streaming connection to the log and returns a stream over the log bytes. The
-   * caller is responsible for closing the returned {@link InputStream}.
+   * Opens a live, streaming connection to the log and completes with a stream over the log bytes.
+   * The caller is responsible for closing the returned {@link InputStream}.
    *
    * <p>Unlike {@link #get()}, this bypasses the buffered/retrying transport so the log can be
    * followed in real time as the run produces it (the {@code stream=1} query parameter). Because
    * the response is consumed incrementally, it is not retried.
    */
-  public InputStream stream() {
+  public CompletableFuture<InputStream> stream() {
     return stream(new LogOptions());
   }
 
   /** Opens a live log stream with explicit options (raw, download). */
-  public InputStream stream(LogOptions options) {
+  public CompletableFuture<InputStream> stream(LogOptions options) {
     QueryParams params = new QueryParams();
     params.addBool("stream", true);
     options.apply(params);
     String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl(""));
 
-    HttpResponse<InputStream> resp = ctx.http.stream(url);
-    if (resp.statusCode() >= HttpClientCore.MAX_SUCCESS_STATUS) {
-      byte[] body = drain(resp.body());
-      throw HttpClientCore.buildApiError(
-          resp.statusCode(), body, 1, "GET", HttpClientCore.extractPath(url));
-    }
-    return resp.body();
+    return ctx.http
+        .streamAsync(url)
+        .thenApply(
+            resp -> {
+              if (resp.statusCode() >= HttpClientCore.MAX_SUCCESS_STATUS) {
+                byte[] body = drain(resp.body());
+                throw HttpClientCore.buildApiError(
+                    resp.statusCode(), body, 1, "GET", HttpClientCore.extractPath(url));
+              }
+              return resp.body();
+            });
   }
 
   private static byte[] drain(InputStream in) {

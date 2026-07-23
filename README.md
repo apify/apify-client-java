@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.4.0'
+  implementation 'com.apify:apify-client:0.5.0'
 }
 ```
 
@@ -52,7 +52,7 @@ class HelloApify {
   public static void main(String[] args) {
     // Your API token from https://console.apify.com/settings/integrations
     ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
-    ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
+    ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L).join();
     System.out.println("Run " + run.getId() + " finished with status " + run.getStatus());
   }
 }
@@ -69,13 +69,14 @@ enumerates the model/option-type packages. The Quick start example above is a co
 program (imports, class, `main`); every other snippet in this file, from here on, is a fragment
 that assumes a configured `client` and the correct imports for the types it uses — not, by itself,
 a complete program — the [resource pages](docs/README.md) show the same kind of fragment per
-method. Reading items from a run's default dataset:
+method. Reading items from a run's default dataset, chaining the two asynchronous calls:
 
 ```java
-ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
-PaginationList<JsonNode> items =
-    client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
-System.out.println("Items in this page: " + items.getCount());
+client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L)
+    .thenCompose(run -> client.dataset(run.getDefaultDatasetId())
+        .listItems(new DatasetListItemsOptions()))
+    .thenAccept(items -> System.out.println("Items in this page: " + items.getCount()))
+    .join();
 ```
 
 The types used above — `PaginationList<T>` (root package), `DatasetListItemsOptions`
@@ -85,6 +86,41 @@ The types used above — `PaginationList<T>` (root package), `DatasetListItemsOp
 in the same style (build-and-run, storages, log redirection, and more); the complete, runnable
 programs live under
 [`src/test/java/com/apify/client/examples/`](https://github.com/apify/apify-client-java/tree/master/src/test/java/com/apify/client/examples).
+
+## Asynchronous API
+
+Every network-calling method returns a
+[`CompletableFuture`](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/CompletableFuture.html)
+(`java.util.concurrent.CompletableFuture`) instead of blocking the calling thread on the HTTP
+exchange, and every paginated collection's `iterate(...)` returns a
+[`Flow.Publisher`](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/Flow.Publisher.html)
+(`java.util.concurrent.Flow.Publisher`) — the JDK's built-in Reactive Streams type — instead of a
+blocking `Iterator`, so following a large collection never blocks a thread waiting on the next
+page's network round-trip.
+
+- **Chain calls** with `thenApply`/`thenCompose`/`thenAccept` (see the dataset example above) to
+  keep a pipeline fully asynchronous end to end.
+- **Block for a result** with `future.join()` (unchecked) or `future.get()` (checked,
+  `InterruptedException`/`ExecutionException`) when you just want a synchronous-looking call site
+  (e.g. a `main` method, a test, or a simple script) — every snippet in this documentation that
+  needs a value calls `.join()` for exactly that reason.
+- **Consume an `iterate(...)` publisher** either by implementing `Flow.Subscriber<T>` yourself
+  (`onSubscribe` → `request(n)` to pull `n` items, `onNext` per item, `onComplete`/`onError` to
+  finish) for real backpressure, or with the small convenience bridge
+  `com.apify.client.Publishers.collect(publisher)`, which subscribes with unbounded demand and
+  returns a `CompletableFuture<List<T>>` — useful when you just want "give me everything" and don't
+  need backpressure:
+
+  ```java
+  List<Actor> actors = Publishers.collect(client.actors().iterate(new ActorListOptions())).join();
+  ```
+
+A future/publisher's failure mode is unchanged from before: any `ApifyApiException`/
+`ApifyTransportException` this client throws now arrives as the future's exceptional completion
+(surfaced by `.join()`/`.get()` as a `CompletionException`/`ExecutionException` wrapping the
+original, still-unchecked exception) instead of a direct `throw` — see
+[Error handling](#error-handling) below for the full exception hierarchy, which is otherwise
+unchanged.
 
 ## Configuration
 
@@ -160,38 +196,48 @@ exponential backoff and jitter on `429`, `5xx` and network errors.
 
 #### `HttpTransport` contract
 
-A custom implementation (`com.apify.client.http.HttpTransport`) must provide both methods.
-`HttpRequest` and `HttpResponse<T>` below are the JDK's `java.net.http.HttpRequest`/
+A custom implementation (`com.apify.client.http.HttpTransport`) must provide both methods, both
+non-blocking. `HttpRequest` and `HttpResponse<T>` below are the JDK's `java.net.http.HttpRequest`/
 `java.net.http.HttpResponse<T>` (not custom client types) — same as `Duration` above:
 
 | Method | Signature | Contract |
 |---|---|---|
-| `send` | `HttpResponse<byte[]> send(HttpRequest request) throws IOException, InterruptedException` | Sends the single, fully-prepared request (auth, `User-Agent` and any other headers are already set by the client) and returns the response with its body fully buffered as `byte[]`. Used for every non-streaming call. |
-| `sendStreamingResponse` | `HttpResponse<InputStream> sendStreamingResponse(HttpRequest request) throws IOException, InterruptedException` | Sends the request and returns the response body as a live `InputStream` for incremental consumption, used by log streaming (`LogClient.stream(...)`). The *caller* (the client) is responsible for closing the returned stream; an implementation must not close it itself before returning. |
+| `sendAsync` | `CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request)` | Sends the single, fully-prepared request (auth, `User-Agent` and any other headers are already set by the client) and completes the future with the response with its body fully buffered as `byte[]`. Used for every non-streaming call. |
+| `sendStreamingAsync` | `CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request)` | Sends the request and completes the future with the response body as a live `InputStream` for incremental consumption, used by log streaming (`LogClient.stream(...)`). The *caller* (the client) is responsible for closing the returned stream; an implementation must not close it itself before completing the future. |
 
 Both methods perform exactly one network round-trip each — no retrying, no request mutation
-(retries, auth, and the `User-Agent` header are handled one layer up, by the client itself). A
-non-2xx HTTP status is **not** a transport-level error: return it as a normal `HttpResponse` with
-its actual status code. Only throw for a genuine transport failure — connection refused, DNS
-resolution failure, or a timeout. Any thrown `IOException` (or `InterruptedException`, with the
-interrupt flag restored) is translated by the client into an `ApifyTransportException`; throw
+(retries, auth, and the `User-Agent` header are handled one layer up, by the client itself), and
+neither may block the calling thread waiting on the network. A non-2xx HTTP status is **not** a
+transport-level error: complete the future normally with it, as a normal `HttpResponse` carrying its
+actual status code. Only fail the future for a genuine transport failure — connection refused, DNS
+resolution failure, or a timeout. Any exception the future is completed exceptionally with is
+translated by the client into an `ApifyTransportException`; complete exceptionally with
 `com.apify.client.http.HttpTimeoutException` specifically for a timeout so
-`ApifyTransportException.isTimeout()` reports it correctly.
+`ApifyTransportException.isTimeout()` reports it correctly. `DefaultHttpTransport` implements both
+methods directly on top of the JDK `HttpClient`'s own `sendAsync`.
 
 ## Fetching single resources
 
-Methods that fetch a single resource return an `Optional<T>`: a missing resource is reported by an
-empty `Optional` rather than an exception.
+Methods that fetch a single resource complete with an `Optional<T>`: a missing resource is reported
+by an empty `Optional` rather than an exception.
 
 ```java
-client.actor("apify/hello-world").get().ifPresent(actor -> System.out.println(actor.getTitle()));
+client.actor("apify/hello-world").get()
+    .thenAccept(actor -> actor.ifPresent(a -> System.out.println(a.getTitle())))
+    .join();
 ```
 
 ## Error handling
 
 Every exception this client throws for a request/transport failure is an unchecked
 `com.apify.client.http.ApifyClientException`. It has two concrete subtypes, both also in
-`com.apify.client.http`:
+`com.apify.client.http`. Since every network-calling method is asynchronous (see
+[Asynchronous API](#asynchronous-api) above), these exceptions arrive as the returned
+`CompletableFuture`'s exceptional completion rather than a direct `throw`; `.join()` re-throws the
+original exception wrapped in an unchecked `CompletionException` (`.get()` wraps it in a checked
+`ExecutionException` instead) — unwrap `getCause()` to recover the original
+`ApifyApiException`/`ApifyTransportException`, or use `.handle(...)`/`.exceptionally(...)` to react
+to it without unwrapping at all:
 
 - `ApifyApiException` — the request reached the API, which answered with a non-success status.
 - `ApifyTransportException` — the request never produced an API response at all (connection
@@ -206,22 +252,27 @@ Every exception this client throws for a request/transport failure is an uncheck
 Catch `ApifyClientException` to handle both failure modes uniformly, or catch a specific subtype to
 handle one of them differently. `ApifyApiException` is imported from `com.apify.client.http`:
 
-A few methods validate their own preconditions before making any request and throw a plain JDK
-exception instead, not an `ApifyClientException` subtype: `ApifyClient.setStatusMessage(message,
-options)` throws `IllegalStateException` if the `ACTOR_RUN_ID` environment variable is not set,
-`ApifyClient.me()`'s limits methods (`limits()`, `updateLimits(...)`, `monthlyUsage(...)`) throw the
-same `IllegalStateException` if called on a `UserClient` that is not `me()`, and
-`ApifyClientBuilder`'s setters throw `IllegalArgumentException` on an invalid configuration value
-(e.g. a negative retry count). These are local, no-request-sent failures, not something the API
-responded with or the transport failed to deliver, which is why they stay outside the
-request/transport exception hierarchy above — catch `IllegalStateException`/`IllegalArgumentException`
-separately if you call any of them.
+A few methods validate their own preconditions synchronously, before ever building a request or
+future, and throw a plain JDK exception directly from the call site instead, not an
+`ApifyClientException` subtype (so no `.join()`/`.get()` unwrapping is involved for these):
+`ApifyClient.setStatusMessage(message, options)` throws `IllegalStateException` if the
+`ACTOR_RUN_ID` environment variable is not set, `ApifyClient.me()`'s limits methods (`limits()`,
+`updateLimits(...)`, `monthlyUsage(...)`) throw the same `IllegalStateException` if called on a
+`UserClient` that is not `me()`, and `ApifyClientBuilder`'s setters throw `IllegalArgumentException`
+on an invalid configuration value (e.g. a negative retry count). These are local, no-request-sent
+failures, not something the API responded with or the transport failed to deliver, which is why
+they stay outside the request/transport exception hierarchy above — catch
+`IllegalStateException`/`IllegalArgumentException` separately if you call any of them.
 
 ```java
 try {
-  client.actor("does/not-exist").update(Map.of("title", "x"));
-} catch (ApifyApiException e) {
-  System.out.println("status=" + e.getStatusCode() + " type=" + e.getType());
+  client.actor("does/not-exist").update(Map.of("title", "x")).join();
+} catch (CompletionException e) {
+  if (e.getCause() instanceof ApifyApiException apiError) {
+    System.out.println("status=" + apiError.getStatusCode() + " type=" + apiError.getType());
+  } else {
+    throw e;
+  }
 }
 ```
 
@@ -242,10 +293,10 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.4.0`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.5.0`).
 - `Version.API_SPEC_VERSION` — the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters and models were last generated
-  and checked against (`v2-2026-07-20T094852Z`). It is a snapshot, not a live compatibility
+  and checked against (`v2-2026-07-22T122437Z`). It is a snapshot, not a live compatibility
   guarantee: the client keeps working against newer, backward-compatible spec revisions, but a
   feature added to the API after this snapshot has no corresponding method here yet.
 

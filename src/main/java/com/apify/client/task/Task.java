@@ -2,8 +2,8 @@ package com.apify.client.task;
 
 import com.apify.client.ApifyResource;
 import com.apify.client.actor.ActorStandby;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
+import tools.jackson.databind.JsonNode;
 
 /** A pre-configured Actor run (an Actor task). */
 public final class Task extends ApifyResource {

@@ -47,7 +47,7 @@ class ExamplesTest {
   }
 
   @Test
-  void iterateStore() {
+  void iterateStore() throws Exception {
     requireToken();
     IterateStore.main(new String[] {});
   }

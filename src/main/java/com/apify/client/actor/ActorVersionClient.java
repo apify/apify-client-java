@@ -4,6 +4,7 @@ import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * A client for a specific Actor version ({@code GET/PUT/DELETE
@@ -21,18 +22,18 @@ public final class ActorVersionClient {
   }
 
   /** Fetches the version, or empty if it does not exist. */
-  public Optional<ActorVersion> get() {
+  public CompletableFuture<Optional<ActorVersion>> get() {
     return ctx.getResource("", new QueryParams(), ActorVersion.class);
   }
 
   /** Updates the version with the given fields and returns the updated object. */
-  public ActorVersion update(Object newFields) {
+  public CompletableFuture<ActorVersion> update(Object newFields) {
     return ctx.updateResource("", newFields, ActorVersion.class);
   }
 
   /** Deletes the version. */
-  public void delete() {
-    ctx.deleteResource("");
+  public CompletableFuture<Void> delete() {
+    return ctx.deleteResource("");
   }
 
   /** A client for a specific environment variable of this version. */

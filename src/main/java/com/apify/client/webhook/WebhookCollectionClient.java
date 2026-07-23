@@ -2,6 +2,7 @@ package com.apify.client.webhook;
 
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * A client for the account-wide webhook collection ({@code GET/POST /v2/webhooks}), supporting both
@@ -14,7 +15,7 @@ public final class WebhookCollectionClient extends AbstractWebhookCollectionClie
   }
 
   /** Creates a new webhook. {@code webhook} is any JSON-serializable webhook definition. */
-  public Webhook create(Object webhook) {
+  public CompletableFuture<Webhook> create(Object webhook) {
     return ctx.createResource(new QueryParams(), webhook, Webhook.class);
   }
 }

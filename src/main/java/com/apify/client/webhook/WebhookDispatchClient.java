@@ -5,6 +5,7 @@ import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /** A client for a specific webhook dispatch ({@code /v2/webhook-dispatches/{dispatchId}}). */
 public final class WebhookDispatchClient {
@@ -15,7 +16,7 @@ public final class WebhookDispatchClient {
   }
 
   /** Fetches the dispatch, or empty if it does not exist. */
-  public Optional<WebhookDispatch> get() {
+  public CompletableFuture<Optional<WebhookDispatch>> get() {
     return ctx.getResource("", new QueryParams(), WebhookDispatch.class);
   }
 }

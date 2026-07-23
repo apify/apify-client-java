@@ -14,10 +14,10 @@ module com.apify.client {
   // resolves test sources on the module path when main sources declare one) uses the in-process
   // Java compiler API to compile documentation code snippets as part of the test suite.
   requires java.compiler;
-  requires com.fasterxml.jackson.annotation;
-  requires com.fasterxml.jackson.core;
-  requires com.fasterxml.jackson.databind;
-  requires com.fasterxml.jackson.datatype.jsr310;
+  // Jackson 3: tools.jackson.databind `requires transitive` both tools.jackson.core and
+  // com.fasterxml.jackson.annotation, so this one line also makes those two modules' packages
+  // (JacksonException, TypeReference, the Jackson annotations, ...) readable here.
+  requires tools.jackson.databind;
   requires org.slf4j;
   requires static com.aayushatharva.brotli4j;
 
@@ -40,31 +40,31 @@ module com.apify.client {
   // which requires reflective access opened to jackson-databind for every package holding a model
   // or request/response DTO, including the non-exported internal package.
   opens com.apify.client to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.actor to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.build to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.run to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.dataset to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.keyvalue to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.requestqueue to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.task to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.schedule to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.webhook to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.user to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.store to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.http to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
   opens com.apify.client.internal to
-      com.fasterxml.jackson.databind;
+      tools.jackson.databind;
 }

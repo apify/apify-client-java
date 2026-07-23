@@ -29,53 +29,53 @@ class WebhookIntegrationTest extends IntegrationBase {
   @Test
   void listWebhooks() {
     ApifyClient client = requireClient();
-    assertTrue(client.webhooks().list(new ListOptions().limit(5L)).getTotal() >= 0);
+    assertTrue(client.webhooks().list(new ListOptions().limit(5L)).join().getTotal() >= 0);
   }
 
   @Test
   void listWebhookDispatches() {
     ApifyClient client = requireClient();
-    assertTrue(client.webhookDispatches().list(new ListOptions().limit(5L)).getTotal() >= 0);
+    assertTrue(client.webhookDispatches().list(new ListOptions().limit(5L)).join().getTotal() >= 0);
   }
 
   @Test
   void getWebhook() {
     ApifyClient client = requireClient();
-    Webhook wh = client.webhooks().create(webhookDef("https://example.com/webhook"));
+    Webhook wh = client.webhooks().create(webhookDef("https://example.com/webhook")).join();
     try {
-      var got = client.webhook(wh.getId()).get();
+      var got = client.webhook(wh.getId()).get().join();
       assertTrue(got.isPresent());
       assertEquals(wh.getId(), got.get().getId());
     } finally {
-      client.webhook(wh.getId()).delete();
+      client.webhook(wh.getId()).delete().join();
     }
   }
 
   @Test
   void getWebhookDispatch() {
     ApifyClient client = requireClient();
-    Webhook wh = client.webhooks().create(webhookDef("https://example.com/webhook"));
+    Webhook wh = client.webhooks().create(webhookDef("https://example.com/webhook")).join();
     try {
-      WebhookDispatch dispatch = client.webhook(wh.getId()).test();
-      var got = client.webhookDispatch(dispatch.getId()).get();
+      WebhookDispatch dispatch = client.webhook(wh.getId()).test().join();
+      var got = client.webhookDispatch(dispatch.getId()).get().join();
       assertTrue(got.isPresent());
       assertEquals(dispatch.getId(), got.get().getId());
     } finally {
-      client.webhook(wh.getId()).delete();
+      client.webhook(wh.getId()).delete().join();
     }
   }
 
   @Test
   void webhookCrudFlow() {
     ApifyClient client = requireClient();
-    Webhook wh = client.webhooks().create(webhookDef("https://example.com/webhook"));
+    Webhook wh = client.webhooks().create(webhookDef("https://example.com/webhook")).join();
     try {
       WebhookClient webhook = client.webhook(wh.getId());
-      assertTrue(webhook.get().isPresent());
-      Webhook updated = webhook.update(Map.of("requestUrl", "https://example.com/updated"));
+      assertTrue(webhook.get().join().isPresent());
+      Webhook updated = webhook.update(Map.of("requestUrl", "https://example.com/updated")).join();
       assertEquals("https://example.com/updated", updated.getRequestUrl());
-      webhook.dispatches().list(new ListOptions());
-      webhook.test();
+      webhook.dispatches().list(new ListOptions()).join();
+      webhook.test().join();
 
       // list() step of the create/get/modify/list/delete flow: verify the just-created webhook
       // appears in the top-level collection listing.
@@ -87,6 +87,7 @@ class WebhookIntegrationTest extends IntegrationBase {
                   client
                       .webhooks()
                       .list(new ListOptions().desc(true).limit(10L))
+                      .join()
                       .getItems()
                       .stream()
                       .anyMatch(w -> wh.getId().equals(w.getId())));
@@ -100,7 +101,7 @@ class WebhookIntegrationTest extends IntegrationBase {
       assertTrue(wh.getModifiedAt() != null);
       assertTrue(wh.getStats() != null);
     } finally {
-      client.webhook(wh.getId()).delete();
+      client.webhook(wh.getId()).delete().join();
     }
   }
 }

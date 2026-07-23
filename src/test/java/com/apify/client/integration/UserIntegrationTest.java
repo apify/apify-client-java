@@ -3,15 +3,15 @@ package com.apify.client.integration;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
-import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
 
 class UserIntegrationTest extends IntegrationBase {
 
   @Test
   void getOwnAccount() {
     ApifyClient client = requireClient();
-    var user = client.me().get();
+    var user = client.me().get().join();
     assertTrue(user.isPresent());
     assertTrue(user.get().getId() != null && !user.get().getId().isEmpty());
   }
@@ -19,33 +19,33 @@ class UserIntegrationTest extends IntegrationBase {
   @Test
   void getUserById() {
     ApifyClient client = requireClient();
-    var me = client.me().get();
+    var me = client.me().get().join();
     assertTrue(me.isPresent());
     // The account's own id is always a valid target for the by-id accessor (public profile view),
     // covering `ApifyClient.user(id)` in addition to the `me()` convenience already exercised
     // above.
-    var byId = client.user(me.get().getId()).get();
+    var byId = client.user(me.get().getId()).get().join();
     assertTrue(byId.isPresent());
   }
 
   @Test
   void getMonthlyUsage() {
     ApifyClient client = requireClient();
-    JsonNode usage = client.me().monthlyUsage();
+    JsonNode usage = client.me().monthlyUsage().join();
     assertTrue(usage != null && !usage.isEmpty());
   }
 
   @Test
   void getMonthlyUsageForDate() {
     ApifyClient client = requireClient();
-    JsonNode usage = client.me().monthlyUsage("2026-06-01");
+    JsonNode usage = client.me().monthlyUsage("2026-06-01").join();
     assertTrue(usage != null && !usage.isEmpty());
   }
 
   @Test
   void getLimits() {
     ApifyClient client = requireClient();
-    JsonNode limits = client.me().limits();
+    JsonNode limits = client.me().limits().join();
     assertTrue(limits != null && !limits.isEmpty());
   }
 

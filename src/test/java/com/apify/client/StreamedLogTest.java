@@ -50,8 +50,8 @@ class StreamedLogTest {
     backend.scriptStream(200, streamBody);
     List<String> collected = new CopyOnWriteArrayList<>();
     StreamedLog streamedLog =
-        client(backend).run("run123").getStreamedLog(options.toLog(collected::add));
-    streamedLog.start();
+        client(backend).run("run123").getStreamedLog(options.toLog(collected::add)).join();
+    streamedLog.start().join();
     // The scripted stream is finite, so redirection finishes on its own; stop() joins the thread.
     streamedLog.stop();
     return collected;
@@ -105,8 +105,8 @@ class StreamedLogTest {
         MockTransport.ofConstant(
             200, "{\"data\":{\"id\":\"run123\",\"actId\":\"act1\",\"name\":\"a\"}}");
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z hello\n");
-    StreamedLog streamedLog = client(backend).run("run123").getStreamedLog();
-    streamedLog.start();
+    StreamedLog streamedLog = client(backend).run("run123").getStreamedLog().join();
+    streamedLog.start().join();
     streamedLog.stop();
     // No assertion on output (goes to the default SLF4J logger); the point is it runs without
     // throwing.
@@ -143,8 +143,9 @@ class StreamedLogTest {
                           message -> {
                             calls.incrementAndGet();
                             throw new RuntimeException("consumer failed");
-                          }));
-      streamedLog.start();
+                          }))
+              .join();
+      streamedLog.start().join();
       streamedLog.stop(); // joins the reader; if it died uncaught, the handler above has fired
       assertNull(
           uncaught.get(),
@@ -164,8 +165,11 @@ class StreamedLogTest {
     MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
     StreamedLog streamedLog =
-        client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
-    streamedLog.start();
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(m -> {}))
+            .join();
+    streamedLog.start().join();
     assertThrows(IllegalStateException.class, streamedLog::start);
     streamedLog.stop();
   }
@@ -174,7 +178,10 @@ class StreamedLogTest {
   void stopWithoutStartThrows() {
     MockTransport backend = MockTransport.ofConstant(200, "");
     StreamedLog streamedLog =
-        client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(m -> {}))
+            .join();
     assertThrows(IllegalStateException.class, streamedLog::stop);
   }
 
@@ -182,7 +189,10 @@ class StreamedLogTest {
   void closeWithoutStartIsNoOp() {
     MockTransport backend = MockTransport.ofConstant(200, "");
     StreamedLog streamedLog =
-        client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(m -> {}))
+            .join();
     // close() on a never-started helper must not throw (supports try-with-resources).
     streamedLog.close();
   }
@@ -206,8 +216,9 @@ class StreamedLogTest {
     StreamedLog streamedLog =
         client(backend)
             .run("run123")
-            .getStreamedLog(new StreamedLogOptions().toLog(collected::add));
-    streamedLog.start();
+            .getStreamedLog(new StreamedLogOptions().toLog(collected::add))
+            .join();
+    streamedLog.start().join();
     // Wait until a and b have been redirected, which proves the reader has consumed the body and is
     // now blocked with c held back as the pending last message.
     pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> collected.size() >= 2);
@@ -231,8 +242,11 @@ class StreamedLogTest {
     MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
     StreamedLog streamedLog =
-        client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
-    streamedLog.start();
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(m -> {}))
+            .join();
+    streamedLog.start().join();
     streamedLog.stop();
     streamedLog.close(); // must be a no-op, not an IllegalStateException
     streamedLog.close(); // idempotent on repeat
@@ -250,8 +264,11 @@ class StreamedLogTest {
       MockTransport backend = MockTransport.ofConstant(200, "");
       backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
       StreamedLog streamedLog =
-          client(backend).run("run123").getStreamedLog(new StreamedLogOptions().toLog(m -> {}));
-      streamedLog.start();
+          client(backend)
+              .run("run123")
+              .getStreamedLog(new StreamedLogOptions().toLog(m -> {}))
+              .join();
+      streamedLog.start().join();
 
       CountDownLatch go = new CountDownLatch(1);
       AtomicReference<Throwable> closeError = new AtomicReference<>();
@@ -300,8 +317,9 @@ class StreamedLogTest {
     try (StreamedLog streamedLog =
         client(backend)
             .run("run123")
-            .getStreamedLog(new StreamedLogOptions().toLog(collected::add))) {
-      streamedLog.start();
+            .getStreamedLog(new StreamedLogOptions().toLog(collected::add))
+            .join()) {
+      streamedLog.start().join();
       // give the finite stream a moment to be consumed
       Thread.sleep(Duration.ofMillis(50).toMillis());
     }
@@ -337,9 +355,10 @@ class StreamedLogTest {
                           if (stopRequested.compareAndSet(false, true)) {
                             ref.get().stop();
                           }
-                        }));
+                        }))
+            .join();
     ref.set(streamedLog);
-    streamedLog.start();
+    streamedLog.start().join();
     pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> collected.size() >= 2);
     assertEquals(
         List.of("2999-01-01T00:00:00.000Z a", "2999-01-01T00:00:01.000Z b"),
@@ -367,9 +386,10 @@ class StreamedLogTest {
                         message -> {
                           collected.add(message);
                           ref.get().close(); // idempotent self-close on the reader thread
-                        }));
+                        }))
+            .join();
     ref.set(streamedLog);
-    streamedLog.start();
+    streamedLog.start().join();
     pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> collected.size() >= 2);
     assertEquals(
         List.of("2999-01-01T00:00:00.000Z a", "2999-01-01T00:00:01.000Z b"),
@@ -380,12 +400,12 @@ class StreamedLogTest {
   @Test
   void defaultPrefixLookupFailureStillCreatesHelper() {
     // The no-arg getStreamedLog() builds a cosmetic per-run prefix by GETting the run (and its
-    // Actor). Those getters swallow only 404; a 401/403/5xx-after-retries would otherwise throw out
-    // of getStreamedLog() and abort helper creation even though streaming might work. The lookup is
+    // Actor). Those getters swallow only 404; a 401/403/5xx-after-retries would otherwise fail the
+    // returned future and abort helper creation even though streaming might work. The lookup is
     // wrapped so it falls back to the runId-only prefix instead of failing.
     MockTransport backend = new MockTransport(List.of(MockTransport.ok(401, "{\"error\":{}}")));
     StreamedLog streamedLog =
-        assertDoesNotThrow(() -> client(backend).run("run123").getStreamedLog());
+        assertDoesNotThrow(() -> client(backend).run("run123").getStreamedLog().join());
     assertNotNull(streamedLog);
   }
 

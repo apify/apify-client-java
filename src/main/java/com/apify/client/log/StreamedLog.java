@@ -1,6 +1,7 @@
 package com.apify.client.log;
 
 import com.apify.client.http.ApifyApiException;
+import com.apify.client.internal.HttpClientCore;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -8,6 +9,7 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -73,6 +75,13 @@ public final class StreamedLog implements AutoCloseable {
   private volatile InputStream activeStream;
   private Thread streamingThread;
 
+  /**
+   * Set for the duration between {@link #start()} being called and the async stream-open completing
+   * (success or failure), closing the window where a concurrent {@link #start()} call would
+   * otherwise see {@code streamingThread == null} and race the first call's setup.
+   */
+  private boolean starting;
+
   public StreamedLog(LogClient logClient, Consumer<String> destination, boolean fromStart) {
     this.logClient = logClient;
     this.destination = destination;
@@ -82,30 +91,46 @@ public final class StreamedLog implements AutoCloseable {
   /**
    * Starts redirecting the log in a background daemon thread.
    *
-   * <p>The live log stream is opened synchronously before the thread is launched, so this call
-   * blocks briefly on the HTTP round-trip and surfaces a failure to open the stream to the caller
-   * rather than on the background thread.
+   * <p>Opening the live log stream is asynchronous (this call returns immediately); the returned
+   * future completes once the stream is open and the background reader thread has been launched, or
+   * exceptionally if the stream could not be opened. If it were opened inside the reader thread
+   * instead, a {@link #stop()} that ran during the HTTP round-trip would close a still-null stream,
+   * leaving the reader blocked on a live read that never returns and {@code join()} hanging
+   * forever.
    *
-   * @throws IllegalStateException if redirection is already running
-   * @throws ApifyApiException if the log stream cannot be opened (the API returns a non-2xx
-   *     status); other transport failures propagate as their own runtime exception
+   * @throws IllegalStateException if redirection is already running (or a previous {@link #start()}
+   *     call's stream-open is still in flight)
+   * @implNote the returned future completes exceptionally with an {@link ApifyApiException} if the
+   *     log stream cannot be opened (the API returns a non-2xx status); other transport failures
+   *     complete it with their own runtime exception.
    */
-  public synchronized void start() {
-    if (streamingThread != null) {
+  public synchronized CompletableFuture<Void> start() {
+    if (streamingThread != null || starting) {
       throw new IllegalStateException("Streaming task already active");
     }
+    starting = true;
     stopLogging = false;
     forwardingFailed = false;
-    // Open the live stream here, before launching the reader thread, so activeStream is guaranteed
-    // to be set once the thread exists. If it were opened inside the thread, a stop() that ran
-    // during the HTTP round-trip would close a still-null stream, leaving the reader blocked on a
-    // live read() that never returns and join() hanging forever. Opening it up front also lets a
-    // failed connection surface to the caller of start() instead of a background-thread warning.
-    activeStream = logClient.stream(new LogOptions().raw(true));
-    Thread thread = new Thread(this::streamLog, "apify-streamed-log");
-    thread.setDaemon(true);
-    streamingThread = thread;
-    thread.start();
+    return logClient.stream(new LogOptions().raw(true))
+        .handle(
+            (stream, error) -> {
+              synchronized (StreamedLog.this) {
+                starting = false;
+                if (error != null) {
+                  Throwable cause = HttpClientCore.unwrapCompletion(error);
+                  if (cause instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
+                  }
+                  throw new IllegalStateException("failed to open log stream", cause);
+                }
+                activeStream = stream;
+                Thread thread = new Thread(this::streamLog, "apify-streamed-log");
+                thread.setDaemon(true);
+                streamingThread = thread;
+                thread.start();
+              }
+              return null;
+            });
   }
 
   /**

@@ -17,6 +17,9 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.zip.GZIPOutputStream;
 
@@ -24,6 +27,11 @@ import java.util.zip.GZIPOutputStream;
  * The orchestrating HTTP client shared by every resource client. It owns the transport, the
  * optional API token, the {@code User-Agent}, and the retry/timeout policy, and applies them to
  * every request. Internal to the client; safe for concurrent use.
+ *
+ * <p>Every call is non-blocking end to end: a request never occupies the calling thread while
+ * waiting on the network, a retryable failure's backoff delay is a scheduled timer (see {@link
+ * Async}) rather than {@code Thread.sleep}, and each retry attempt is chained via {@link
+ * CompletableFuture#thenCompose} rather than looped over synchronously.
  */
 public final class HttpClientCore {
 
@@ -120,7 +128,7 @@ public final class HttpClientCore {
   }
 
   /** Sends a request with auth, User-Agent and the retry policy applied. */
-  public ApiResponse call(
+  public CompletableFuture<ApiResponse> call(
       String method, String url, byte[] body, String contentType, Duration baseTimeout) {
     return call(method, url, body, contentType, null, baseTimeout, false);
   }
@@ -131,7 +139,7 @@ public final class HttpClientCore {
    * rather than being retried (other transport/network errors and retryable statuses are still
    * retried).
    */
-  public ApiResponse call(
+  public CompletableFuture<ApiResponse> call(
       String method,
       String url,
       byte[] body,
@@ -145,7 +153,7 @@ public final class HttpClientCore {
    * Like {@link #call(String, String, byte[], String, Duration)} but additionally sets the given
    * extra headers on every attempt.
    */
-  public ApiResponse call(
+  public CompletableFuture<ApiResponse> call(
       String method,
       String url,
       byte[] body,
@@ -156,7 +164,7 @@ public final class HttpClientCore {
   }
 
   /** The canonical overload every other {@code call} convenience overload delegates to. */
-  public ApiResponse call(
+  public CompletableFuture<ApiResponse> call(
       String method,
       String url,
       byte[] body,
@@ -175,41 +183,109 @@ public final class HttpClientCore {
       headers.put(CONTENT_ENCODING_HEADER, compressed.encoding());
     }
 
-    Duration delay = retry.minDelayBetweenRetries;
-    int maxAttempts = retry.maxRetries + 1;
     String path = extractPath(url);
-    RuntimeException lastError = null;
+    int maxAttempts = retry.maxRetries + 1;
+    return attemptWithRetry(
+        method,
+        url,
+        requestBody,
+        contentType,
+        headers,
+        baseTimeout,
+        doNotRetryTimeouts,
+        path,
+        1,
+        maxAttempts,
+        retry.minDelayBetweenRetries);
+  }
 
-    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-      boolean retryable;
-      try {
-        ApiResponse resp =
-            doAttempt(
-                method,
-                url,
-                requestBody,
-                contentType,
-                headers,
-                attemptTimeout(baseTimeout, attempt));
-        if (resp.statusCode() < MAX_SUCCESS_STATUS) {
-          return resp;
-        }
-        lastError = buildApiError(resp.statusCode(), resp.body(), attempt, method, path);
-        retryable = isStatusRetryable(resp.statusCode());
-      } catch (ApifyTransportException e) {
-        lastError = e;
-        // Network/timeout failures are retryable, unless the caller opted out of retrying timeouts.
-        retryable = !(doNotRetryTimeouts && e.isTimeout());
-      }
+  /**
+   * Runs one attempt and, on a retryable failure that has not exhausted {@code maxAttempts},
+   * schedules the next one after a backoff delay - chained via {@link
+   * CompletableFuture#thenCompose} rather than a blocking loop, so no thread is ever parked waiting
+   * on the network or the delay.
+   */
+  private CompletableFuture<ApiResponse> attemptWithRetry(
+      String method,
+      String url,
+      byte[] body,
+      String contentType,
+      Map<String, String> headers,
+      Duration baseTimeout,
+      boolean doNotRetryTimeouts,
+      String path,
+      int attempt,
+      int maxAttempts,
+      Duration delay) {
+    Duration timeout = attemptTimeout(baseTimeout, attempt);
+    return attempt(
+            method, url, body, contentType, headers, timeout, doNotRetryTimeouts, attempt, path)
+        .thenCompose(
+            outcome -> {
+              if (outcome.success()) {
+                return CompletableFuture.completedFuture(outcome.response());
+              }
+              if (!outcome.retryable() || attempt == maxAttempts) {
+                return failedFuture(outcome.error());
+              }
+              Duration sleepFor = randomizedDelay(delay);
+              Duration nextDelay =
+                  minDuration(delay.multipliedBy(BACKOFF_FACTOR), retry.maxDelayBetweenRetries);
+              return Async.delay(sleepFor)
+                  .thenCompose(
+                      unused ->
+                          attemptWithRetry(
+                              method,
+                              url,
+                              body,
+                              contentType,
+                              headers,
+                              baseTimeout,
+                              doNotRetryTimeouts,
+                              path,
+                              attempt + 1,
+                              maxAttempts,
+                              nextDelay));
+            });
+  }
 
-      if (!retryable || attempt == maxAttempts) {
-        throw lastError;
-      }
+  /** The outcome of a single attempt: either a success response, or a retryable/terminal error. */
+  private record AttemptOutcome(
+      ApiResponse response, boolean success, boolean retryable, RuntimeException error) {}
 
-      sleep(randomizedDelay(delay));
-      delay = minDuration(delay.multipliedBy(BACKOFF_FACTOR), retry.maxDelayBetweenRetries);
-    }
-    throw lastError; // unreachable in practice (maxAttempts >= 1), defensive
+  /** Sends one attempt and classifies the result (success / retryable error / terminal error). */
+  private CompletableFuture<AttemptOutcome> attempt(
+      String method,
+      String url,
+      byte[] body,
+      String contentType,
+      Map<String, String> extraHeaders,
+      Duration timeout,
+      boolean doNotRetryTimeouts,
+      int attemptNum,
+      String path) {
+    return doAttempt(method, url, body, contentType, extraHeaders, timeout)
+        .handle(
+            (resp, err) -> {
+              if (err == null) {
+                if (resp.statusCode() < MAX_SUCCESS_STATUS) {
+                  return new AttemptOutcome(resp, true, false, null);
+                }
+                RuntimeException apiError =
+                    buildApiError(resp.statusCode(), resp.body(), attemptNum, method, path);
+                return new AttemptOutcome(
+                    null, false, isStatusRetryable(resp.statusCode()), apiError);
+              }
+              Throwable cause = unwrapCompletion(err);
+              ApifyTransportException transportError =
+                  cause instanceof ApifyTransportException apifyTransportException
+                      ? apifyTransportException
+                      : new ApifyTransportException(cause);
+              // Network/timeout failures are retryable, unless the caller opted out of retrying
+              // timeouts.
+              boolean retryable = !(doNotRetryTimeouts && transportError.isTimeout());
+              return new AttemptOutcome(null, false, retryable, transportError);
+            });
   }
 
   /**
@@ -241,7 +317,7 @@ public final class HttpClientCore {
     return b.build();
   }
 
-  private ApiResponse doAttempt(
+  private CompletableFuture<ApiResponse> doAttempt(
       String method,
       String url,
       byte[] body,
@@ -249,15 +325,9 @@ public final class HttpClientCore {
       Map<String, String> extraHeaders,
       Duration timeout) {
     HttpRequest request = buildRequest(method, url, body, contentType, extraHeaders, timeout);
-    try {
-      HttpResponse<byte[]> resp = transport.send(request);
-      return new ApiResponse(resp.statusCode(), resp.headers(), resp.body());
-    } catch (IOException e) {
-      throw new ApifyTransportException(e);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new ApifyTransportException(e);
-    }
+    return transport
+        .sendAsync(request)
+        .thenApply(resp -> new ApiResponse(resp.statusCode(), resp.headers(), resp.body()));
   }
 
   /**
@@ -362,23 +432,34 @@ public final class HttpClientCore {
     return Duration.ofMillis(millis + ThreadLocalRandom.current().nextLong(millis));
   }
 
-  private static void sleep(Duration d) {
-    try {
-      Thread.sleep(Math.max(0, d.toMillis()));
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new ApifyTransportException(e);
-    }
-  }
-
   private static Duration minDuration(Duration a, Duration b) {
     return a.compareTo(b) < 0 ? a : b;
+  }
+
+  private static CompletableFuture<ApiResponse> failedFuture(RuntimeException error) {
+    CompletableFuture<ApiResponse> future = new CompletableFuture<>();
+    future.completeExceptionally(error);
+    return future;
+  }
+
+  /**
+   * Unwraps the {@link CompletionException}/{@link ExecutionException} layers {@link
+   * CompletableFuture} plumbing may add around the original failure, so callers always classify
+   * (and wrap) the real cause rather than the wrapper.
+   */
+  public static Throwable unwrapCompletion(Throwable t) {
+    Throwable current = t;
+    while ((current instanceof CompletionException || current instanceof ExecutionException)
+        && current.getCause() != null) {
+      current = current.getCause();
+    }
+    return current;
   }
 
   /**
    * The {@code {"error": {...}}} envelope the API sends on a non-success response, mapped directly
    * by Jackson rather than navigated field-by-field as a raw {@link
-   * com.fasterxml.jackson.databind.JsonNode} tree.
+   * tools.jackson.databind.JsonNode} tree.
    */
   private static final class ErrorEnvelope {
     public ErrorBody error;
@@ -425,16 +506,25 @@ public final class HttpClientCore {
     }
   }
 
-  /** Opens a live streaming response (single attempt, no retry). Used by log streaming. */
-  public HttpResponse<InputStream> stream(String url) {
+  /**
+   * Opens a live streaming response (single attempt, no retry). Used by log streaming. The returned
+   * future completes exceptionally with an {@link ApifyTransportException} on a transport failure;
+   * a non-2xx status is returned as a normal response for the caller (log streaming) to inspect,
+   * matching {@link HttpTransport}'s contract.
+   */
+  public CompletableFuture<HttpResponse<InputStream>> streamAsync(String url) {
     HttpRequest request = buildRequest("GET", url, null, null, null, retry.timeout);
-    try {
-      return transport.sendStreamingResponse(request);
-    } catch (IOException e) {
-      throw new ApifyTransportException(e);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new ApifyTransportException(e);
-    }
+    CompletableFuture<HttpResponse<InputStream>> result = new CompletableFuture<>();
+    transport
+        .sendStreamingAsync(request)
+        .whenComplete(
+            (resp, err) -> {
+              if (err == null) {
+                result.complete(resp);
+              } else {
+                result.completeExceptionally(new ApifyTransportException(unwrapCompletion(err)));
+              }
+            });
+    return result;
   }
 }

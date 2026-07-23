@@ -117,7 +117,7 @@ class CompressionTest {
     MockTransport backend = MockTransport.ofConstant(201, "");
     byte[] payload = payload(4096, (byte) 'a');
 
-    client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE);
+    client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE).join();
 
     boolean brotli = HttpClientCore.brotliAvailable();
     String expected = brotli ? "br" : "gzip";
@@ -135,7 +135,7 @@ class CompressionTest {
     MockTransport backend = MockTransport.ofConstant(201, "");
     byte[] payload = payload(16, (byte) 'b');
 
-    client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE);
+    client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE).join();
 
     assertFalse(
         backend.lastHeaders.firstValue("Content-Encoding").isPresent(),
@@ -148,7 +148,7 @@ class CompressionTest {
     MockTransport backend = MockTransport.ofConstant(201, "");
     byte[] payload = payload(1024, (byte) 'c');
 
-    client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE);
+    client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE).join();
 
     boolean brotli = HttpClientCore.brotliAvailable();
     assertEquals(

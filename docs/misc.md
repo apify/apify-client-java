@@ -6,8 +6,8 @@ Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollec
 
 | Method | Description |
 |---|---|
-| `list(StoreListOptions)` | A page of Store Actors. Returns `PaginationList<ActorStoreListItem>`. |
-| `iterate(StoreListOptions, Long chunkSize)` | A lazy `Iterator<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of Actors yielded (`null`/unset or non-positive = all); `chunkSize` is the per-request page size (`null` = server default). |
+| `list(StoreListOptions)` | A page of Store Actors. Completes with `PaginationList<ActorStoreListItem>`. |
+| `iterate(StoreListOptions, Long chunkSize)` | A lazy `Flow.Publisher<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of Actors yielded (`null`/unset or non-positive = all); `chunkSize` is the per-request page size (`null` = server default). |
 
 `StoreListOptions` fields: `offset` (number of Actors to skip), `limit` (maximum number of Actors to
 return), `search` (full-text search query), `sortBy` (the sort field, e.g. `popularity`, `newest`),
@@ -17,14 +17,13 @@ return), `search` (full-text search query), `sortBy` (the sort field, e.g. `popu
 Actors that allow agentic users), `responseFormat` (the response shape: `full` or `agent`).
 
 ```java
-Iterator<ActorStoreListItem> it =
-    client.store().iterate(new StoreListOptions().search("crawler").limit(20L), 10L);
-int shown = 0;
-while (shown < 5 && it.hasNext()) {
-  ActorStoreListItem item = it.next();
-  System.out.println(item.getUsername() + "/" + item.getName());
-  shown++;
-}
+// Publishers.collect() drains the whole publisher; fine here since `limit` already caps it.
+// To stop early without fetching further pages, subscribe with your own Flow.Subscriber instead
+// (request(1) at a time, cancel() once you have enough) — see IterateStore.java in the examples.
+List<ActorStoreListItem> items =
+    Publishers.collect(client.store().iterate(new StoreListOptions().search("crawler").limit(20L), 10L))
+        .join();
+items.forEach(item -> System.out.println(item.getUsername() + "/" + item.getName()));
 ```
 
 `ActorStoreListItem` fields: `getId()`, `getName()`, `getUsername()`, `getTitle()`,
@@ -38,16 +37,16 @@ still available via the inherited `getExtra()` (see
 
 | Method | Description |
 |---|---|
-| `get()` | Fetch the user. Returns `Optional<User>` (private details for `me()` via `getExtra()`). |
-| `monthlyUsage()` / `monthlyUsage(String date)` | Account monthly usage (`me()` only). `date` (any day within the target month, formatted `YYYY-MM-DD`) reports that month; `null`/empty reports the current month. Returns `JsonNode`. |
-| `limits()` | Account resource limits (`me()` only). Returns `JsonNode`. |
-| `updateLimits(Object)` | Update account limits (`me()` only). No return value. |
+| `get()` | Fetch the user. Completes with `Optional<User>` (private details for `me()` via `getExtra()`). |
+| `monthlyUsage()` / `monthlyUsage(String date)` | Account monthly usage (`me()` only). `date` (any day within the target month, formatted `YYYY-MM-DD`) reports that month; `null`/empty reports the current month. Completes with `JsonNode`. |
+| `limits()` | Account resource limits (`me()` only). Completes with `JsonNode`. |
+| `updateLimits(Object)` | Update account limits (`me()` only). Completes with no value (`CompletableFuture<Void>`). |
 
 The usage/limits methods are only available for `me()`; calling them on `user(id)` throws
 `IllegalStateException`.
 
 ```java
-Optional<User> me = client.me().get();
+Optional<User> me = client.me().get().join();
 me.ifPresent(
     u -> {
       System.out.println("Account: " + u.getId());
@@ -55,7 +54,7 @@ me.ifPresent(
       // remaining account field not modelled directly.
       System.out.println("Email: " + u.getEmail());
     });
-JsonNode usage = client.me().monthlyUsage();
+JsonNode usage = client.me().monthlyUsage().join();
 ```
 
 `User` fields: `getId()`, `getUsername()`, `getProfile()` (`UserProfile` — `getBio()`, `getName()`,
@@ -79,12 +78,12 @@ Access a build's or run's log directly, or via `client.run(id).log()` / `client.
 
 | Method | Description |
 |---|---|
-| `get()` / `get(LogOptions)` | The whole log as text. Returns `Optional<String>`. |
-| `stream()` / `stream(LogOptions)` | A live `InputStream` over the log (for redirection). |
+| `get()` / `get(LogOptions)` | The whole log as text. Completes with `Optional<String>`. |
+| `stream()` / `stream(LogOptions)` | A live `InputStream` over the log (for redirection). Completes with `InputStream`. |
 
 `LogOptions` fields: `raw(Boolean)`, `download(Boolean)`.
 
 ```java
-Optional<String> log = client.log("RUN_OR_BUILD_ID").get();
+Optional<String> log = client.log("RUN_OR_BUILD_ID").get().join();
 log.ifPresent(System.out::println);
 ```

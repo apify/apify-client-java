@@ -11,9 +11,9 @@ The account-wide collection supports both listing and creation.
 
 | Method | Description |
 |---|---|
-| `list(ListOptions)` | List webhooks. Returns `PaginationList<Webhook>`. |
-| `iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<Webhook>` over all webhooks; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). Also available on the read-only nested collections. |
-| `create(Object)` | Create a webhook. Returns `Webhook`. |
+| `list(ListOptions)` | List webhooks. Completes with `PaginationList<Webhook>`. |
+| `iterate(ListOptions, Long chunkSize)` | Lazy `Flow.Publisher<Webhook>` over all webhooks; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). Also available on the read-only nested collections. |
+| `create(Object)` | Create a webhook. Completes with `Webhook`. |
 
 ### Nested webhook collections (read-only)
 
@@ -34,7 +34,7 @@ Webhook webhook = client.webhooks().create(Map.of(
     "isAdHoc", false,
     "eventTypes", List.of("ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED"),
     "condition", Map.of("actorId", "apify/hello-world"),
-    "requestUrl", "https://example.com/webhook"));
+    "requestUrl", "https://example.com/webhook")).join();
 ```
 
 ## `WebhookClient`
@@ -42,11 +42,11 @@ Webhook webhook = client.webhooks().create(Map.of(
 | Method | Description |
 |---|---|
 | `get()` / `update(Object)` / `delete()` | CRUD. |
-| `test()` | Dispatch the webhook immediately. Returns `WebhookDispatch`. |
+| `test()` | Dispatch the webhook immediately. Completes with `WebhookDispatch`. |
 | `dispatches()` | This webhook's dispatch collection. |
 
 ```java
-WebhookDispatch dispatch = client.webhook("WEBHOOK_ID").test();
+WebhookDispatch dispatch = client.webhook("WEBHOOK_ID").test().join();
 System.out.println(dispatch.getId());
 ```
 
@@ -67,9 +67,9 @@ inherited `getExtra()` (see [the docs index](README.md#model-fields-and-unmodele
 
 | Method | Description |
 |---|---|
-| `webhookDispatches().list(ListOptions)` | List dispatches. Returns `PaginationList<WebhookDispatch>`. |
-| `webhookDispatches().iterate(ListOptions, Long chunkSize)` | Lazy `Iterator<WebhookDispatch>` over all dispatches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
-| `webhookDispatch(id).get()` | Fetch a dispatch. Returns `Optional<WebhookDispatch>`. |
+| `webhookDispatches().list(ListOptions)` | List dispatches. Completes with `PaginationList<WebhookDispatch>`. |
+| `webhookDispatches().iterate(ListOptions, Long chunkSize)` | Lazy `Flow.Publisher<WebhookDispatch>` over all dispatches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
+| `webhookDispatch(id).get()` | Fetch a dispatch. Completes with `Optional<WebhookDispatch>`. |
 
 `WebhookDispatch` fields: `getId()`, `getUserId()`, `getWebhookId()`, `getCreatedAt()` (`Instant`),
 `getStatus()` (one of `"ACTIVE"`/`"SUCCEEDED"`/`"FAILED"`), `getEventType()` (the event that

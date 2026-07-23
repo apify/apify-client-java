@@ -2,9 +2,11 @@ package com.apify.client.actor;
 
 import com.apify.client.PaginationList;
 import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.ListPublisher;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import java.util.Iterator;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
 
 /**
  * A client for an Actor version's environment variable collection ({@code GET/POST
@@ -18,21 +20,21 @@ public final class ActorEnvVarCollectionClient {
   }
 
   /** Lists the version's environment variables. */
-  public PaginationList<ActorEnvVar> list() {
+  public CompletableFuture<PaginationList<ActorEnvVar>> list() {
     return ctx.listResource("", new QueryParams(), ActorEnvVar.class);
   }
 
   /**
-   * Returns an iterator over the version's environment variables. The env-var collection is not
-   * paginated (the API returns every variable in one response), so this iterates a single fetched
+   * Returns a publisher over the version's environment variables. The env-var collection is not
+   * paginated (the API returns every variable in one response), so this publishes a single fetched
    * page; the method exists for API consistency with the other collection clients.
    */
-  public Iterator<ActorEnvVar> iterate() {
-    return list().getItems().iterator();
+  public Flow.Publisher<ActorEnvVar> iterate() {
+    return new ListPublisher<>(list().thenApply(PaginationList::getItems));
   }
 
   /** Creates a new environment variable. */
-  public ActorEnvVar create(ActorEnvVar envVar) {
+  public CompletableFuture<ActorEnvVar> create(ActorEnvVar envVar) {
     return ctx.createResource(new QueryParams(), envVar, ActorEnvVar.class);
   }
 }

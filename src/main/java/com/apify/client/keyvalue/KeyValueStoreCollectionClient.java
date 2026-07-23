@@ -5,6 +5,7 @@ import com.apify.client.internal.AbstractCollectionClient;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.ResourceContext;
+import java.util.concurrent.CompletableFuture;
 
 /** A client for the key-value store collection ({@code GET/POST /v2/key-value-stores}). */
 public final class KeyValueStoreCollectionClient
@@ -21,7 +22,7 @@ public final class KeyValueStoreCollectionClient
    * Gets the store with the given name, creating it if it does not exist. An empty/{@code null}
    * name creates a new unnamed store.
    */
-  public KeyValueStore getOrCreate(String name) {
+  public CompletableFuture<KeyValueStore> getOrCreate(String name) {
     return getOrCreate(name, null);
   }
 
@@ -30,7 +31,7 @@ public final class KeyValueStoreCollectionClient
    * schema} on creation. Mirrors the reference client's {@code getOrCreate(name, {schema})}; a
    * {@code null} schema behaves like {@link #getOrCreate(String)}.
    */
-  public KeyValueStore getOrCreate(String name, Object schema) {
+  public CompletableFuture<KeyValueStore> getOrCreate(String name, Object schema) {
     return ctx.getOrCreateNamedWithSchema(name, schema, KeyValueStore.class);
   }
 }

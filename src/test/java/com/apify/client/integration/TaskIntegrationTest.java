@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
+import com.apify.client.Publishers;
 import com.apify.client.dataset.DatasetListItemsOptions;
 import com.apify.client.log.StreamedLogOptions;
 import com.apify.client.run.ActorRun;
@@ -37,33 +38,33 @@ class TaskIntegrationTest extends IntegrationBase {
   @Test
   void listTasks() {
     ApifyClient client = requireClient();
-    assertTrue(client.tasks().list(new ListOptions().limit(5L)).getTotal() >= 0);
+    assertTrue(client.tasks().list(new ListOptions().limit(5L)).join().getTotal() >= 0);
   }
 
   @Test
   void getTask() {
     ApifyClient client = requireClient();
-    Task task = client.tasks().create(taskDef(uniqueName("task-get")));
+    Task task = client.tasks().create(taskDef(uniqueName("task-get"))).join();
     try {
-      var got = client.task(task.getId()).get();
+      var got = client.task(task.getId()).get().join();
       assertTrue(got.isPresent());
       assertEquals(task.getId(), got.get().getId());
     } finally {
-      client.task(task.getId()).delete();
+      client.task(task.getId()).delete().join();
     }
   }
 
   @Test
   void taskCrudFlow() {
     ApifyClient client = requireClient();
-    Task task = client.tasks().create(taskDef(uniqueName("task-crud")));
+    Task task = client.tasks().create(taskDef(uniqueName("task-crud"))).join();
     try {
       TaskClient tc = client.task(task.getId());
-      assertTrue(tc.get().isPresent());
-      tc.updateInput(Map.of("message", "updated"));
-      assertTrue(tc.getInput().isPresent());
-      tc.update(Map.of("name", uniqueName("task-renamed")));
-      tc.runs().list(new ListOptions(), new RunListOptions());
+      assertTrue(tc.get().join().isPresent());
+      tc.updateInput(Map.of("message", "updated")).join();
+      assertTrue(tc.getInput().join().isPresent());
+      tc.update(Map.of("name", uniqueName("task-renamed"))).join();
+      tc.runs().list(new ListOptions(), new RunListOptions()).join();
 
       // list() step of the create/get/modify/list/delete flow: verify the just-created task
       // appears in the top-level collection listing.
@@ -72,7 +73,12 @@ class TaskIntegrationTest extends IntegrationBase {
               LIST_FIND_ATTEMPTS,
               LIST_FIND_BACKOFF_MILLIS,
               () ->
-                  client.tasks().list(new ListOptions().desc(true).limit(10L)).getItems().stream()
+                  client
+                      .tasks()
+                      .list(new ListOptions().desc(true).limit(10L))
+                      .join()
+                      .getItems()
+                      .stream()
                       .anyMatch(t -> task.getId().equals(t.getId())));
       assertTrue(foundInList, "expected the just-created task to appear in the top-level list");
 
@@ -83,46 +89,46 @@ class TaskIntegrationTest extends IntegrationBase {
       assertTrue(task.getOptions() != null && "latest".equals(task.getOptions().getBuild()));
       assertTrue(task.getInput() != null);
     } finally {
-      client.task(task.getId()).delete();
+      client.task(task.getId()).delete().join();
     }
   }
 
   @Test
   void taskLastRunAndWebhooks() {
     ApifyClient client = requireClient();
-    Task task = client.tasks().create(taskDef(uniqueName("task-lastrun")));
+    Task task = client.tasks().create(taskDef(uniqueName("task-lastrun"))).join();
     try {
       TaskClient tc = client.task(task.getId());
-      ActorRun run = tc.call(null, new TaskStartOptions(), TEST_ACTOR_WAIT_SECS);
+      ActorRun run = tc.call(null, new TaskStartOptions(), TEST_ACTOR_WAIT_SECS).join();
       assertEquals("SUCCEEDED", run.getStatus());
       assertTrue(run.getStats() != null);
       assertTrue(run.getOptions() != null);
       assertTrue(run.getMeta() != null && run.getMeta().getOrigin() != null);
 
-      var lastRun = tc.lastRun("SUCCEEDED").get();
+      var lastRun = tc.lastRun("SUCCEEDED").get().join();
       assertTrue(lastRun.isPresent());
       assertEquals(run.getId(), lastRun.get().getId());
 
       // Last-run-scoped nested storage GETs (previously untested — only `lastRun().get()` itself
       // was). This task is exclusively owned by this test, so `lastRun` is deterministically the
       // run started above and its default storages are guaranteed to exist.
-      tc.lastRun("SUCCEEDED").dataset().listItems(new DatasetListItemsOptions());
-      tc.lastRun("SUCCEEDED").keyValueStore().getRecord("OUTPUT");
-      assertTrue(tc.lastRun("SUCCEEDED").log().get().isPresent());
+      tc.lastRun("SUCCEEDED").dataset().listItems(new DatasetListItemsOptions()).join();
+      tc.lastRun("SUCCEEDED").keyValueStore().getRecord("OUTPUT").join();
+      assertTrue(tc.lastRun("SUCCEEDED").log().get().join().isPresent());
 
       // Read-only nested webhook collection (GET + iterate); no webhooks are registered for this
       // fresh task, so this just exercises both calls succeeding against an empty result.
-      assertTrue(tc.webhooks().list(new ListOptions()).getTotal() >= 0);
-      assertTrue(!tc.webhooks().iterate(new ListOptions()).hasNext());
+      assertTrue(tc.webhooks().list(new ListOptions()).join().getTotal() >= 0);
+      assertTrue(Publishers.collect(tc.webhooks().iterate(new ListOptions())).join().isEmpty());
     } finally {
-      client.task(task.getId()).delete();
+      client.task(task.getId()).delete().join();
     }
   }
 
   @Test
   void taskCallStreamsLogByDefault() {
     ApifyClient client = requireClient();
-    Task task = client.tasks().create(taskDef(uniqueName("task-call-log")));
+    Task task = client.tasks().create(taskDef(uniqueName("task-call-log"))).join();
     try {
       TaskClient tc = client.task(task.getId());
       List<String> collected = new CopyOnWriteArrayList<>();
@@ -131,9 +137,10 @@ class TaskIntegrationTest extends IntegrationBase {
       // of the wait without any explicit opt-in.
       ActorRun run =
           tc.call(
-              null,
-              new TaskCallOptions().logOptions(new StreamedLogOptions().toLog(collected::add)),
-              TEST_ACTOR_WAIT_SECS);
+                  null,
+                  new TaskCallOptions().logOptions(new StreamedLogOptions().toLog(collected::add)),
+                  TEST_ACTOR_WAIT_SECS)
+              .join();
       assertEquals("SUCCEEDED", run.getStatus());
       // As in ActorRunIntegrationTest#callWithActorCallOptionsStreamsLogByDefault: call()'s
       // internal log-streaming lifecycle closes the stream as soon as the run finishes, which can
@@ -146,7 +153,7 @@ class TaskIntegrationTest extends IntegrationBase {
       // fails here rather than being masked.
       assertCallDefaultStreamedLogNonEmptyIfProduced(client.run(run.getId()), collected);
     } finally {
-      client.task(task.getId()).delete();
+      client.task(task.getId()).delete().join();
     }
   }
 }

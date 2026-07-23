@@ -29,7 +29,7 @@ class UnitHttpTest {
   void successSingleCall() {
     MockTransport transport =
         MockTransport.ofConstant(200, "{\"data\":{\"id\":\"u1\",\"username\":\"bob\"}}");
-    Optional<User> user = client(transport, 8).me().get();
+    Optional<User> user = client(transport, 8).me().get().join();
     assertTrue(user.isPresent());
     assertEquals("u1", user.get().getId());
     assertEquals("bob", user.get().getUsername());
@@ -42,7 +42,8 @@ class UnitHttpTest {
         MockTransport.ofConstant(
             429, "{\"error\":{\"type\":\"rate-limit-exceeded\",\"message\":\"slow down\"}}");
     ApifyApiException ex =
-        assertThrows(ApifyApiException.class, () -> client(transport, 2).me().get());
+        assertThrows(
+            ApifyApiException.class, () -> TestAsync.await(client(transport, 2).me().get()));
     assertEquals(429, ex.getStatusCode());
     assertEquals(3, transport.calls); // 1 initial + 2 retries
     assertEquals(3, ex.getAttempt());
@@ -52,7 +53,7 @@ class UnitHttpTest {
   void serverErrorIsRetried() {
     MockTransport transport =
         MockTransport.ofConstant(503, "{\"error\":{\"type\":\"internal\",\"message\":\"boom\"}}");
-    assertThrows(ApifyApiException.class, () -> client(transport, 1).me().get());
+    assertThrows(ApifyApiException.class, () -> TestAsync.await(client(transport, 1).me().get()));
     assertEquals(2, transport.calls);
   }
 
@@ -61,14 +62,14 @@ class UnitHttpTest {
     MockTransport transport =
         MockTransport.ofConstant(
             400, "{\"error\":{\"type\":\"bad-request\",\"message\":\"nope\"}}");
-    assertThrows(ApifyApiException.class, () -> client(transport, 5).me().get());
+    assertThrows(ApifyApiException.class, () -> TestAsync.await(client(transport, 5).me().get()));
     assertEquals(1, transport.calls);
   }
 
   @Test
   void networkErrorIsRetried() {
     MockTransport transport = new MockTransport(List.of(MockTransport.networkError()));
-    assertThrows(RuntimeException.class, () -> client(transport, 3).me().get());
+    assertThrows(RuntimeException.class, () -> TestAsync.await(client(transport, 3).me().get()));
     assertEquals(4, transport.calls);
   }
 
@@ -80,7 +81,7 @@ class UnitHttpTest {
                 MockTransport.ok(500, "{\"error\":{\"type\":\"internal\",\"message\":\"x\"}}"),
                 MockTransport.ok(500, "{\"error\":{\"type\":\"internal\",\"message\":\"x\"}}"),
                 MockTransport.ok(200, "{\"data\":{\"id\":\"ok\"}}")));
-    Optional<User> user = client(transport, 5).me().get();
+    Optional<User> user = client(transport, 5).me().get().join();
     assertTrue(user.isPresent());
     assertEquals("ok", user.get().getId());
     assertEquals(3, transport.calls);
@@ -91,7 +92,7 @@ class UnitHttpTest {
     MockTransport transport =
         MockTransport.ofConstant(
             404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}");
-    Optional<Actor> actor = client(transport, 5).actor("nope").get();
+    Optional<Actor> actor = client(transport, 5).actor("nope").get().join();
     assertFalse(actor.isPresent());
     assertEquals(1, transport.calls); // no retry on 404
   }
@@ -101,7 +102,7 @@ class UnitHttpTest {
     // The `type` field alone must drive not-found detection; `message` may be absent.
     MockTransport transport =
         MockTransport.ofConstant(404, "{\"error\":{\"type\":\"record-not-found\"}}");
-    Optional<Actor> actor = client(transport, 5).actor("nope").get();
+    Optional<Actor> actor = client(transport, 5).actor("nope").get().join();
     assertFalse(actor.isPresent());
     assertEquals(1, transport.calls); // no retry on 404
   }
@@ -110,7 +111,7 @@ class UnitHttpTest {
   void deleteOnNotFoundWithTypeButNoMessageIsNoOp() {
     MockTransport transport =
         MockTransport.ofConstant(404, "{\"error\":{\"type\":\"record-or-token-not-found\"}}");
-    client(transport, 5).actor("nope").delete(); // must not throw
+    client(transport, 5).actor("nope").delete().join(); // must not throw
     assertEquals(1, transport.calls);
   }
 
@@ -119,7 +120,8 @@ class UnitHttpTest {
     MockTransport transport =
         MockTransport.ofConstant(400, "{\"error\":{\"type\":\"bad-request\"}}");
     ApifyApiException ex =
-        assertThrows(ApifyApiException.class, () -> client(transport, 0).me().get());
+        assertThrows(
+            ApifyApiException.class, () -> TestAsync.await(client(transport, 0).me().get()));
     assertEquals(400, ex.getStatusCode());
     assertEquals("bad-request", ex.getType());
   }
@@ -131,7 +133,8 @@ class UnitHttpTest {
             400,
             "{\"error\":{\"type\":\"bad-request\",\"message\":\"invalid input\",\"data\":{\"field\":\"name\"}}}");
     ApifyApiException ex =
-        assertThrows(ApifyApiException.class, () -> client(transport, 0).me().get());
+        assertThrows(
+            ApifyApiException.class, () -> TestAsync.await(client(transport, 0).me().get()));
     assertEquals(400, ex.getStatusCode());
     assertEquals("bad-request", ex.getType());
     assertTrue(ex.getMessage().contains("invalid input"));
@@ -144,7 +147,7 @@ class UnitHttpTest {
   void zeroRetriesSingleAttempt() {
     MockTransport transport =
         MockTransport.ofConstant(500, "{\"error\":{\"type\":\"internal\",\"message\":\"x\"}}");
-    assertThrows(ApifyApiException.class, () -> client(transport, 0).me().get());
+    assertThrows(ApifyApiException.class, () -> TestAsync.await(client(transport, 0).me().get()));
     assertEquals(1, transport.calls);
   }
 }

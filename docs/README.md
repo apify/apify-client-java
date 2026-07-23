@@ -22,8 +22,11 @@ user-agent suffix, custom HTTP transport).
 Get your API token from the
 [Apify Console → Settings → API & Integrations](https://console.apify.com/settings/integrations).
 
-Methods that fetch a single resource return an `Optional<T>`: a missing resource is reported by an
-empty `Optional` rather than an exception. API failures are thrown as `ApifyApiException` (see
+Every network-calling method returns a `CompletableFuture` (`java.util.concurrent.CompletableFuture`)
+rather than blocking the calling thread — see [Asynchronous API](../README.md#asynchronous-api) in
+the top-level README. Methods that fetch a single resource complete with an `Optional<T>`: a missing
+resource is reported by an empty `Optional` rather than an exception. API failures surface as the
+future's exceptional completion, wrapping an `ApifyApiException` (see
 [error handling](../README.md#error-handling)).
 
 ## Imports and dependencies
@@ -53,16 +56,19 @@ option types, so import each resource you use from its own package:
 For example, the [top-level README's dataset snippet](../README.md#quick-start) needs
 `com.apify.client.ApifyClient`, `com.apify.client.PaginationList`,
 `com.apify.client.dataset.DatasetListItemsOptions`, `com.apify.client.run.ActorRun`,
-`com.apify.client.actor.ActorStartOptions` and `com.fasterxml.jackson.databind.JsonNode` — five
-different packages for one four-line snippet.
+`com.apify.client.actor.ActorStartOptions` and `tools.jackson.databind.JsonNode` — five
+different packages for one short snippet.
 
 Snippets in these docs also assume the standard-library types they use are imported
 (`java.util.List`, `java.util.ArrayList`, `java.util.Map`, `java.util.Optional`,
-`java.util.Iterator`, `java.util.UUID`, `java.util.function.Consumer`, `java.time.Duration`,
-`java.time.Instant`, `java.io.InputStream`). `java.time.Instant` is returned by many model getters
-(e.g. `createdAt`, `modifiedAt`, `nextRunAt`, `lockExpiresAt`).
+`java.util.UUID`, `java.util.function.Consumer`, `java.util.concurrent.CompletableFuture`,
+`java.util.concurrent.Flow`, `java.util.concurrent.CountDownLatch`, `java.time.Duration`,
+`java.time.Instant`, `java.io.InputStream`).
+`java.time.Instant` is returned by many model getters (e.g. `createdAt`, `modifiedAt`, `nextRunAt`,
+`lockExpiresAt`).
 
-Raw-JSON return values use Jackson's `com.fasterxml.jackson.databind.JsonNode`. Jackson is a
+Raw-JSON return values use Jackson's `tools.jackson.databind.JsonNode`. Jackson (3.x; note the
+`tools.jackson.*` package, not the older `com.fasterxml.jackson.databind.*` from Jackson 2) is a
 transitive dependency of this client, so it is already on your classpath.
 
 ## Raw JSON values
@@ -110,7 +116,7 @@ fields later. For example a `me()` `User`'s private account details (email, plan
 …) are available via `getExtra()`, since `User` models only its most commonly used fields.
 
 ```java
-User me = client.me().get().orElseThrow();
+User me = client.me().get().join().orElseThrow();
 Object plan = me.getExtra().get("plan");
 ```
 
@@ -123,7 +129,7 @@ Object plan = me.getExtra().get("plan");
 the message as final.
 
 ```java
-client.setStatusMessage("half way there", new SetStatusMessageOptions().isStatusMessageTerminal(false));
+client.setStatusMessage("half way there", new SetStatusMessageOptions().isStatusMessageTerminal(false)).join();
 ```
 
 ## Optional option fields
@@ -133,7 +139,7 @@ default". Leave a setter uncalled to omit that parameter.
 
 ```java
 ActorListOptions options = new ActorListOptions().my(true).limit(10L);
-PaginationList<Actor> page = client.actors().list(options);
+PaginationList<Actor> page = client.actors().list(options).join();
 ```
 
 ## Common list options — `ListOptions`
@@ -149,7 +155,7 @@ Most `list` methods (builds, tasks, schedules, webhooks, Actor versions) take th
 | `desc(Boolean)` | `Boolean` | If `true`, return items newest-first. |
 
 ```java
-PaginationList<Build> builds = client.builds().list(new ListOptions().limit(50L).desc(true));
+PaginationList<Build> builds = client.builds().list(new ListOptions().limit(50L).desc(true)).join();
 ```
 
 ## Pagination — `PaginationList<T>`
@@ -160,18 +166,28 @@ their own page/head containers instead.
 
 ## Iteration — `iterate` / `iterateItems` / `iterateKeys`
 
-Each paginated collection also offers a lazy `Iterator` that fetches pages on demand: `iterate(...)`
-on the collection clients, `DatasetClient.iterateItems(...)`, and `KeyValueStoreClient.iterateKeys(...)`
-(request-queue requests use `RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the
-**total** number of items yielded; `null`/unset — or a non-positive value such as `0` — means no cap,
-so every item is yielded. (This differs from `list(...)`, which sends `limit=0` to the server
-verbatim rather than treating it as unbounded — the iteration behavior matches the reference JS
-client.) The per-request page size is an optional
-trailing `chunkSize` argument: the per-resource tables below show the `chunkSize` form, and each
-iterator also has an overload that omits it (using the server's default page size). The page size
-does not change which items a collection iterator yields; note the one exception in
-[Storages](storages.md) — `iterateItems` combined with server-side item filters, where the page size
-can affect the result.
+Each paginated collection also offers a lazy `Flow.Publisher` (`java.util.concurrent.Flow.Publisher`,
+the JDK's built-in Reactive Streams type) that fetches pages only as the subscriber signals demand:
+`iterate(...)` on the collection clients, `DatasetClient.iterateItems(...)`, and
+`KeyValueStoreClient.iterateKeys(...)` (request-queue requests use
+`RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the **total** number of items
+yielded; `null`/unset — or a non-positive value such as `0` — means no cap, so every item is
+yielded. (This differs from `list(...)`, which sends `limit=0` to the server verbatim rather than
+treating it as unbounded — the iteration behavior matches the reference JS client.) The per-request
+page size is an optional trailing `chunkSize` argument: the per-resource tables below show the
+`chunkSize` form, and each publisher also has an overload that omits it (using the server's default
+page size). The page size does not change which items a collection publisher yields; note the one
+exception in [Storages](storages.md) — `iterateItems` combined with server-side item filters, where
+the page size can affect the result.
+
+Consume a publisher either by implementing `Flow.Subscriber<T>` yourself (see
+[Asynchronous API](../README.md#asynchronous-api) in the top-level README for the shape), or with
+the convenience bridge `com.apify.client.Publishers.collect(publisher)`, which subscribes with
+unbounded demand and returns a `CompletableFuture<List<T>>`:
+
+```java
+List<Actor> actors = Publishers.collect(client.actors().iterate(new ActorListOptions())).join();
+```
 
 ## Resource pages
 

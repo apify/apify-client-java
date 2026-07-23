@@ -1,25 +1,25 @@
 package com.apify.client.requestqueue;
 
 import com.apify.client.http.ApifyApiException;
-import com.apify.client.http.ApifyClientException;
 import com.apify.client.http.ApifyTransportException;
 import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.Async;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** A client for a specific request queue (and run-nested variants). */
 public final class RequestQueueClient {
@@ -95,25 +95,25 @@ public final class RequestQueueClient {
   }
 
   /** Fetches the queue metadata, or empty if it does not exist. */
-  public Optional<RequestQueue> get() {
+  public CompletableFuture<Optional<RequestQueue>> get() {
     return ctx.getResource("", new QueryParams(), RequestQueue.class);
   }
 
   /** Updates the queue metadata (e.g. name) and returns the updated object. */
-  public RequestQueue update(Object newFields) {
+  public CompletableFuture<RequestQueue> update(Object newFields) {
     return ctx.updateResource("", newFields, RequestQueue.class);
   }
 
   /** Deletes the queue. */
-  public void delete() {
-    ctx.deleteResource("");
+  public CompletableFuture<Void> delete() {
+    return ctx.deleteResource("");
   }
 
   /**
    * Returns the requests at the head (front) of the queue, up to {@code limit} ({@code null} for
    * the server default).
    */
-  public RequestQueueHead listHead(Long limit) {
+  public CompletableFuture<RequestQueueHead> listHead(Long limit) {
     QueryParams params = new QueryParams();
     params.addLong("limit", limit);
     withClientKey(params);
@@ -121,7 +121,8 @@ public final class RequestQueueClient {
   }
 
   /** Adds a request to the queue. If {@code forefront} is true, it is added to the front. */
-  public RequestQueueOperationInfo addRequest(RequestQueueRequest request, boolean forefront) {
+  public CompletableFuture<RequestQueueOperationInfo> addRequest(
+      RequestQueueRequest request, boolean forefront) {
     QueryParams params = new QueryParams();
     params.addBool("forefront", forefront);
     withClientKey(params);
@@ -134,7 +135,7 @@ public final class RequestQueueClient {
   }
 
   /** Fetches a request by ID, or empty if it does not exist. */
-  public Optional<RequestQueueRequest> getRequest(String id) {
+  public CompletableFuture<Optional<RequestQueueRequest>> getRequest(String id) {
     return ctx.getResource(
         "requests/" + ResourceContext.encodePathSegment(id),
         new QueryParams(),
@@ -145,7 +146,8 @@ public final class RequestQueueClient {
    * Updates an existing request (identified by its ID field) and returns the operation info. If
    * {@code forefront} is true, the request is moved to the front of the queue.
    */
-  public RequestQueueOperationInfo updateRequest(RequestQueueRequest request, boolean forefront) {
+  public CompletableFuture<RequestQueueOperationInfo> updateRequest(
+      RequestQueueRequest request, boolean forefront) {
     QueryParams params = new QueryParams();
     params.addBool("forefront", forefront);
     withClientKey(params);
@@ -158,18 +160,24 @@ public final class RequestQueueClient {
   }
 
   /** Deletes a request by ID. */
-  public void deleteRequest(String id) {
+  public CompletableFuture<Void> deleteRequest(String id) {
     QueryParams params = withClientKey(new QueryParams());
     String url =
         ctx.mergedParams(params)
             .applyToUrl(ctx.subUrl("requests/" + ResourceContext.encodePathSegment(id)));
-    try {
-      http.call("DELETE", url, null, "", http.baseRequestTimeout());
-    } catch (ApifyApiException e) {
-      if (!ResourceContext.isNotFound(e)) {
-        throw e;
-      }
-    }
+    return http.call("DELETE", url, null, "", http.baseRequestTimeout())
+        .handle(
+            (resp, error) -> {
+              if (error == null) {
+                return null;
+              }
+              Throwable cause = HttpClientCore.unwrapCompletion(error);
+              if (cause instanceof ApifyApiException apiError
+                  && ResourceContext.isNotFound(apiError)) {
+                return null;
+              }
+              throw rethrow(cause);
+            });
   }
 
   /**
@@ -178,7 +186,7 @@ public final class RequestQueueClient {
    * via {@link #deleteRequestLock}. This is the primary method used by distributed crawlers to
    * coordinate work across multiple workers.
    */
-  public LockedRequestQueueHead listAndLockHead(long lockSecs, Long limit) {
+  public CompletableFuture<LockedRequestQueueHead> listAndLockHead(long lockSecs, Long limit) {
     QueryParams params = new QueryParams();
     params.addLong("lockSecs", lockSecs).addLong("limit", limit);
     withClientKey(params);
@@ -189,7 +197,8 @@ public final class RequestQueueClient {
    * Adds multiple requests to the queue with the default batch options. If {@code forefront} is
    * true, they are added to the front.
    */
-  public BatchAddResult batchAddRequests(List<RequestQueueRequest> requests, boolean forefront) {
+  public CompletableFuture<BatchAddResult> batchAddRequests(
+      List<RequestQueueRequest> requests, boolean forefront) {
     return batchAddRequests(requests, forefront, new BatchAddRequestsOptions());
   }
 
@@ -201,16 +210,17 @@ public final class RequestQueueClient {
    * #MAX_PAYLOAD_SIZE_BYTES}): a chunk of up to 25 requests is further split by cumulative
    * JSON-encoded byte size, so a batch of individually large requests (e.g. sizeable {@code
    * userData}) cannot 413. Chunks are sent using up to {@link BatchAddRequestsOptions#maxParallel}
-   * parallel API calls, and any requests the API leaves unprocessed (typically rate-limited) are
-   * retried with exponential backoff up to {@link
+   * concurrently in-flight chunk requests, and any requests the API leaves unprocessed (typically
+   * rate-limited) are retried with exponential backoff up to {@link
    * BatchAddRequestsOptions#maxUnprocessedRequestsRetries} times. The per-chunk results are merged
    * into a single {@link BatchAddResult}.
    *
-   * <p>This method never throws for an API error, matching the reference client's contract: any
-   * request that could not be confirmed processed — whether due to persistent rate-limiting, server
-   * errors, or a non-retryable client error (e.g. an invalid token or insufficient permissions) —
-   * is returned in {@link BatchAddResult#getUnprocessedRequests()} instead. A single request whose
-   * own JSON encoding already exceeds the payload-size limit is rejected up front with {@link
+   * <p>This method's returned future never completes exceptionally due to an API/transport failure,
+   * matching the reference client's contract: any request that could not be confirmed processed —
+   * whether due to persistent rate-limiting, server errors, or a non-retryable client error (e.g.
+   * an invalid token or insufficient permissions) — is returned in {@link
+   * BatchAddResult#getUnprocessedRequests()} instead. A single request whose own JSON encoding
+   * already exceeds the payload-size limit is rejected up front with {@link
    * IllegalArgumentException}, since no chunk size could ever fit it.
    *
    * <p><b>Caveat:</b> processed-vs-unprocessed reconciliation after a retry matches requests by
@@ -220,7 +230,7 @@ public final class RequestQueueClient {
    * caller-supplied key to match it back against the API's per-attempt response. Callers that rely
    * on {@code batchAddRequests}' return value should set {@code uniqueKey} explicitly.
    */
-  public BatchAddResult batchAddRequests(
+  public CompletableFuture<BatchAddResult> batchAddRequests(
       List<RequestQueueRequest> requests, boolean forefront, BatchAddRequestsOptions options) {
     long payloadSizeLimitBytes =
         MAX_PAYLOAD_SIZE_BYTES
@@ -235,32 +245,53 @@ public final class RequestQueueClient {
       start += chunk.size();
     }
 
-    BatchAddResult merged = new BatchAddResult();
     if (chunks.isEmpty()) {
-      return merged;
+      return CompletableFuture.completedFuture(new BatchAddResult());
     }
 
-    int maxParallel = options.maxParallelValue();
-    if (maxParallel <= 1 || chunks.size() == 1) {
-      for (List<RequestQueueRequest> chunk : chunks) {
-        merged.merge(batchAddChunkWithRetries(chunk, forefront, options));
-      }
-      return merged;
-    }
+    int maxParallel = Math.max(1, options.maxParallelValue());
+    int workerCount = Math.min(maxParallel, chunks.size());
+    BatchAddResult[] resultsByChunk = new BatchAddResult[chunks.size()];
+    AtomicInteger nextChunkIndex = new AtomicInteger(0);
 
-    ExecutorService pool = Executors.newFixedThreadPool(Math.min(maxParallel, chunks.size()));
-    try {
-      List<Future<BatchAddResult>> futures = new ArrayList<>();
-      for (List<RequestQueueRequest> chunk : chunks) {
-        futures.add(pool.submit(() -> batchAddChunkWithRetries(chunk, forefront, options)));
-      }
-      for (Future<BatchAddResult> future : futures) {
-        merged.merge(awaitResult(future));
-      }
-    } finally {
-      pool.shutdownNow();
+    List<CompletableFuture<Void>> workers = new ArrayList<>(workerCount);
+    for (int w = 0; w < workerCount; w++) {
+      workers.add(runBatchAddWorker(chunks, nextChunkIndex, resultsByChunk, forefront, options));
     }
-    return merged;
+    return CompletableFuture.allOf(workers.toArray(CompletableFuture[]::new))
+        .thenApply(
+            unused -> {
+              BatchAddResult merged = new BatchAddResult();
+              for (BatchAddResult chunkResult : resultsByChunk) {
+                merged.merge(chunkResult);
+              }
+              return merged;
+            });
+  }
+
+  /**
+   * One "worker": repeatedly claims the next not-yet-started chunk (via {@code nextChunkIndex}) and
+   * processes it, until every chunk has been claimed. Running {@code workerCount} of these
+   * concurrently bounds how many chunk requests (including their own retries) are in flight at
+   * once, matching {@link BatchAddRequestsOptions#maxParallel} without needing a thread pool - each
+   * worker is a chain of async continuations, not a blocked thread.
+   */
+  private CompletableFuture<Void> runBatchAddWorker(
+      List<List<RequestQueueRequest>> chunks,
+      AtomicInteger nextChunkIndex,
+      BatchAddResult[] resultsByChunk,
+      boolean forefront,
+      BatchAddRequestsOptions options) {
+    int index = nextChunkIndex.getAndIncrement();
+    if (index >= chunks.size()) {
+      return CompletableFuture.completedFuture(null);
+    }
+    return batchAddChunkWithRetries(chunks.get(index), forefront, options)
+        .thenCompose(
+            result -> {
+              resultsByChunk[index] = result;
+              return runBatchAddWorker(chunks, nextChunkIndex, resultsByChunk, forefront, options);
+            });
   }
 
   /**
@@ -317,59 +348,79 @@ public final class RequestQueueClient {
     return Json.toBytes(value).length;
   }
 
-  private static BatchAddResult awaitResult(Future<BatchAddResult> future) {
-    try {
-      return future.get();
-    } catch (ExecutionException e) {
-      Throwable cause = e.getCause();
-      if (cause instanceof RuntimeException) {
-        throw (RuntimeException) cause;
-      }
-      throw new IllegalStateException("batch add request failed", cause);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new ApifyTransportException(e);
-    }
-  }
-
   /**
    * Adds one chunk (already sized to the API limit), retrying requests the API leaves unprocessed
-   * with exponential backoff. Never throws regardless of the failure cause, matching the reference
-   * client's {@code _batchAddRequestsWithRetries}: on any failure — a non-retryable 4xx/5xx API
-   * response, or a transport-level failure (connection error, timeout) that never produced a
-   * response at all — the remaining requests in the chunk are simply returned as unprocessed rather
-   * than surfaced as an exception, so the method keeps a single, uniform never-throws contract
-   * across both {@link ApifyApiException} and {@link ApifyTransportException}.
+   * with exponential backoff (a scheduled delay, not a blocked thread; see {@link Async}). The
+   * returned future never completes exceptionally, matching the reference client's {@code
+   * _batchAddRequestsWithRetries}: on any failure — a non-retryable 4xx/5xx API response, or a
+   * transport-level failure (connection error, timeout) that never produced a response at all — the
+   * remaining requests in the chunk are simply reported as unprocessed rather than surfaced as an
+   * exception, so the method keeps a single, uniform never-fails contract across both {@link
+   * ApifyApiException} and {@link com.apify.client.http.ApifyTransportException}.
    */
-  private BatchAddResult batchAddChunkWithRetries(
+  private CompletableFuture<BatchAddResult> batchAddChunkWithRetries(
       List<RequestQueueRequest> chunk, boolean forefront, BatchAddRequestsOptions options) {
     int maxRetries = options.maxUnprocessedRequestsRetriesValue();
     long minDelayMillis = options.minDelayBetweenUnprocessedRequestsRetriesMillisValue();
+    return batchAddAttempt(chunk, chunk, List.of(), forefront, 0, maxRetries, minDelayMillis);
+  }
 
-    List<RequestQueueRequest> remaining = chunk;
-    List<RequestQueueOperationInfo> processed = new ArrayList<>();
+  /** One attempt of the retry loop backing {@link #batchAddChunkWithRetries}. */
+  private CompletableFuture<BatchAddResult> batchAddAttempt(
+      List<RequestQueueRequest> chunk,
+      List<RequestQueueRequest> toSend,
+      List<RequestQueueOperationInfo> processedSoFar,
+      boolean forefront,
+      int attempt,
+      int maxRetries,
+      long minDelayMillis) {
+    return batchAddChunk(toSend, forefront)
+        .handle(
+            (response, error) -> {
+              if (error == null) {
+                return response;
+              }
+              Throwable cause = HttpClientCore.unwrapCompletion(error);
+              if (cause instanceof ApifyApiException || cause instanceof ApifyTransportException) {
+                // A non-retryable API error or a transport failure: stop retrying this chunk, with
+                // whatever was already confirmed processed. Any other (unexpected) exception is
+                // rethrown rather than swallowed.
+                return null;
+              }
+              throw rethrow(cause);
+            })
+        .thenCompose(
+            response -> {
+              List<RequestQueueOperationInfo> processed = new ArrayList<>(processedSoFar);
+              if (response != null) {
+                processed.addAll(response.getProcessedRequests());
+              }
+              List<RequestQueueRequest> stillRemaining = requestsNotYetProcessed(chunk, processed);
+              // Any client-level failure (response == null, i.e. the batchAddChunk call above
+              // failed) stops retrying this chunk immediately; whatever has not been confirmed
+              // processed is reported as unprocessed below, never thrown - matching the reference
+              // client's contract.
+              boolean stop = response == null || stillRemaining.isEmpty() || attempt >= maxRetries;
+              if (stop) {
+                return CompletableFuture.completedFuture(finish(chunk, processed));
+              }
+              return Async.delay(backoffDelay(attempt, minDelayMillis))
+                  .thenCompose(
+                      unused ->
+                          batchAddAttempt(
+                              chunk,
+                              stillRemaining,
+                              processed,
+                              forefront,
+                              attempt + 1,
+                              maxRetries,
+                              minDelayMillis));
+            })
+        .exceptionally(error -> finish(chunk, processedSoFar));
+  }
 
-    for (int attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        BatchAddResult response = batchAddChunk(remaining, forefront);
-        processed.addAll(response.getProcessedRequests());
-        remaining = requestsNotYetProcessed(chunk, processed);
-        if (remaining.isEmpty()) {
-          break;
-        }
-      } catch (ApifyClientException ignored) {
-        // Any client-level failure — an API error response (rate-limit, server error, or a hard
-        // client error such as a bad token) or a transport failure that never reached the API at
-        // all (timeout, connection reset) — stops retrying this chunk immediately; whatever has
-        // not been confirmed processed is reported as unprocessed below, never thrown — matching
-        // the reference client's contract.
-        break;
-      }
-      if (attempt < maxRetries) {
-        sleepBackoff(attempt, minDelayMillis);
-      }
-    }
-
+  private static BatchAddResult finish(
+      List<RequestQueueRequest> chunk, List<RequestQueueOperationInfo> processed) {
     BatchAddResult result = new BatchAddResult();
     result.setProcessedRequests(processed);
     // Unprocessed = everything sent minus everything acknowledged processed. Computing it here
@@ -395,25 +446,22 @@ public final class RequestQueueClient {
     return remaining;
   }
 
-  private static void sleepBackoff(int attempt, long minDelayMillis) {
+  /**
+   * {@code (1 + random) * 2^attempt * minDelay} — exponential backoff with jitter, matching the
+   * reference. The exponent is capped so a pathologically large retry count cannot overflow the
+   * delay into an absurd (or negative) duration.
+   */
+  private static Duration backoffDelay(int attempt, long minDelayMillis) {
     if (minDelayMillis <= 0) {
-      return;
+      return Duration.ZERO;
     }
-    // (1 + random) * 2^attempt * minDelay — exponential backoff with jitter, matching the
-    // reference. The exponent is capped so a pathologically large retry count cannot overflow the
-    // delay into an absurd (or negative, after the long cast) sleep.
     int cappedAttempt = Math.min(attempt, MAX_BACKOFF_EXPONENT);
     double factor = (1 + ThreadLocalRandom.current().nextDouble()) * Math.pow(2, cappedAttempt);
-    long delayMillis = (long) Math.floor(factor * minDelayMillis);
-    try {
-      Thread.sleep(delayMillis);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new ApifyTransportException(e);
-    }
+    return Duration.ofMillis((long) Math.floor(factor * minDelayMillis));
   }
 
-  private BatchAddResult batchAddChunk(List<RequestQueueRequest> requests, boolean forefront) {
+  private CompletableFuture<BatchAddResult> batchAddChunk(
+      List<RequestQueueRequest> requests, boolean forefront) {
     QueryParams params = new QueryParams();
     params.addBool("forefront", forefront);
     withClientKey(params);
@@ -429,13 +477,13 @@ public final class RequestQueueClient {
    * Deletes multiple requests in a single call. Each entry identifies a request (e.g. by id or
    * uniqueKey).
    */
-  public BatchDeleteResult batchDeleteRequests(Object requests) {
+  public CompletableFuture<BatchDeleteResult> batchDeleteRequests(Object requests) {
     QueryParams params = withClientKey(new QueryParams());
     return ctx.deleteWithBody("requests/batch", params, requests, BatchDeleteResult.class);
   }
 
   /** Lists the queue's requests with pagination. */
-  public RequestsList listRequests(ListRequestsOptions options) {
+  public CompletableFuture<RequestsList> listRequests(ListRequestsOptions options) {
     options.validate();
     QueryParams params = new QueryParams();
     options.apply(params);
@@ -447,7 +495,8 @@ public final class RequestQueueClient {
    * Extends the lock on a request by {@code lockSecs} seconds. If {@code forefront} is true, the
    * request is moved to the front when its lock expires.
    */
-  public RequestLockInfo prolongRequestLock(String id, long lockSecs, boolean forefront) {
+  public CompletableFuture<RequestLockInfo> prolongRequestLock(
+      String id, long lockSecs, boolean forefront) {
     QueryParams params = new QueryParams();
     params.addLong("lockSecs", lockSecs).addBool("forefront", forefront);
     withClientKey(params);
@@ -463,43 +512,49 @@ public final class RequestQueueClient {
    * Releases the lock on a request. If {@code forefront} is true, the request is moved to the front
    * of the queue.
    */
-  public void deleteRequestLock(String id, boolean forefront) {
+  public CompletableFuture<Void> deleteRequestLock(String id, boolean forefront) {
     QueryParams params = new QueryParams();
     params.addBool("forefront", forefront);
     withClientKey(params);
     String url =
         ctx.mergedParams(params)
             .applyToUrl(ctx.subUrl("requests/" + ResourceContext.encodePathSegment(id) + "/lock"));
-    try {
-      http.call("DELETE", url, null, "", http.baseRequestTimeout());
-    } catch (ApifyApiException e) {
-      if (!ResourceContext.isNotFound(e)) {
-        throw e;
-      }
-    }
+    return http.call("DELETE", url, null, "", http.baseRequestTimeout())
+        .handle(
+            (resp, error) -> {
+              if (error == null) {
+                return null;
+              }
+              Throwable cause = HttpClientCore.unwrapCompletion(error);
+              if (cause instanceof ApifyApiException apiError
+                  && ResourceContext.isNotFound(apiError)) {
+                return null;
+              }
+              throw rethrow(cause);
+            });
   }
 
   /** Releases all locks the client holds on this queue's requests. */
-  public UnlockRequestsResult unlockRequests() {
+  public CompletableFuture<UnlockRequestsResult> unlockRequests() {
     QueryParams params = withClientKey(new QueryParams());
     return ctx.postWithBody("requests/unlock", params, null, "", UnlockRequestsResult.class);
   }
 
   /**
-   * Returns a lazy iterator over all requests in the queue, fetching pages of up to {@code
-   * pageLimit} requests at a time ({@code null} for the server default). Equivalent to {@link
-   * #paginateRequests(Long, Long, List) paginateRequests(null, pageLimit, null)} (no total cap, no
-   * state filter).
+   * Returns a lazy, backpressure-aware publisher over all requests in the queue, fetching pages of
+   * up to {@code pageLimit} requests at a time ({@code null} for the server default). Equivalent to
+   * {@link #paginateRequests(Long, Long, List) paginateRequests(null, pageLimit, null)} (no total
+   * cap, no state filter).
    */
-  public Iterator<RequestQueueRequest> paginateRequests(Long pageLimit) {
+  public Flow.Publisher<RequestQueueRequest> paginateRequests(Long pageLimit) {
     return paginateRequests(null, pageLimit, null);
   }
 
   /**
-   * Returns a lazy iterator over the queue's requests via the cursor-based listing endpoint. {@code
-   * totalLimit} caps the total number of requests yielded across all pages ({@code
-   * null}/non-positive = unbounded); {@code chunkSize} is the per-request page size ({@code null} =
-   * server default); {@code filter} restricts to requests in the given states ({@link
+   * Returns a lazy, backpressure-aware publisher over the queue's requests via the cursor-based
+   * listing endpoint. {@code totalLimit} caps the total number of requests yielded across all pages
+   * ({@code null}/non-positive = unbounded); {@code chunkSize} is the per-request page size ({@code
+   * null} = server default); {@code filter} restricts to requests in the given states ({@link
    * ListRequestsOptions#FILTER_LOCKED}/{@link ListRequestsOptions#FILTER_PENDING}, {@code null} =
    * no filter), matching {@link #listRequests(ListRequestsOptions)}'s filter.
    *
@@ -507,79 +562,182 @@ public final class RequestQueueClient {
    * exclusiveStartId}/{@code cursor} is not supported here (use {@link
    * #listRequests(ListRequestsOptions)} directly for that single-page use case).
    */
-  public Iterator<RequestQueueRequest> paginateRequests(
+  public Flow.Publisher<RequestQueueRequest> paginateRequests(
       Long totalLimit, Long chunkSize, List<String> filter) {
-    return new RequestsIterator(totalLimit, chunkSize, filter);
+    return new RequestsPublisher(totalLimit, chunkSize, filter);
   }
 
-  /** Lazily iterates over a request queue's requests via the cursor-based listing endpoint. */
-  private final class RequestsIterator implements Iterator<RequestQueueRequest> {
+  /**
+   * Lazily publishes a request queue's requests via the cursor-based listing endpoint, fetching a
+   * page only once the subscriber has signalled demand. Supports a single subscriber, like {@link
+   * com.apify.client.internal.AsyncPaginatedPublisher}, whose draining design this mirrors (cursor
+   * pagination instead of offset/limit, plus the "not yet started" distinction the cursor-based
+   * termination check needs, are the only real differences).
+   */
+  private final class RequestsPublisher implements Flow.Publisher<RequestQueueRequest> {
     private final Long totalLimit;
     private final Long chunkSize;
     private final List<String> filter;
-    private List<RequestQueueRequest> buffer = List.of();
-    private int pos;
-    private String nextCursor;
-    private long yielded;
-    private boolean started;
-    private boolean exhausted;
+    private final AtomicBoolean subscribed = new AtomicBoolean();
 
-    RequestsIterator(Long totalLimit, Long chunkSize, List<String> filter) {
+    RequestsPublisher(Long totalLimit, Long chunkSize, List<String> filter) {
       this.totalLimit = totalLimit != null && totalLimit > 0 ? totalLimit : null;
       this.chunkSize = chunkSize;
       this.filter = filter;
     }
 
     @Override
-    public boolean hasNext() {
-      while (pos >= buffer.size()) {
-        if (exhausted || (started && (nextCursor == null || nextCursor.isEmpty()))) {
-          return false;
+    public void subscribe(Flow.Subscriber<? super RequestQueueRequest> subscriber) {
+      if (!subscribed.compareAndSet(false, true)) {
+        subscriber.onSubscribe(
+            new Flow.Subscription() {
+              @Override
+              public void request(long n) {}
+
+              @Override
+              public void cancel() {}
+            });
+        subscriber.onError(
+            new IllegalStateException(
+                "This publisher supports only a single subscriber (already subscribed)"));
+        return;
+      }
+      subscriber.onSubscribe(new Session(subscriber));
+    }
+
+    private final class Session implements Flow.Subscription {
+      private final Flow.Subscriber<? super RequestQueueRequest> subscriber;
+      private final AtomicLong requested = new AtomicLong();
+      private final AtomicBoolean draining = new AtomicBoolean();
+      private final AtomicBoolean cancelled = new AtomicBoolean();
+      private final AtomicBoolean terminated = new AtomicBoolean();
+
+      // Only touched from within the draining-guarded section; see AsyncPaginatedPublisher.Session.
+      private List<RequestQueueRequest> buffer = List.of();
+      private int pos;
+      private String nextCursor;
+      private long yielded;
+      private boolean started;
+      private boolean exhausted;
+
+      Session(Flow.Subscriber<? super RequestQueueRequest> subscriber) {
+        this.subscriber = subscriber;
+      }
+
+      @Override
+      public void request(long n) {
+        if (n <= 0) {
+          if (terminated.compareAndSet(false, true)) {
+            subscriber.onError(
+                new IllegalArgumentException(
+                    "Reactive Streams violation: requested amount must be positive, was " + n));
+          }
+          return;
         }
-        if (totalLimit != null && yielded >= totalLimit) {
-          return false;
+        requested.updateAndGet(current -> current + n < 0 ? Long.MAX_VALUE : current + n);
+        drain();
+      }
+
+      @Override
+      public void cancel() {
+        cancelled.set(true);
+      }
+
+      private void drain() {
+        if (draining.compareAndSet(false, true)) {
+          drainLoop();
+        }
+      }
+
+      private boolean isExhausted() {
+        return exhausted
+            || (started && (nextCursor == null || nextCursor.isEmpty()))
+            || (totalLimit != null && yielded >= totalLimit);
+      }
+
+      private void drainLoop() {
+        while (!cancelled.get() && requested.get() > 0 && pos < buffer.size()) {
+          RequestQueueRequest item = buffer.get(pos++);
+          yielded++;
+          requested.decrementAndGet();
+          subscriber.onNext(item);
+        }
+        if (cancelled.get()) {
+          draining.set(false);
+          return;
+        }
+        if (pos < buffer.size()) {
+          draining.set(false);
+          if (requested.get() > 0 && pos < buffer.size()) {
+            drain();
+          }
+          return;
+        }
+        if (isExhausted()) {
+          if (terminated.compareAndSet(false, true)) {
+            subscriber.onComplete();
+          }
+          draining.set(false);
+          return;
         }
         fetchPage();
       }
-      return true;
-    }
 
-    @Override
-    public RequestQueueRequest next() {
-      if (!hasNext()) {
-        throw new NoSuchElementException();
+      private void fetchPage() {
+        QueryParams params = new QueryParams();
+        Long capRemaining = totalLimit != null ? totalLimit - yielded : null;
+        Long pageLimit =
+            capRemaining == null
+                ? chunkSize
+                : (chunkSize == null ? capRemaining : Math.min(capRemaining, chunkSize));
+        params.addLong("limit", pageLimit);
+        if (nextCursor != null && !nextCursor.isEmpty()) {
+          params.addString("cursor", nextCursor);
+        }
+        params.addCsv("filter", filter);
+        withClientKey(params);
+        ctx.getResourceRequired("requests", params, RequestsList.class)
+            .whenComplete(
+                (page, error) -> {
+                  if (cancelled.get()) {
+                    draining.set(false);
+                    return;
+                  }
+                  if (error != null) {
+                    if (terminated.compareAndSet(false, true)) {
+                      subscriber.onError(HttpClientCore.unwrapCompletion(error));
+                    }
+                    draining.set(false);
+                    return;
+                  }
+                  applyPage(page, capRemaining);
+                  drainLoop();
+                });
       }
-      yielded++;
-      return buffer.get(pos++);
-    }
 
-    private void fetchPage() {
-      QueryParams params = new QueryParams();
-      Long capRemaining = totalLimit != null ? totalLimit - yielded : null;
-      Long pageLimit =
-          capRemaining == null
-              ? chunkSize
-              : (chunkSize == null ? capRemaining : Math.min(capRemaining, chunkSize));
-      params.addLong("limit", pageLimit);
-      if (nextCursor != null && !nextCursor.isEmpty()) {
-        params.addString("cursor", nextCursor);
-      }
-      params.addCsv("filter", filter);
-      withClientKey(params);
-      RequestsList page = ctx.getResourceRequired("requests", params, RequestsList.class);
-      started = true;
-      buffer = page.getItems();
-      pos = 0;
-      nextCursor = page.getNextCursor();
-      // Defensively trim to the cap in case the server returned more than requested, matching
-      // PaginatedIterator's same guard, so a caller never sees more than `totalLimit` items even
-      // if the server ignores (or overshoots) the requested per-page `limit`.
-      if (capRemaining != null && buffer.size() > capRemaining) {
-        buffer = buffer.subList(0, capRemaining.intValue());
-      }
-      if (buffer.isEmpty() && (nextCursor == null || nextCursor.isEmpty())) {
-        exhausted = true;
+      private void applyPage(RequestsList page, Long capRemaining) {
+        started = true;
+        buffer = page.getItems();
+        pos = 0;
+        nextCursor = page.getNextCursor();
+        // Defensively trim to the cap in case the server returned more than requested, matching
+        // AsyncPaginatedPublisher's same guard, so a subscriber never sees more than `totalLimit`
+        // items even if the server ignores (or overshoots) the requested per-page `limit`.
+        if (capRemaining != null && buffer.size() > capRemaining) {
+          buffer = buffer.subList(0, capRemaining.intValue());
+        }
+        if (buffer.isEmpty() && (nextCursor == null || nextCursor.isEmpty())) {
+          exhausted = true;
+        }
       }
     }
+  }
+
+  /** Rethrows a classified cause as an unchecked exception, as-is (defensive fallback only). */
+  private static RuntimeException rethrow(Throwable cause) {
+    if (cause instanceof RuntimeException runtimeException) {
+      return runtimeException;
+    }
+    return new ApifyTransportException(cause);
   }
 }

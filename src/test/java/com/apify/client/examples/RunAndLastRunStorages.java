@@ -16,17 +16,19 @@ public final class RunAndLastRunStorages {
   public static void main(String[] args) {
     ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
 
-    client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L);
+    client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L).join();
 
-    Optional<ActorRun> lastRun = client.actor("apify/hello-world").lastRun("SUCCEEDED").get();
+    Optional<ActorRun> lastRun =
+        client.actor("apify/hello-world").lastRun("SUCCEEDED").get().join();
     if (lastRun.isEmpty()) {
       throw new IllegalStateException("no succeeded run found");
     }
     ActorRun run = lastRun.get();
     System.out.println("Last run: " + run.getId());
 
-    var items = client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions());
+    var items =
+        client.dataset(run.getDefaultDatasetId()).listItems(new DatasetListItemsOptions()).join();
     System.out.println("Items in this page of the last run's dataset: " + items.getCount());
-    client.keyValueStore(run.getDefaultKeyValueStoreId()).getRecord("OUTPUT");
+    client.keyValueStore(run.getDefaultKeyValueStoreId()).getRecord("OUTPUT").join();
   }
 }

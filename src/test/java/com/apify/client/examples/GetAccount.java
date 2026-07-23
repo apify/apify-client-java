@@ -14,7 +14,7 @@ public final class GetAccount {
 
   public static void main(String[] args) {
     ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
-    Optional<User> user = client.me().get();
+    Optional<User> user = client.me().get().join();
     if (user.isEmpty()) {
       throw new IllegalStateException("current user not found");
     }

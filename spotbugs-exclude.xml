@@ -46,6 +46,13 @@
      {@code extra} map each time, which is wasted work for a map that is (by construction) never
      mutated after deserialization, so copying is not the fix here - the false positive is. Listed
      per getter (not per class) to keep the exclusion exactly as narrow as the finding it suppresses.
+
+  5. EI_EXPOSE_REP2 on {@code ListPublisher}'s constructor, which stores the caller-supplied {@code
+     CompletableFuture<List<T>>} straight into a field. A {@code CompletableFuture} is a handle to an
+     in-flight, externally-completed async computation, not a value object - there is no meaningful
+     way to "defensively copy" one (copying a reference to the same underlying completion is not a
+     copy at all, and there is no API to snapshot/clone a future's eventual result ahead of time), so
+     the usual fix for this finding does not apply here.
 -->
 <FindBugsFilter>
   <Match>
@@ -53,6 +60,10 @@
       <Class name="com.apify.client.actor.ActorClient"/>
       <Class name="com.apify.client.task.TaskClient"/>
     </Or>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="com.apify.client.internal.ListPublisher"/>
     <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
   <Match>

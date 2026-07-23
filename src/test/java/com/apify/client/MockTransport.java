@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Flow;
 import javax.net.ssl.SSLSession;
@@ -31,9 +32,9 @@ final class MockTransport implements HttpTransport {
   static final class Scripted {
     final int status;
     final byte[] body;
-    final IOException error;
+    final Exception error;
 
-    Scripted(int status, String body, IOException error) {
+    Scripted(int status, String body, Exception error) {
       this.status = status;
       this.body = body == null ? new byte[0] : body.getBytes(StandardCharsets.UTF_8);
       this.error = error;
@@ -85,7 +86,7 @@ final class MockTransport implements HttpTransport {
 
   // synchronized: batchAddRequests may drive this transport from several threads at once.
   @Override
-  public synchronized HttpResponse<byte[]> send(HttpRequest request) throws IOException {
+  public synchronized CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request) {
     int idx = calls++;
     lastHeaders = request.headers();
     lastUrl = request.uri().toString();
@@ -100,9 +101,11 @@ final class MockTransport implements HttpTransport {
     }
     Scripted r = responses.get(idx);
     if (r.error != null) {
-      throw r.error;
+      CompletableFuture<HttpResponse<byte[]>> failed = new CompletableFuture<>();
+      failed.completeExceptionally(r.error);
+      return failed;
     }
-    return new FakeResponse(request.uri(), r.status, r.body);
+    return CompletableFuture.completedFuture(new FakeResponse(request.uri(), r.status, r.body));
   }
 
   /** Scripts the next {@link #sendStreamingResponse} call to return the given status and body. */
@@ -124,16 +127,18 @@ final class MockTransport implements HttpTransport {
   }
 
   @Override
-  public synchronized HttpResponse<InputStream> sendStreamingResponse(HttpRequest request) {
+  public synchronized CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(
+      HttpRequest request) {
     calls++;
     lastUrl = request.uri().toString();
     lastMethod = request.method();
     if (streamBody != null) {
-      return new FakeStreamResponse(request.uri(), streamBodyStatus, streamBody);
+      return CompletableFuture.completedFuture(
+          new FakeStreamResponse(request.uri(), streamBodyStatus, streamBody));
     }
     Scripted r = streamResponse != null ? streamResponse : responses.get(0);
-    return new FakeStreamResponse(
-        request.uri(), r.status, new java.io.ByteArrayInputStream(r.body));
+    return CompletableFuture.completedFuture(
+        new FakeStreamResponse(request.uri(), r.status, new java.io.ByteArrayInputStream(r.body)));
   }
 
   private static byte[] readBody(HttpRequest request) {

@@ -5,6 +5,49 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-23
+
+### Changed
+
+- **Breaking:** migrated from Jackson 2 to Jackson 3. Dependency `groupId` changes from
+  `com.fasterxml.jackson.core` to `tools.jackson.core` for `jackson-databind`;
+  `jackson-datatype-jsr310` is no longer a dependency (Java-time (de)serialization is now built into
+  `jackson-databind`). Any public type coming from `com.fasterxml.jackson.databind` (e.g. `JsonNode`
+  on `DatasetClient`/`TaskClient`/`ActorClient`/...) now comes from `tools.jackson.databind` instead;
+  `com.fasterxml.jackson.annotation` (the annotation types) is unchanged.
+- **Breaking:** every network-calling method on `ApifyClient` and its resource clients is now
+  asynchronous and non-blocking, returning a `java.util.concurrent.CompletableFuture` instead of
+  blocking the calling thread and returning its result directly (e.g. `Optional<T> get()` is now
+  `CompletableFuture<Optional<T>> get()`; a `void`-returning call is now `CompletableFuture<Void>`).
+- **Breaking:** every paginated `iterate(...)`/`paginateRequests(...)` method now returns a
+  `java.util.concurrent.Flow.Publisher` instead of a blocking `java.util.Iterator`, fetching pages
+  only as the subscriber signals demand (`Flow.Subscription#request(long)`).
+- **Breaking:** `HttpTransport.send`/`sendStreamingResponse` replaced with non-blocking
+  `sendAsync`/`sendStreamingAsync`, both returning `CompletableFuture<HttpResponse<...>>`;
+  `DefaultHttpTransport` is now backed by the JDK `HttpClient`'s own `sendAsync`.
+- **Breaking:** `HttpTimeoutException` no longer extends `java.io.IOException`; it is now a plain
+  unchecked `RuntimeException`, matching the transport contract no longer declaring any checked
+  exception.
+- Retry backoff and the `waitForFinish`/`batchAddRequests` polling delays are now scheduled timers
+  instead of `Thread.sleep`, so no thread is blocked while a call is being retried or polled.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-07-22T122437Z`.
+
+### Added
+
+- `com.apify.client.Publishers.collect(Flow.Publisher<T>)`: a convenience that subscribes with
+  unbounded demand and collects a publisher's items into a `CompletableFuture<List<T>>`, for callers
+  that do not need backpressure.
+
+### Fixed
+
+- `Webhook.getRequestUrl()`/`WebhookDispatchWebhookInfo.getRequestUrl()` javadoc now documents that
+  the field is `null` for a hook action other than the conventional HTTP case (e.g. a Slack or email
+  notification), matching the OpenAPI specification.
+- A JSON `null` for a primitive numeric model field (e.g. `ActorRunStats` fields before a run's
+  stats are fully populated) no longer fails deserialization; Jackson 3 defaults this stricter than
+  Jackson 2 did, so the mapper now explicitly restores the previous, lenient (`null` -> zero)
+  behavior.
+
 ## [0.4.0] - 2026-07-20
 
 ### Changed

@@ -1,10 +1,10 @@
 package com.apify.client.schedule;
 
 import com.apify.client.ApifyResource;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
 
 /** A schedule automatically starts Actor or task runs at specified times. */
 public final class Schedule extends ApifyResource {

@@ -50,22 +50,22 @@ public final class CreateBuildRunActor {
                                 "content",
                                     "console.log('hello from the java client example');")))));
 
-    Actor created = client.actors().create(actorDef);
+    Actor created = client.actors().create(actorDef).join();
     try {
       System.out.println("Created actor " + created.getId());
       ActorClient actor = client.actor(created.getId());
 
-      Build build = actor.build("0.0", new ActorBuildOptions());
-      client.build(build.getId()).waitForFinish(300L);
+      Build build = actor.build("0.0", new ActorBuildOptions()).join();
+      client.build(build.getId()).waitForFinish(300L).join();
       System.out.println("Built actor (build " + build.getId() + ")");
 
-      ActorRun run = actor.call(null, new ActorStartOptions(), 120L);
+      ActorRun run = actor.call(null, new ActorStartOptions(), 120L).join();
       System.out.println("Run " + run.getId() + " finished with status " + run.getStatus());
 
-      Optional<String> log = client.run(run.getId()).log().get();
+      Optional<String> log = client.run(run.getId()).log().get().join();
       log.ifPresent(text -> System.out.println("--- run log ---\n" + text));
     } finally {
-      client.actor(created.getId()).delete();
+      client.actor(created.getId()).delete().join();
     }
   }
 }

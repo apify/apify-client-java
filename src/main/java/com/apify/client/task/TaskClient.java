@@ -1,7 +1,6 @@
 package com.apify.client.task;
 
 import com.apify.client.ApifyClient;
-import com.apify.client.http.ApiResponse;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
@@ -13,8 +12,9 @@ import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
 import com.apify.client.run.RunCollectionClient;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import tools.jackson.databind.JsonNode;
 
 /**
  * A client for a specific Actor task.
@@ -34,42 +34,42 @@ public final class TaskClient {
   }
 
   /** Fetches the task object, or empty if it does not exist. */
-  public Optional<Task> get() {
+  public CompletableFuture<Optional<Task>> get() {
     return ctx.getResource("", new QueryParams(), Task.class);
   }
 
   /** Updates the task with the given fields and returns the updated object. */
-  public Task update(Object newFields) {
+  public CompletableFuture<Task> update(Object newFields) {
     return ctx.updateResource("", newFields, Task.class);
   }
 
   /** Deletes the task. */
-  public void delete() {
-    ctx.deleteResource("");
+  public CompletableFuture<Void> delete() {
+    return ctx.deleteResource("");
   }
 
   /**
-   * Starts the task and returns immediately with the created run. {@code input} optionally
-   * overrides the task's stored input ({@code null} to use the stored input).
+   * Starts the task and completes with the created run as soon as it exists (no waiting). {@code
+   * input} optionally overrides the task's stored input ({@code null} to use the stored input).
    */
-  public ActorRun start(Object input, TaskStartOptions options) {
+  public CompletableFuture<ActorRun> start(Object input, TaskStartOptions options) {
     return RunStartSupport.start(ctx, input, options::apply, options.contentTypeOrDefault());
   }
 
   /**
-   * Starts the task and waits (client-side polling) for it to finish. {@code waitSecs} bounds the
+   * Starts the task and waits (non-blocking, polling) for it to finish. {@code waitSecs} bounds the
    * wait; {@code null} waits indefinitely.
    *
    * <p>This overload does not stream the run's log; use {@link #call(Object, TaskCallOptions,
    * Long)} for that (matching the reference client's default {@code call} behavior).
    */
-  public ActorRun call(Object input, TaskStartOptions options, Long waitSecs) {
+  public CompletableFuture<ActorRun> call(Object input, TaskStartOptions options, Long waitSecs) {
     return RunStartSupport.call(
         root, ctx, input, options::apply, options.contentTypeOrDefault(), waitSecs);
   }
 
   /**
-   * Starts the task and waits (client-side polling) for it to finish, additionally streaming the
+   * Starts the task and waits (non-blocking, polling) for it to finish, additionally streaming the
    * run's log for the duration of the wait — matching the reference client's {@code call}, whose
    * {@code options.log} defaults to {@code 'default'}. {@code waitSecs} bounds the wait; {@code
    * null} waits indefinitely.
@@ -79,7 +79,7 @@ public final class TaskClient {
    * TaskCallOptions#disableLogStreaming()} to opt out entirely, or {@link
    * TaskCallOptions#logOptions(com.apify.client.log.StreamedLogOptions)} for a custom destination.
    */
-  public ActorRun call(Object input, TaskCallOptions options, Long waitSecs) {
+  public CompletableFuture<ActorRun> call(Object input, TaskCallOptions options, Long waitSecs) {
     TaskCallOptions opts = options != null ? options : new TaskCallOptions();
     TaskStartOptions startOptions = opts.toStartOptions();
     return RunStartSupport.callWithLogStreaming(
@@ -94,16 +94,17 @@ public final class TaskClient {
   }
 
   /** Fetches the task's stored input, or empty if none is set. */
-  public Optional<JsonNode> getInput() {
-    ApiResponse resp = ctx.getRaw("input", new QueryParams());
-    if (resp == null) {
-      return Optional.empty();
-    }
-    return Optional.of(Json.parse(resp.body(), JsonNode.class));
+  public CompletableFuture<Optional<JsonNode>> getInput() {
+    return ctx.getRaw("input", new QueryParams())
+        .thenApply(
+            resp ->
+                resp == null
+                    ? Optional.empty()
+                    : Optional.of(Json.parse(resp.body(), JsonNode.class)));
   }
 
   /** Replaces the task's stored input and returns the updated input. */
-  public JsonNode updateInput(Object input) {
+  public CompletableFuture<JsonNode> updateInput(Object input) {
     return ctx.putWithBodyNoEnvelope(
         "input",
         new QueryParams(),
