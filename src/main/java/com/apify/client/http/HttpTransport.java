@@ -27,7 +27,11 @@ public interface HttpTransport {
   /**
    * Sends a request and buffers the whole response body as bytes, completing the returned future
    * once the exchange finishes. Completes exceptionally with an {@link HttpTimeoutException} on a
-   * timeout, or another {@link java.io.IOException} for any other transport-level failure.
+   * timeout; any other transport-level failure (connection refused, DNS, ...) completes it with
+   * whatever unchecked {@code Throwable} the transport implementation fails with - for {@link
+   * DefaultHttpTransport}, that is typically an {@code IOException} the JDK {@link
+   * java.net.http.HttpClient} itself failed with, since this contract has no checked-exception
+   * requirement of its own.
    */
   CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request);
 

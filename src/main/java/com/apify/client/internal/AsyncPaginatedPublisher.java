@@ -121,12 +121,17 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
     @Override
     public void request(long n) {
       if (n <= 0) {
-        terminate(
-            () ->
-                subscriber.onError(
-                    new IllegalArgumentException(
-                        "Reactive Streams violation: requested amount must be positive, was "
-                            + n)));
+        // Deliberately does not go through terminate(): request() is called from outside the
+        // drain loop (it does not hold the `draining` guard), so - unlike the drain loop's own
+        // terminal paths - it must not release a guard it may not own. Releasing it here would
+        // let a concurrent request() elsewhere win the drain() CAS and start a second drain loop
+        // in parallel with a possibly still-running one, racing on the unsynchronized paging
+        // fields (mirrors ListPublisher.Session's identical n<=0 handling).
+        if (terminated.compareAndSet(false, true)) {
+          subscriber.onError(
+              new IllegalArgumentException(
+                  "Reactive Streams violation: requested amount must be positive, was " + n));
+        }
         return;
       }
       requested.updateAndGet(current -> addSaturating(current, n));
@@ -152,12 +157,16 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
      * started) from that fetch's completion callback, which re-enters this same method.
      */
     private void drainLoop() {
-      while (!cancelled.get() && requested.get() > 0 && pos < buffer.size()) {
+      while (!cancelled.get() && !terminated.get() && requested.get() > 0 && pos < buffer.size()) {
         T item = buffer.get(pos++);
         requested.decrementAndGet();
         subscriber.onNext(item);
       }
-      if (cancelled.get()) {
+      if (cancelled.get() || terminated.get()) {
+        // `terminated` here means a reentrant request(n<=0) fired onError from within the onNext
+        // call just above (a subscriber violating Reactive Streams §3.9); stop emitting immediately
+        // instead of continuing to drain the rest of the buffered demand into a subscriber that has
+        // already received a terminal signal (RS §1.7).
         draining.set(false);
         return;
       }
@@ -178,8 +187,12 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
       }
       if (fetchInFlight) {
         // A fetch from an earlier drain() is still outstanding; its completion will resume this
-        // loop. (In practice unreachable: the flag is only set/cleared within this
-        // draining-guarded section, so no concurrent drain can observe it true here.)
+        // loop. With a well-behaved subscriber this is unreachable (the flag is only set/cleared
+        // within this draining-guarded section, so no concurrent drain can normally observe it
+        // true here) - but it is a real safety net, not dead code: request(n<=0) no longer
+        // releases `draining` on its own (see the comment there), yet a subscriber that itself
+        // races two concurrent request() calls could still reach this branch, and it correctly
+        // defers to the in-flight fetch's own completion instead of starting a second one.
         draining.set(false);
         return;
       }

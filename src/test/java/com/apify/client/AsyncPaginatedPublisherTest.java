@@ -4,10 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.internal.AsyncPaginatedPublisher;
+import com.apify.client.internal.ListPublisher;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -138,5 +140,71 @@ class AsyncPaginatedPublisherTest {
     StubFetcher f = new StubFetcher(0);
     List<Integer> got = drain(new AsyncPaginatedPublisher<>(null, 5L, null, f));
     assertTrue(got.isEmpty());
+  }
+
+  /**
+   * Records onNext/onError deliveries for the reentrant-invalid-request regression tests below. A
+   * subscriber violating Reactive Streams §3.9 by issuing {@code request(n<=0)} from within {@code
+   * onNext} must see exactly the one item already being emitted when the violation is reported,
+   * then a single {@code onError} - never further {@code onNext} calls for the rest of an
+   * already-fetched/already-fully-in-hand page (RS §1.7: no signals after a terminal one).
+   */
+  private static final class RecordingSubscriber implements Flow.Subscriber<Integer> {
+    final List<Integer> items = new ArrayList<>();
+    final List<Throwable> errors = new ArrayList<>();
+    final AtomicReference<Flow.Subscription> subscription = new AtomicReference<>();
+
+    @Override
+    public void onSubscribe(Flow.Subscription s) {
+      subscription.set(s);
+      s.request(5);
+    }
+
+    @Override
+    public void onNext(Integer item) {
+      items.add(item);
+      subscription.get().request(-1); // reentrant RS §3.9 violation
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      errors.add(t);
+    }
+
+    @Override
+    public void onComplete() {}
+  }
+
+  @Test
+  void reentrantInvalidRequestStopsEmissionImmediately() {
+    // Regression test: the drain loop used to check only `cancelled`/demand/buffer-position, never
+    // `terminated`, so a reentrant request(n<=0) mid-emission still let the loop emit the rest of
+    // an
+    // already-fetched page (and even fetch and emit a further page) after onError had already
+    // fired.
+    StubFetcher f = new StubFetcher(5);
+    RecordingSubscriber subscriber = new RecordingSubscriber();
+    new AsyncPaginatedPublisher<>(null, null, null, f).subscribe(subscriber);
+    assertEquals(
+        List.of(0),
+        subscriber.items,
+        "only the item already being emitted when the invalid request() fired is delivered");
+    assertEquals(1, subscriber.errors.size());
+    assertTrue(subscriber.errors.get(0) instanceof IllegalArgumentException);
+  }
+
+  @Test
+  void listPublisherReentrantInvalidRequestStopsEmissionImmediately() {
+    // Same regression, for ListPublisher's independent (but structurally identical) drain loop.
+    CompletableFuture<List<Integer>> source =
+        CompletableFuture.completedFuture(List.of(0, 1, 2, 3, 4));
+    RecordingSubscriber subscriber = new RecordingSubscriber();
+    new ListPublisher<>(source).subscribe(subscriber);
+    assertEquals(
+        List.of(0),
+        subscriber.items,
+        "only the item already being emitted when the invalid request() fired is delivered");
+    assertEquals(1, subscriber.errors.size());
+    assertTrue(subscriber.errors.get(0) instanceof IllegalArgumentException);
   }
 }

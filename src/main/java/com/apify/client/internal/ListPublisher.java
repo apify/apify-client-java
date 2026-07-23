@@ -104,12 +104,16 @@ public final class ListPublisher<T> implements Flow.Publisher<T> {
     }
 
     private void drainLoop() {
-      while (!cancelled.get() && requested.get() > 0 && pos < items.size()) {
+      while (!cancelled.get() && !terminated.get() && requested.get() > 0 && pos < items.size()) {
         T item = items.get(pos++);
         requested.decrementAndGet();
         subscriber.onNext(item);
       }
-      if (cancelled.get()) {
+      if (cancelled.get() || terminated.get()) {
+        // `terminated` here means a reentrant request(n<=0) fired onError from within the onNext
+        // call just above (a subscriber violating Reactive Streams §3.9); stop emitting immediately
+        // instead of continuing to drain the rest of the buffered demand into a subscriber that has
+        // already received a terminal signal (RS §1.7). Mirrors AsyncPaginatedPublisher.Session.
         draining.set(false);
         return;
       }

@@ -46,10 +46,10 @@
     </properties>
 
     <dependencies>
-        <!-- Jackson 3 ("jackson-jr"-era package rename: databind/core now live under the
-             tools.jackson.core groupId; jackson-annotations stayed at the old groupId/package,
-             pulled in transitively). Java-time (de)serialization is built into jackson-databind
-             itself in Jackson 3 (no separate jackson-datatype-jsr310 module/registration needed). -->
+        <!-- Jackson 3's package rename: databind/core now live under the tools.jackson.core
+             groupId; jackson-annotations stayed at the old groupId/package, pulled in
+             transitively. Java-time (de)serialization is built into jackson-databind itself in
+             Jackson 3 (no separate jackson-datatype-jsr310 module/registration needed). -->
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
