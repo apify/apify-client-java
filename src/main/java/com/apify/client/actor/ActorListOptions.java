@@ -3,7 +3,7 @@ package com.apify.client.actor;
 import com.apify.client.internal.ListOptionsLike;
 import com.apify.client.internal.QueryParams;
 
-/** Options for {@link ActorCollectionClient#list(ActorListOptions)}. */
+/** Options for {@link ActorCollectionClient#list ActorCollectionClient.list(ActorListOptions)}. */
 public final class ActorListOptions implements ListOptionsLike {
   private Long offset;
   private Long limit;
