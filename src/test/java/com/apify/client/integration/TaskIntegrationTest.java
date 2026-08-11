@@ -1,12 +1,16 @@
 package com.apify.client.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
 import com.apify.client.Publishers;
+import com.apify.client.TestAsync;
 import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.http.ApifyApiException;
 import com.apify.client.log.StreamedLogOptions;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.RunListOptions;
@@ -88,6 +92,32 @@ class TaskIntegrationTest extends IntegrationBase {
       assertTrue(task.getStats() != null);
       assertTrue(task.getOptions() != null && "latest".equals(task.getOptions().getBuild()));
       assertTrue(task.getInput() != null);
+    } finally {
+      client.task(task.getId()).delete().join();
+    }
+  }
+
+  @Test
+  void taskPublishUnpublish() {
+    ApifyClient client = requireClient();
+    Task task = client.tasks().create(taskDef(uniqueName("task-publish"))).join();
+    try {
+      TaskClient tc = client.task(task.getId());
+
+      // unpublish() is a no-op the task's Actor need not be owned by this test account for -
+      // reuses the update() PUT and leaves isPublic not-true.
+      Task unpublished = tc.unpublish().join();
+      assertFalse(Boolean.TRUE.equals(unpublished.getIsPublic()));
+
+      // publish() requires write permission to the task's Actor (apify/hello-world, unowned by
+      // this test account) and a configured publicConfig, so it is expected to fail rather than
+      // succeed here - this still exercises the convenience method sends the documented request.
+      ApifyApiException error =
+          assertThrows(ApifyApiException.class, () -> TestAsync.await(tc.publish()));
+      assertTrue(
+          error.getStatusCode() == 400 || error.getStatusCode() == 403,
+          "expected publish() on an unowned Actor's task to fail with 400 or 403, got "
+              + error.getStatusCode());
     } finally {
       client.task(task.getId()).delete().join();
     }

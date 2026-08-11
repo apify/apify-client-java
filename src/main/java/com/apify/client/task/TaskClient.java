@@ -12,6 +12,7 @@ import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
 import com.apify.client.run.RunCollectionClient;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import tools.jackson.databind.JsonNode;
@@ -46,6 +47,30 @@ public final class TaskClient {
   /** Deletes the task. */
   public CompletableFuture<Void> delete() {
     return ctx.deleteResource("");
+  }
+
+  /**
+   * Publishes the task on its public landing page, by setting {@code isPublic} through {@link
+   * #update(Object)}.
+   *
+   * <p>The task's Actor must be public and the task must have its public display configuration
+   * ({@code publicConfig}) set up first. Requires write permission to both the task and its Actor.
+   * Publishing an already published task does nothing.
+   */
+  public CompletableFuture<Task> publish() {
+    return update(Map.of("isPublic", true));
+  }
+
+  /**
+   * Unpublishes the task from its public landing page, by setting {@code isPublic} through {@link
+   * #update(Object)}.
+   *
+   * <p>The public display configuration ({@code publicConfig}) is preserved, so the task can be
+   * published again without re-entering it. Requires write permission to both the task and its
+   * Actor. Unpublishing a task that is not published does nothing.
+   */
+  public CompletableFuture<Task> unpublish() {
+    return update(Map.of("isPublic", false));
   }
 
   /**

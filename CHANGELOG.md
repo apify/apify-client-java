@@ -5,6 +5,19 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-11
+
+### Added
+
+- `TaskClient.publish()` / `TaskClient.unpublish()`, and `Task.getIsPublic()` /
+  `Task.getPublicConfig()` (`TaskPublicConfig`), mirroring the reference JS client.
+
+### Changed
+
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-08-05T133145Z`.
+- Request-body brotli compression now falls back to gzip if the brotli encoding call itself fails,
+  not only when the native codec fails to load, matching the reference JS client.
+
 ## [0.5.0] - 2026-07-23
 
 ### Changed

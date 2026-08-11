@@ -148,6 +148,7 @@
     <Or>
       <Method name="getActorStandby"/>
       <Method name="getOptions"/>
+      <Method name="getPublicConfig"/>
       <Method name="getStats"/>
     </Or>
     <Bug pattern="EI_EXPOSE_REP"/>
