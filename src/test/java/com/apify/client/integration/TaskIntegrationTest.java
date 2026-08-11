@@ -104,14 +104,15 @@ class TaskIntegrationTest extends IntegrationBase {
     try {
       TaskClient tc = client.task(task.getId());
 
-      // unpublish() is a no-op the task's Actor need not be owned by this test account for -
-      // reuses the update() PUT and leaves isPublic not-true.
+      // unpublish() only requires write permission to the task itself, not its Actor, so it
+      // succeeds here even though the task's Actor (apify/hello-world) is unowned by this test
+      // account. Reuses the update() PUT and leaves isPublic not-true.
       Task unpublished = tc.unpublish().join();
       assertFalse(Boolean.TRUE.equals(unpublished.getIsPublic()));
 
-      // publish() requires write permission to the task's Actor (apify/hello-world, unowned by
-      // this test account) and a configured publicConfig, so it is expected to fail rather than
-      // succeed here - this still exercises the convenience method sends the documented request.
+      // publish() additionally requires write permission to the task's Actor and a configured
+      // publicConfig, so it is expected to fail here rather than succeed - this still exercises
+      // that the convenience method sends the documented request.
       ApifyApiException error =
           assertThrows(ApifyApiException.class, () -> TestAsync.await(tc.publish()));
       assertTrue(

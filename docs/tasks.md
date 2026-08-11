@@ -24,7 +24,7 @@ Task task = client.tasks().create(Map.of(
 | Method | Description |
 |---|---|
 | `get()` / `update(Object)` / `delete()` | CRUD. Complete with `Optional<Task>` / `Task` / no value. |
-| `publish()` / `unpublish()` | Publish/unpublish the task on its public landing page, by setting `isPublic` through `update(Object)`. Publishing requires the task's Actor to be public, write permission to both, and a configured `publicConfig`; unpublishing preserves `publicConfig` so the task can be republished without re-entering it. Complete with the updated `Task`. |
+| `publish()` / `unpublish()` | Publish/unpublish the task on its public landing page, by setting `isPublic` through `update(Object)`. `publish()` requires the task's Actor to be public, write permission to both the task and its Actor, and a configured `publicConfig`. `unpublish()` only requires write permission to the task; it preserves `publicConfig` so the task can be republished without re-entering it. Complete with the updated `Task`. |
 | `start(Object input, TaskStartOptions)` | Start a task run (input overrides stored input; `null` uses it). Completes with `ActorRun`. |
 | `call(Object input, TaskStartOptions, Long waitSecs)` | Start and poll until finished; does **not** stream the run's log. Completes with `ActorRun`. |
 | `call(Object input, TaskCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default (matching the reference client's `call` defaulting `options.log` to `'default'`). Use `TaskCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |

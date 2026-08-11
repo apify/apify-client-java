@@ -66,8 +66,9 @@ public final class TaskClient {
    * #update(Object)}.
    *
    * <p>The public display configuration ({@code publicConfig}) is preserved, so the task can be
-   * published again without re-entering it. Requires write permission to both the task and its
-   * Actor. Unpublishing a task that is not published does nothing.
+   * published again without re-entering it. Requires write permission to the task only (unlike
+   * {@link #publish()}, it does not require permission to the task's Actor). Unpublishing a task
+   * that is not published does nothing.
    */
   public CompletableFuture<Task> unpublish() {
     return update(Map.of("isPublic", false));
