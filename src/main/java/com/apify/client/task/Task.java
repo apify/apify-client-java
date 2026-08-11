@@ -19,6 +19,8 @@ public final class Task extends ApifyResource {
   private TaskOptions options;
   private JsonNode input;
   private ActorStandby actorStandby;
+  private Boolean isPublic;
+  private TaskPublicConfig publicConfig;
 
   /** The unique task ID. */
   public String getId() {
@@ -82,5 +84,19 @@ public final class Task extends ApifyResource {
   /** Standby-mode configuration overrides for this task, if any. */
   public ActorStandby getActorStandby() {
     return actorStandby;
+  }
+
+  /**
+   * Whether the task is published on its public landing page. Not part of the documented {@code
+   * Task} schema in the OpenAPI spec, but the API returns it in practice (mirroring the reference
+   * JS client). Use {@link TaskClient#publish()} / {@link TaskClient#unpublish()} to change it.
+   */
+  public Boolean getIsPublic() {
+    return isPublic;
+  }
+
+  /** The task's public landing page display configuration, if it has one. */
+  public TaskPublicConfig getPublicConfig() {
+    return publicConfig;
   }
 }

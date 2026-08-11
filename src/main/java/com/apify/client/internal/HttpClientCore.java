@@ -383,11 +383,26 @@ public final class HttpClientCore {
    * pass {@link #BROTLI_AVAILABLE}; making the coding an explicit parameter keeps this a pure
    * function of its inputs rather than of hidden static state. Public so {@code CompressionTest}
    * (outside this non-exported package) can exercise it directly.
+   *
+   * <p>If the brotli path itself fails despite the native codec having loaded, this falls back to
+   * gzip rather than failing the whole request - matching the reference JS client, which since <a
+   * href="https://github.com/apify/apify-client-js/pull/990">apify-client-js#990</a> keys the
+   * fallback on compression actually failing rather than only on an upfront availability check.
+   * Catches {@code Throwable}, not just {@code RuntimeException}: a native codec that loaded
+   * successfully at startup can still fail a specific call with an {@code Error} (e.g. a partial or
+   * mismatched native library surfacing {@link UnsatisfiedLinkError} only once a method is actually
+   * invoked), the same reason {@link #detectBrotli()} itself catches {@code Throwable} rather than
+   * {@code Exception}.
    */
   public static Compressed compress(byte[] data, boolean preferBrotli) {
-    return preferBrotli
-        ? new Compressed(brotli(data), ENCODING_BROTLI)
-        : new Compressed(gzip(data), ENCODING_GZIP);
+    if (preferBrotli) {
+      try {
+        return new Compressed(brotli(data), ENCODING_BROTLI);
+      } catch (Throwable t) {
+        return new Compressed(gzip(data), ENCODING_GZIP);
+      }
+    }
+    return new Compressed(gzip(data), ENCODING_GZIP);
   }
 
   /** Brotli-compresses a request body using the loaded native codec. */
