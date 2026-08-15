@@ -57,9 +57,9 @@ ActorRun streamed =
 `getRestartOnError()` (`Boolean`)), `getInput()` (a `JsonNode` snapshot of the stored input, from
 whichever response last returned this `Task` object; prefer `TaskClient.getInput()` above to fetch
 it fresh on-demand), `getActorStandby()` (`ActorStandby`, from `com.apify.client.actor`,
-standby-mode configuration overrides for this task, if any), `getIsPublic()` (`Boolean`; not part
-of the documented `Task` schema in the OpenAPI spec, but the API returns it in practice, mirroring
-the reference JS client — use `publish()`/`unpublish()` above to change it), and `getPublicConfig()`
+standby-mode configuration overrides for this task, if any), `getIsPublic()` (`Boolean`; derived
+from `publicConfig.publishedAt` — use `publish()`/`unpublish()` above to change it), and
+`getPublicConfig()`
 (`TaskPublicConfig`, the task's public landing page display configuration, if any). Any field not
 covered by a typed getter is still available via the inherited `getExtra()` (see
 [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
@@ -71,8 +71,9 @@ serving standby requests), `getDesiredRequestsPerActorRun()`, `getDisableStandby
 
 `TaskPublicConfig` fields (all optional; `null` when unset): `getPublishedAt()` (`Instant`; set
 when the task is published, `null` when unpublished — read-only, changed via `publish()` /
-`unpublish()`), `getSeoTitle()`, `getSeoDescription()`, `getCategorization()`,
-`getInputSchemaFields()` (`List<String>`), `getDatasetName()`, `getDatasetView()`.
+`unpublish()`), `getSeoTitle()`, `getSeoDescription()`, `getCategorization()` (not part of the
+documented schema; kept for parity with the reference JS client), `getInputSchemaFields()`
+(`List<String>`), `getDatasetName()`, `getDatasetView()`.
 
 ```java
 Task task = client.task("TASK_ID").unpublish().join();
