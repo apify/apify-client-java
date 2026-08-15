@@ -28,12 +28,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Not exercised here: {@code HttpClientCore.compress}'s per-call fallback from a
  * <em>failing</em> brotli encode to gzip (as opposed to the upfront {@code BROTLI_AVAILABLE} check,
- * which the brotli-path tests below do exercise). Accepted gap, not an oversight: brotli4j's
- * in-memory {@code Encoder.compress} has no documented, portable way to be made to throw once the
- * native codec has loaded for a given platform, so a test forcing that failure would need to fake
- * the codec behind a seam that does not otherwise exist in this client - not worth adding for a
- * defense-in-depth branch whose only effect, if it were ever reached, is choosing gzip over brotli
- * (both already-tested, already-correct codings).
+ * which the brotli-path tests below do exercise). Accepted gap: brotli4j's {@code Encoder.compress}
+ * has no portable way to be forced to throw once the native codec has loaded, and the fallback only
+ * chooses between two codings already covered above.
  */
 class CompressionTest {
 
