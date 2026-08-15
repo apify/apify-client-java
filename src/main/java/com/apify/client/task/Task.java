@@ -87,9 +87,10 @@ public final class Task extends ApifyResource {
   }
 
   /**
-   * Whether the task is published on its public landing page. Not part of the documented {@code
-   * Task} schema in the OpenAPI spec, but the API returns it in practice (mirroring the reference
-   * JS client). Use {@link TaskClient#publish()} / {@link TaskClient#unpublish()} to change it.
+   * Whether the task is published on its public landing page, derived from {@link
+   * TaskPublicConfig#getPublishedAt() publicConfig.publishedAt}. A boxed {@code Boolean} (rather
+   * than a primitive) to distinguish a field the response did not include from an explicit {@code
+   * false}. Use {@link TaskClient#publish()} / {@link TaskClient#unpublish()} to change it.
    */
   public Boolean getIsPublic() {
     return isPublic;

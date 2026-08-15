@@ -104,9 +104,11 @@ class TaskIntegrationTest extends IntegrationBase {
     try {
       TaskClient tc = client.task(task.getId());
 
-      // unpublish() only requires write permission to the task itself, not its Actor, so it
-      // succeeds here even though the task's Actor (apify/hello-world) is unowned by this test
-      // account. Reuses the update() PUT and leaves isPublic not-true.
+      // The freshly created task is already unpublished, so this unpublish() call is a no-op per
+      // the spec ("sending the value the task already has does nothing") - it succeeds even
+      // though the task's Actor (apify/hello-world) is unowned by this test account, without that
+      // being evidence that unpublish() needs less permission than publish(): both require write
+      // permission to the task's Actor. Reuses the update() PUT and leaves isPublic not-true.
       Task unpublished = tc.unpublish().join();
       assertFalse(Boolean.TRUE.equals(unpublished.getIsPublic()));
 
