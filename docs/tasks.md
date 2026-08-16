@@ -24,7 +24,7 @@ Task task = client.tasks().create(Map.of(
 | Method | Description |
 |---|---|
 | `get()` / `update(Object)` / `delete()` | CRUD. Complete with `Optional<Task>` / `Task` / no value. |
-| `publish()` / `unpublish()` | Publish/unpublish the task on its public landing page, by setting `isPublic` through `update(Object)`. `publish()` requires the task's Actor to be public, write permission to both the task and its Actor, and a configured `publicConfig`. `unpublish()` only requires write permission to the task; it preserves `publicConfig` so the task can be republished without re-entering it. Complete with the updated `Task`. |
+| `publish()` / `unpublish()` | Publish/unpublish the task on its public landing page, by setting `isPublic` through `update(Object)`. Both require write permission to both the task and its Actor; `publish()` additionally requires the task's Actor to be public and a configured `publicConfig`. `unpublish()` preserves `publicConfig` so the task can be republished without re-entering it. Complete with the updated `Task`. |
 | `start(Object input, TaskStartOptions)` | Start a task run (input overrides stored input; `null` uses it). Completes with `ActorRun`. |
 | `call(Object input, TaskStartOptions, Long waitSecs)` | Start and poll until finished; does **not** stream the run's log. Completes with `ActorRun`. |
 | `call(Object input, TaskCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default (matching the reference client's `call` defaulting `options.log` to `'default'`). Use `TaskCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
@@ -57,9 +57,9 @@ ActorRun streamed =
 `getRestartOnError()` (`Boolean`)), `getInput()` (a `JsonNode` snapshot of the stored input, from
 whichever response last returned this `Task` object; prefer `TaskClient.getInput()` above to fetch
 it fresh on-demand), `getActorStandby()` (`ActorStandby`, from `com.apify.client.actor`,
-standby-mode configuration overrides for this task, if any), `getIsPublic()` (`Boolean`; not part
-of the documented `Task` schema in the OpenAPI spec, but the API returns it in practice, mirroring
-the reference JS client — use `publish()`/`unpublish()` above to change it), and `getPublicConfig()`
+standby-mode configuration overrides for this task, if any), `getIsPublic()` (`Boolean`; derived
+from `publicConfig.publishedAt` — use `publish()`/`unpublish()` above to change it), and
+`getPublicConfig()`
 (`TaskPublicConfig`, the task's public landing page display configuration, if any). Any field not
 covered by a typed getter is still available via the inherited `getExtra()` (see
 [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
@@ -71,8 +71,9 @@ serving standby requests), `getDesiredRequestsPerActorRun()`, `getDisableStandby
 
 `TaskPublicConfig` fields (all optional; `null` when unset): `getPublishedAt()` (`Instant`; set
 when the task is published, `null` when unpublished — read-only, changed via `publish()` /
-`unpublish()`), `getSeoTitle()`, `getSeoDescription()`, `getCategorization()`,
-`getInputSchemaFields()` (`List<String>`), `getDatasetName()`, `getDatasetView()`.
+`unpublish()`), `getSeoTitle()`, `getSeoDescription()`, `getCategorization()` (not part of the
+documented schema; kept for parity with the reference JS client), `getInputSchemaFields()`
+(`List<String>`), `getDatasetName()`, `getDatasetView()`.
 
 ```java
 Task task = client.task("TASK_ID").unpublish().join();
