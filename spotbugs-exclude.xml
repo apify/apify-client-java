@@ -33,19 +33,19 @@
      traces a record's synthesized accessor and canonical constructor), so this pair of exclusions is
      specific to the record form.
 
-  4. EI_EXPOSE_REP on the specific getters listed below, each returning a field whose type was just
-     changed (this PR) to extend the shared {@code ApifyResource} forward-compatibility base (an
-     {@code extra} catch-all map + package-private {@code @JsonAnySetter}), so unmodelled API fields
-     on nested value DTOs are preserved instead of silently dropped. That base class is not {@code
-     final} and holds a mutable {@code LinkedHashMap} field, which flips SpotBugs' mutability
-     heuristic for every subtype from "no public mutator -> immutable-enough, don't flag" to
-     "mutable -> flag every getter that returns one as a field of another class" - even though
-     nothing about this actually changed: {@code putExtra} stays package-private, {@code
-     getExtra()} still returns an unmodifiable view, and there is still no public way to mutate a
-     returned instance. Defensively copying on every getter call would require deep-cloning the
-     {@code extra} map each time, which is wasted work for a map that is (by construction) never
-     mutated after deserialization, so copying is not the fix here - the false positive is. Listed
-     per getter (not per class) to keep the exclusion exactly as narrow as the finding it suppresses.
+  4. EI_EXPOSE_REP on the specific getters listed below, each returning a field whose type extends
+     the shared {@code ApifyResource} forward-compatibility base (an {@code extra} catch-all map +
+     package-private {@code @JsonAnySetter}), so unmodelled API fields on nested value DTOs are
+     preserved instead of silently dropped. That base class is not {@code final} and holds a mutable
+     {@code LinkedHashMap} field, which flips SpotBugs' mutability heuristic for every subtype from
+     "no public mutator -> immutable-enough, don't flag" to "mutable -> flag every getter that
+     returns one as a field of another class" - a false positive: {@code putExtra} stays
+     package-private, {@code getExtra()} still returns an unmodifiable view, and there is still no
+     public way to mutate a returned instance. Defensively copying on every getter call would require
+     deep-cloning the {@code extra} map each time, which is wasted work for a map that is (by
+     construction) never mutated after deserialization, so copying is not the fix here - the false
+     positive is. Listed per getter (not per class) to keep the exclusion exactly as narrow as the
+     finding it suppresses.
 
   5. EI_EXPOSE_REP2 on {@code ListPublisher}'s constructor, which stores the caller-supplied {@code
      CompletableFuture<List<T>>} straight into a field. A {@code CompletableFuture} is a handle to an
