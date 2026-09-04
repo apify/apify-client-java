@@ -13,13 +13,13 @@ public final class Version {
    * The semantic version of this client library (see <a href="https://semver.org/">SemVer</a>).
    * Changes to the public interface other than additive ones are considered breaking changes.
    */
-  public static final String CLIENT_VERSION = "0.6.2";
+  public static final String CLIENT_VERSION = "0.6.3";
 
   /**
    * The version of the Apify OpenAPI specification this client was generated and verified against.
    * Corresponds to the {@code info.version} field of the Apify OpenAPI document.
    */
-  public static final String API_SPEC_VERSION = "v2-2026-08-27T071624Z";
+  public static final String API_SPEC_VERSION = "v2-2026-09-02T154542Z";
 
   private Version() {}
 }

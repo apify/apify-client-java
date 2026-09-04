@@ -5,6 +5,19 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-09-04
+
+### Changed
+
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-09-02T154542Z` and `Version.CLIENT_VERSION` to
+  `0.6.3`. The spec delta over this window loosened several schemas (`generalAccess` on `Run`,
+  storage resources, and `ActorDefinition.readme`/`input`/`changelog` are now nullable; some
+  `UserPrivateInfo` fields are no longer required; task `input` can now also be an array) and added
+  `Task.description`/`CreateTaskRequest.description`/`UpdateTaskRequest.description` plus a
+  `format: date-time` annotation on `DailyServiceUsages.date`. None of it changes this client:
+  every affected field is already modeled as nullable, passed through as raw JSON, or (for
+  `Task.description`) already implemented.
+
 ## [0.6.2] - 2026-08-28
 
 ### Changed
