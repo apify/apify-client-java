@@ -5,6 +5,18 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.5] - 2026-09-29
+
+### Changed
+
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-09-28T115051Z` and `Version.CLIENT_VERSION` to
+  `0.6.5`. The spec delta over this window makes the actor-run charge `idempotency-key` header
+  `required: true` (documenting that a key expires 3 minutes after the charge) and rewords the task
+  publish limit (10 published tasks per Actor, 100 per account) and the API rate-limit table. No
+  functional change: `RunClient.charge()` already always sends an idempotency key (auto-generating
+  one when the caller omits it), and neither the old publish limit nor the rate-limit figures were
+  encoded anywhere in this client.
+
 ## [0.6.4] - 2026-09-11
 
 ### Changed
