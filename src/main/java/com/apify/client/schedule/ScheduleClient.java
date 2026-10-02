@@ -2,11 +2,13 @@ package com.apify.client.schedule;
 
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
+import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import tools.jackson.databind.JavaType;
 
 /** A client for a specific schedule ({@code /v2/schedules/{scheduleId}}). */
 public final class ScheduleClient {
@@ -31,13 +33,15 @@ public final class ScheduleClient {
     return ctx.deleteResource("");
   }
 
-  /** Fetches the schedule's invocation log as text, or empty if absent. */
-  public CompletableFuture<Optional<String>> getLog() {
-    return ctx.getRaw("log", new QueryParams())
-        .thenApply(
-            resp ->
-                resp == null
-                    ? Optional.empty()
-                    : Optional.of(new String(resp.body(), StandardCharsets.UTF_8)));
+  /**
+   * Fetches up to the last 1000 entries of the schedule's invocation log.
+   *
+   * <p>A 404 (the schedule itself no longer exists) throws {@link
+   * com.apify.client.http.NotFoundError} rather than resolving to an empty list, since an empty
+   * list would otherwise be indistinguishable from "no invocations yet".
+   */
+  public CompletableFuture<List<ScheduleInvoked>> getLog() {
+    JavaType listType = Json.parametric(List.class, Json.type(ScheduleInvoked.class));
+    return ctx.getResourceRequired("log", new QueryParams(), listType);
   }
 }

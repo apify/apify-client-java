@@ -13,6 +13,7 @@ import com.apify.client.dataset.DatasetListItemsOptions;
 import com.apify.client.dataset.DownloadItemsFormat;
 import com.apify.client.http.ApifyApiException;
 import com.apify.client.http.ApifyTransportException;
+import com.apify.client.http.NotFoundError;
 import com.apify.client.keyvalue.KeyValueStore;
 import com.apify.client.keyvalue.KeyValueStoreRecord;
 import com.apify.client.keyvalue.ListKeysOptions;
@@ -25,6 +26,7 @@ import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.MetamorphOptions;
 import com.apify.client.run.RunChargeOptions;
 import com.apify.client.run.SetStatusMessageOptions;
+import com.apify.client.schedule.ScheduleInvoked;
 import com.apify.client.store.ActorStoreListItem;
 import com.apify.client.store.StoreListOptions;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
@@ -34,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -753,5 +756,82 @@ class ClientBehaviourRegressionTest {
             .join();
     List<String> yielded = items.stream().map(ActorVersion::getVersionNumber).toList();
     assertEquals(List.of("0.1", "0.2"), yielded, "limit caps the number yielded");
+  }
+
+  @Test
+  void scheduleGetLogDecodesEnvelopeArray() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200,
+            "{\"data\":["
+                + "{\"message\":\"Schedule invoked\",\"level\":\"INFO\",\"createdAt\":\"2019-03-26T12:28:00.370Z\"},"
+                + "{\"message\":\"boom\",\"level\":\"ERROR\",\"createdAt\":\"2019-03-26T12:30:00.325Z\"}]}");
+    List<ScheduleInvoked> log = client(backend).schedule("s1").getLog().join();
+    assertEquals(2, log.size());
+    assertEquals("Schedule invoked", log.get(0).getMessage());
+    assertEquals("INFO", log.get(0).getLevel());
+    assertTrue(backend.lastUrl.contains("schedules/s1/log"), backend.lastUrl);
+  }
+
+  @Test
+  void scheduleGetLogThrowsNotFoundOn404() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"not found\"}}");
+    assertThrows(
+        CompletionException.class, () -> client(backend).schedule("missing").getLog().join());
+  }
+
+  @Test
+  void datasetGetStatisticsThrowsNotFoundOn404InsteadOfEmpty() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"not found\"}}");
+    CompletionException e =
+        assertThrows(
+            CompletionException.class,
+            () -> client(backend).dataset("missing").getStatistics().join());
+    assertTrue(e.getCause() instanceof NotFoundError);
+  }
+
+  @Test
+  void taskGetInputThrowsNotFoundOn404() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"not found\"}}");
+    CompletionException e =
+        assertThrows(
+            CompletionException.class, () -> client(backend).task("missing").getInput().join());
+    assertTrue(e.getCause() instanceof NotFoundError);
+  }
+
+  @Test
+  void taskGetInputReturnsRawJsonOnSuccess() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"foo\":\"bar\"}");
+    var input = client(backend).task("t1").getInput().join();
+    assertEquals("bar", input.get("foo").asString());
+    assertTrue(backend.lastUrl.contains("actor-tasks/t1/input"), backend.lastUrl);
+  }
+
+  @Test
+  void createItemsPublicUrlWithFormatSetsQueryParam() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"d1\"}}");
+    String url =
+        client(backend)
+            .dataset("d1")
+            .createItemsPublicUrl(new DatasetListItemsOptions(), null, DownloadItemsFormat.CSV)
+            .join();
+    assertTrue(url.contains("format=csv"), url);
+  }
+
+  @Test
+  void createItemsPublicUrlWithoutFormatOmitsQueryParam() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"d1\"}}");
+    String url =
+        client(backend)
+            .dataset("d1")
+            .createItemsPublicUrl(new DatasetListItemsOptions(), null)
+            .join();
+    assertFalse(url.contains("format="), url);
   }
 }

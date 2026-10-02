@@ -94,9 +94,15 @@ public final class RequestQueueClient {
     return params;
   }
 
-  /** Fetches the queue metadata, or empty if it does not exist. */
+  /**
+   * Fetches the queue metadata, or empty if it does not exist.
+   *
+   * <p>On a client reached through a run/task without an explicit queue id (e.g. {@code
+   * run.requestQueue()}), a 404 is ambiguous between "the run is gone" and "the run has no queue",
+   * so it throws {@link com.apify.client.http.NotFoundError} instead of resolving to empty.
+   */
   public CompletableFuture<Optional<RequestQueue>> get() {
-    return ctx.getResource("", new QueryParams(), RequestQueue.class);
+    return ctx.getResourceUnlessAmbiguous("", new QueryParams(), RequestQueue.class);
   }
 
   /** Updates the queue metadata (e.g. name) and returns the updated object. */
@@ -104,9 +110,12 @@ public final class RequestQueueClient {
     return ctx.updateResource("", newFields, RequestQueue.class);
   }
 
-  /** Deletes the queue. */
+  /**
+   * Deletes the queue. See {@link #get()} for why a client without an explicit queue id throws on a
+   * 404 instead of treating it as a no-op.
+   */
   public CompletableFuture<Void> delete() {
-    return ctx.deleteResource("");
+    return ctx.deleteResourceUnlessAmbiguous("");
   }
 
   /**

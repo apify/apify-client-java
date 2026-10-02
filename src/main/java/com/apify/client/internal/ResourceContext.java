@@ -76,6 +76,17 @@ public final class ResourceContext {
   final String publicOrigin;
 
   /**
+   * Whether this context addresses its resource by an explicit id of its own ({@link #single}), as
+   * opposed to a nested path with no id ({@link #collection}/{@link #nestedCollection}, e.g. a
+   * run's {@code .../dataset}). A 404 is unambiguous for the former (that id does not exist) but
+   * not for the latter (either the parent or the sub-resource could be gone), which is why {@link
+   * #getResourceUnlessAmbiguous} and {@link #deleteResourceUnlessAmbiguous} key their behavior on
+   * this flag - see those methods and each affected resource client's {@code get()}/{@code
+   * delete()} Javadoc.
+   */
+  private final boolean ownId;
+
+  /**
    * Immutable: every field is set once here. {@link #withPublicOrigin} and {@link #seedParams}
    * return a new instance rather than mutating this one, so a {@code ResourceContext} (and the
    * resource client that holds one) is safe to share across threads once built.
@@ -85,22 +96,24 @@ public final class ResourceContext {
       String url,
       QueryParams baseParams,
       String apiOrigin,
-      String publicOrigin) {
+      String publicOrigin,
+      boolean ownId) {
     this.http = http;
     this.url = url;
     this.baseParams = baseParams;
     this.apiOrigin = apiOrigin;
     this.publicOrigin = publicOrigin;
+    this.ownId = ownId;
   }
 
-  private ResourceContext(HttpClientCore http, String url, String baseUrl) {
-    this(http, url, new QueryParams(), originOf(baseUrl), originOf(baseUrl));
+  private ResourceContext(HttpClientCore http, String url, String baseUrl, boolean ownId) {
+    this(http, url, new QueryParams(), originOf(baseUrl), originOf(baseUrl), ownId);
   }
 
   /** Creates a context for a collection endpoint: {@code {base}/{resourcePath}}. */
   public static ResourceContext collection(
       HttpClientCore http, String baseUrl, String resourcePath) {
-    return new ResourceContext(http, baseUrl + "/" + resourcePath, baseUrl);
+    return new ResourceContext(http, baseUrl + "/" + resourcePath, baseUrl, false);
   }
 
   /**
@@ -117,12 +130,13 @@ public final class ResourceContext {
   /** Creates a context for a single resource: {@code {base}/{resourcePath}/{safeId}}. */
   public static ResourceContext single(
       HttpClientCore http, String baseUrl, String resourcePath, String id) {
-    return new ResourceContext(http, baseUrl + "/" + resourcePath + "/" + toSafeId(id), baseUrl);
+    return new ResourceContext(
+        http, baseUrl + "/" + resourcePath + "/" + toSafeId(id), baseUrl, true);
   }
 
   /** A copy of this context with the origin used to build public URLs overridden. */
   public ResourceContext withPublicOrigin(String publicBaseUrl) {
-    return new ResourceContext(http, url, baseParams, apiOrigin, originOf(publicBaseUrl));
+    return new ResourceContext(http, url, baseParams, apiOrigin, originOf(publicBaseUrl), ownId);
   }
 
   /** This resource's URL with an optional extra path segment appended. */
@@ -160,7 +174,7 @@ public final class ResourceContext {
       return this;
     }
     return new ResourceContext(
-        http, url, baseParams.copy().extend(inherited), apiOrigin, publicOrigin);
+        http, url, baseParams.copy().extend(inherited), apiOrigin, publicOrigin, ownId);
   }
 
   // ---- CRUD primitives ------------------------------------------------------
@@ -203,6 +217,27 @@ public final class ResourceContext {
     return getResourceRequired(subPath, params, Json.type(dataClass));
   }
 
+  /**
+   * Like {@link #getResource}, but a 404 is only swallowed to {@link Optional#empty()} when this
+   * context {@link #ownId addresses its resource by an explicit id}. Otherwise (a nested path with
+   * no id of its own, e.g. a run's default dataset) the 404 is ambiguous - it may mean the parent
+   * is gone rather than the sub-resource - so it is rethrown as an {@link ApifyApiException}
+   * ({@link com.apify.client.http.NotFoundError}) instead of being hidden behind an empty result.
+   * Used by every storage/log resource client's {@code get()}.
+   */
+  public <T> CompletableFuture<Optional<T>> getResourceUnlessAmbiguous(
+      String subPath, QueryParams params, JavaType dataType) {
+    if (ownId) {
+      return getResource(subPath, params, dataType);
+    }
+    return this.<T>getResourceRequired(subPath, params, dataType).thenApply(Optional::ofNullable);
+  }
+
+  public <T> CompletableFuture<Optional<T>> getResourceUnlessAmbiguous(
+      String subPath, QueryParams params, Class<T> dataClass) {
+    return getResourceUnlessAmbiguous(subPath, params, Json.type(dataClass));
+  }
+
   public <T> CompletableFuture<T> updateResource(String subPath, Object body, Class<T> dataClass) {
     String u = mergedParams(new QueryParams()).applyToUrl(subUrl(subPath));
     return http.call("PUT", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout())
@@ -224,6 +259,19 @@ public final class ResourceContext {
               }
               throw asRuntimeException(cause);
             });
+  }
+
+  /**
+   * Like {@link #deleteResource}, but - mirroring {@link #getResourceUnlessAmbiguous} - a 404 is
+   * only treated as a successful no-op when this context addresses its resource by an explicit id.
+   * Otherwise it is rethrown, since it may mean the parent (not the sub-resource) is gone.
+   */
+  public CompletableFuture<Void> deleteResourceUnlessAmbiguous(String subPath) {
+    if (ownId) {
+      return deleteResource(subPath);
+    }
+    String u = mergedParams(new QueryParams()).applyToUrl(subUrl(subPath));
+    return http.call("DELETE", u, null, "", http.baseRequestTimeout()).thenApply(resp -> null);
   }
 
   public <T> CompletableFuture<PaginationList<T>> listResource(
@@ -372,6 +420,22 @@ public final class ResourceContext {
               }
               throw asRuntimeException(cause);
             });
+  }
+
+  /**
+   * As {@link #getRaw}, but a 404 is not swallowed - it propagates as an {@link ApifyApiException}.
+   */
+  public CompletableFuture<ApiResponse> getRawRequired(String subPath, QueryParams params) {
+    String u = mergedParams(params).applyToUrl(subUrl(subPath));
+    return http.call("GET", u, null, "", http.baseRequestTimeout());
+  }
+
+  /**
+   * Like {@link #getRaw}, but - mirroring {@link #getResourceUnlessAmbiguous} - a 404 is only
+   * swallowed to {@code null} when this context addresses its resource by an explicit id.
+   */
+  public CompletableFuture<ApiResponse> getRawUnlessAmbiguous(String subPath, QueryParams params) {
+    return ownId ? getRaw(subPath, params) : getRawRequired(subPath, params);
   }
 
   /** HEAD request; completes with whether the resource exists. */
@@ -548,7 +612,9 @@ public final class ResourceContext {
 
   /**
    * Encodes a resource id so it is safe to embed in a URL path. Apify uses the {@code
-   * username~resourcename} form, so the first {@code /} of an id is replaced with {@code ~}.
+   * username~resourcename} form, so every {@code /} in an id is replaced with {@code ~} (not just
+   * the first: an id with more than one slash must not leave any literal {@code /} that could
+   * restructure the request path).
    *
    * <p>Public (not just intra-package) because {@code RunClient#metamorph} in the {@code .run}
    * package needs to apply the same normalization to a resource id supplied as an argument value
@@ -558,15 +624,25 @@ public final class ResourceContext {
    * this class's other narrowly-public members).
    */
   public static String toSafeId(String id) {
-    int slash = id.indexOf('/');
-    return slash < 0 ? id : id.substring(0, slash) + "~" + id.substring(slash + 1);
+    return id.replace('/', '~');
   }
 
   /**
    * Percent-encodes a single URL path segment, so that values interpolated into the path (record
    * keys, request IDs) cannot break out of the segment.
+   *
+   * <p>Rejects an empty string or a bare {@code "."}/{@code ".."} segment instead of encoding it: a
+   * URL parser (client-side, or a proxy/server in front of the API) resolves dot segments
+   * <em>after</em> percent-decoding, so an encoded {@code "%2E%2E"} would still collapse against
+   * its neighbours exactly like a literal {@code ".."} once decoded. Rejecting it outright - rather
+   * than silently encoding something that cannot safely address any record/request - mirrors the
+   * reference JS client's path-segment sanitization.
    */
   public static String encodePathSegment(String input) {
+    if (input == null || input.isEmpty() || ".".equals(input) || "..".equals(input)) {
+      throw new IllegalArgumentException(
+          "a URL path segment must not be empty or a dot segment (\".\" or \"..\"), was: " + input);
+    }
     return URLEncoder.encode(input, StandardCharsets.UTF_8).replace("+", "%20");
   }
 

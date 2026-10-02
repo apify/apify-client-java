@@ -4,6 +4,8 @@ import com.apify.client.http.DefaultHttpTransport;
 import com.apify.client.http.HttpTransport;
 import com.apify.client.http.RetryConfig;
 import com.apify.client.internal.HttpClientCore;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.function.BooleanSupplier;
@@ -166,9 +168,31 @@ public final class ApifyClientBuilder {
     return new ApifyClient(http, apiBase, publicBase);
   }
 
-  /** Strips any trailing slashes and appends {@link #API_VERSION_PATH}. */
+  /**
+   * Strips any trailing slashes and appends {@link #API_VERSION_PATH}, unless the URL's path
+   * already ends with it (e.g. a caller passing {@code "https://api.apify.com/v2"} does not end up
+   * with {@code ".../v2/v2"}). Only an exact {@code /v2} path suffix counts; another {@code /vN} is
+   * left alone, since this client's endpoints only exist under {@code /v2}.
+   *
+   * <p>Checks the URL's parsed path, not just whether the full string ends with {@code "/v2"}: a
+   * bare {@code "https://v2"} (host {@code v2}, no path at all) would otherwise be mistaken for an
+   * already-versioned URL, because the {@code "//"} of the scheme happens to precede a host that
+   * reads "v2" - {@code "https://v2"} must still become {@code "https://v2/v2"}.
+   */
   private static String normalizeApiUrl(String url) {
-    return trimTrailingSlash(url) + API_VERSION_PATH;
+    String trimmed = trimTrailingSlash(url);
+    String path = pathOf(trimmed);
+    return path.endsWith(API_VERSION_PATH) ? trimmed : trimmed + API_VERSION_PATH;
+  }
+
+  /** The path component of a URL, or {@code ""} if it does not parse as one. */
+  private static String pathOf(String url) {
+    try {
+      String path = new URI(url).getRawPath();
+      return path == null ? "" : path;
+    } catch (URISyntaxException e) {
+      return "";
+    }
   }
 
   private static String trimTrailingSlash(String s) {

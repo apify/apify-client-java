@@ -35,16 +35,22 @@ public final class LogClient {
     return new LogClient(ResourceContext.nestedCollection(http, base, "log", inherited));
   }
 
-  /** Fetches the entire log as text, or empty if the log does not exist. */
+  /**
+   * Fetches the entire log as text, or empty if the log does not exist.
+   *
+   * <p>On a client reached through a run/build without an explicit log id (e.g. {@code run.log()},
+   * {@code build.log()}), a 404 is ambiguous between "the run/build is gone" and "it has no log
+   * yet", so it throws {@link com.apify.client.http.NotFoundError} instead of resolving to empty.
+   */
   public CompletableFuture<Optional<String>> get() {
     return get(new LogOptions());
   }
 
-  /** Fetches the log with explicit options (raw, download). */
+  /** Fetches the log with explicit options (raw, download). See {@link #get()} for 404 handling. */
   public CompletableFuture<Optional<String>> get(LogOptions options) {
     QueryParams params = new QueryParams();
     options.apply(params);
-    return ctx.getRaw("", params)
+    return ctx.getRawUnlessAmbiguous("", params)
         .thenApply(
             resp ->
                 resp == null

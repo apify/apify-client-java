@@ -13,6 +13,7 @@ public final class Build extends ApifyResource {
   private Instant startedAt;
   private Instant finishedAt;
   private String buildNumber;
+  private String imageDigest;
   private BuildMeta meta;
   private BuildStats stats;
   private BuildOptions options;
@@ -57,6 +58,15 @@ public final class Build extends ApifyResource {
   /** The human-readable build number (e.g. {@code "0.1.2"}). */
   public String getBuildNumber() {
     return buildNumber;
+  }
+
+  /**
+   * Digest of the built Docker image manifest, without the {@code sha256:} prefix. Compare the
+   * digests of two builds to find out whether their image contents differ. {@code null} if the
+   * digest is not available.
+   */
+  public String getImageDigest() {
+    return imageDigest;
   }
 
   /** Metadata about how the build was initiated. */

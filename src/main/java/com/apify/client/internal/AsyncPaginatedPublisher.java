@@ -225,7 +225,27 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
       buffer = page.getItems();
       pos = 0;
       int count = buffer.size();
-      offset += count;
+      // Advance the offset (and decide exhaustion) by the number of rows the API scanned, not the
+      // number of items it returned: an endpoint with item-level filtering (dataset items' clean /
+      // skipEmpty / skipHidden) can scan up to the requested page size while returning fewer rows,
+      // or none at all. Using the returned count here would re-scan (and re-yield) already-seen
+      // rows, or stop iteration early on a page that filtered out everything but still had more
+      // data ahead.
+      //
+      // getScannedCount() is null on every endpoint that does not report the header at all
+      // (everything but dataset items). Where it is reported, a *nonzero* value is always trusted:
+      // the returned count can legitimately fall on either side of it (a filter drops rows, so
+      // returned < scanned; unwind splits one scanned row's array field into several output items,
+      // so returned > scanned), and the scanned count is what offset must advance by in both cases.
+      // A reported *zero* is trusted only when the page also returned nothing: scanning zero rows
+      // can never produce items, so "0 scanned, N>0 returned" is not a real answer the API can give
+      // - it means the header is not actually populated for this request yet (observed in practice
+      // as a flat 0 on every page of an unfiltered, non-unwound live-API request that did return
+      // real items), and falling back to the returned count there keeps this exactly as safe as
+      // before the header existed.
+      Long reported = page.getScannedCount();
+      long scanned = reported != null && (reported > 0 || count == 0) ? reported : count;
+      offset += scanned;
       yielded += count;
       // Defensively trim the last page to the cap in case the server returned more than requested,
       // so the subscriber never sees more than `totalLimit` items.
@@ -233,9 +253,11 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
         buffer = buffer.subList(0, count - (int) (yielded - totalLimit));
         yielded = totalLimit;
       }
-      // Stop on the cap or an empty page; never on a short page (the API clamps large page sizes)
-      // or the reported total (unreliable on some endpoints — see class doc).
-      if (count == 0 || (totalLimit != null && yielded >= totalLimit)) {
+      // Stop on the cap or a page that scanned nothing (the source is exhausted); never on a short
+      // *returned* page (the API clamps large page sizes, and filtering can legitimately return
+      // fewer items than were scanned) or the reported total (unreliable on some endpoints — see
+      // class doc).
+      if (scanned == 0 || (totalLimit != null && yielded >= totalLimit)) {
         exhausted = true;
       }
     }

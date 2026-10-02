@@ -118,14 +118,16 @@ public final class TaskClient {
         waitSecs);
   }
 
-  /** Fetches the task's stored input, or empty if none is set. */
-  public CompletableFuture<Optional<JsonNode>> getInput() {
-    return ctx.getRaw("input", new QueryParams())
-        .thenApply(
-            resp ->
-                resp == null
-                    ? Optional.empty()
-                    : Optional.of(Json.parse(resp.body(), JsonNode.class)));
+  /**
+   * Fetches the task's stored input.
+   *
+   * <p>A 404 throws {@link com.apify.client.http.NotFoundError} rather than resolving to empty:
+   * unlike {@link #get()}, there is no meaningful "input is absent" state distinct from "the task
+   * is gone", so a missing task is reported as a failure here too.
+   */
+  public CompletableFuture<JsonNode> getInput() {
+    return ctx.getRawRequired("input", new QueryParams())
+        .thenApply(resp -> Json.parse(resp.body(), JsonNode.class));
   }
 
   /** Replaces the task's stored input and returns the updated input. */

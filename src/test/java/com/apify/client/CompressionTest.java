@@ -149,6 +149,65 @@ class CompressionTest {
     assertArrayEquals(payload, backend.lastBodyBytes, "small body must be sent verbatim");
   }
 
+  // --- Content-type classification: skip compressing payloads that are already compressed. ---
+
+  @Test
+  void isCompressibleContentTypeClassifiesKnownMediaTypes() {
+    // Missing/empty/text content types are compressible.
+    assertTrue(HttpClientCore.isCompressibleContentType(null));
+    assertTrue(HttpClientCore.isCompressibleContentType(""));
+    assertTrue(HttpClientCore.isCompressibleContentType("application/json"));
+    assertTrue(HttpClientCore.isCompressibleContentType("text/plain; charset=utf-8"));
+    assertTrue(HttpClientCore.isCompressibleContentType("application/octet-stream"));
+    // A structured-syntax suffix overrides an already-compressed prefix.
+    assertTrue(HttpClientCore.isCompressibleContentType("image/svg+xml"));
+    assertTrue(HttpClientCore.isCompressibleContentType("IMAGE/SVG+XML; charset=utf-8"));
+    // A raw format under an already-compressed prefix is still compressible.
+    assertTrue(HttpClientCore.isCompressibleContentType("image/bmp"));
+    assertTrue(HttpClientCore.isCompressibleContentType("audio/wav"));
+
+    // Media/archive prefixes and exact types already carry their own compression.
+    assertFalse(HttpClientCore.isCompressibleContentType("image/png"));
+    assertFalse(HttpClientCore.isCompressibleContentType("video/mp4"));
+    assertFalse(HttpClientCore.isCompressibleContentType("audio/mpeg"));
+    assertFalse(HttpClientCore.isCompressibleContentType("application/zip"));
+    assertFalse(HttpClientCore.isCompressibleContentType("application/x-gzip"));
+    assertFalse(HttpClientCore.isCompressibleContentType("font/woff2"));
+    assertFalse(
+        HttpClientCore.isCompressibleContentType(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
+    // Case-insensitive and whitespace-tolerant.
+    assertFalse(HttpClientCore.isCompressibleContentType("  Image/PNG  "));
+  }
+
+  @Test
+  void alreadyCompressedContentTypeSkipsCompression() {
+    MockTransport backend = MockTransport.ofConstant(201, "");
+    byte[] payload = payload(4096, (byte) 'a'); // trivially compressible, well above the threshold
+
+    client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, "image/png").join();
+
+    assertFalse(
+        backend.lastHeaders.firstValue("Content-Encoding").isPresent(),
+        "an already-compressed media type must not be run through the compressor");
+    assertArrayEquals(payload, backend.lastBodyBytes, "body must be sent verbatim, uncompressed");
+  }
+
+  @Test
+  void rawFormatUnderCompressedPrefixIsStillCompressed() throws IOException {
+    MockTransport backend = MockTransport.ofConstant(201, "");
+    byte[] payload = payload(4096, (byte) 'a');
+
+    // image/bmp sits under the "image/" prefix but is raw, so it should still be compressed.
+    client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, "image/bmp").join();
+
+    boolean brotli = HttpClientCore.brotliAvailable();
+    assertEquals(
+        brotli ? "br" : "gzip", backend.lastHeaders.firstValue("Content-Encoding").orElse(null));
+    byte[] recovered = brotli ? unbrotli(backend.lastBodyBytes) : gunzip(backend.lastBodyBytes);
+    assertArrayEquals(payload, recovered);
+  }
+
   @Test
   void bodyExactlyAtThresholdIsCompressed() throws IOException {
     MockTransport backend = MockTransport.ofConstant(201, "");

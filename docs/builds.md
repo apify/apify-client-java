@@ -23,7 +23,9 @@ builds) and a single build with `client.build(id)`.
 | `log()` | A `LogClient` for the build's log. |
 
 `Build` fields: `getId()`, `getActId()`, `getUserId()`, `getStatus()`, `getStartedAt()`,
-`getFinishedAt()`, `getBuildNumber()`, `getMeta()` (`BuildMeta` — `getOrigin()`, `getClientIp()`,
+`getFinishedAt()`, `getBuildNumber()`, `getImageDigest()` (`String`, nullable — the built Docker
+image manifest's digest, without the `sha256:` prefix; compare two builds' digests to tell whether
+their image contents differ), `getMeta()` (`BuildMeta` — `getOrigin()`, `getClientIp()`,
 `getUserAgent()`), `getStats()` (`BuildStats` — `getDurationMillis()`/`getRunTimeSecs()` as `Long`,
 `getComputeUnits()` as `Double`, `getImageSizeBytes()` as `Long`), `getOptions()` (`BuildOptions` —
 `getUseCache()`/`getBetaPackages()` as `Boolean`, `getMemoryMbytes()`/`getDiskMbytes()` as `Long`),
