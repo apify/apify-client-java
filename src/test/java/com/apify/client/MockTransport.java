@@ -55,6 +55,7 @@ final class MockTransport implements HttpTransport {
   String lastBody;
   byte[] lastBodyBytes;
   final List<String> bodies = new ArrayList<>();
+  final List<String> urls = new ArrayList<>();
 
   /**
    * Optional scripted response for {@link #sendStreamingResponse}; defaults to the first {@code
@@ -101,6 +102,7 @@ final class MockTransport implements HttpTransport {
     int idx = calls++;
     lastHeaders = request.headers();
     lastUrl = request.uri().toString();
+    urls.add(lastUrl);
     lastMethod = request.method();
     lastBodyBytes = readBody(request);
     lastBody = lastBodyBytes == null ? null : new String(lastBodyBytes, StandardCharsets.UTF_8);

@@ -49,15 +49,15 @@ any field not covered by a typed getter above is still available via the inherit
 | `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL, served as `json`. Completes with `String`. |
 | `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs, DownloadItemsFormat format)` | As above, with the URL's serialization `format` set explicitly. |
 
-> **Server-side item filters and iteration.** The dataset-items endpoint applies `offset`/`limit` to
-> the raw items and then drops those removed by a server-side filter (`skipEmpty`, `skipHidden`,
-> `clean`, `simplified`), so a page can *scan* up to `limit` rows while *returning* fewer, or none at
-> all. Where the API reports the number of rows it scanned (`X-Apify-Pagination-Count`), `iterateItems`
-> advances by that number rather than by the number of items returned, so a fully-filtered page
-> neither repeats already-seen items nor ends iteration early. A reported count smaller than the
-> returned one (seen in practice as a flat `0` even on pages that did return items) is treated as the
-> header not being populated for that request and falls back to the returned count, so this is safe
-> whether or not a given deployment of the API sends the header yet.
+> **Server-side item filters, `unwind`, and iteration.** The dataset-items endpoint applies
+> `offset`/`limit` to the raw rows and then transforms them: a filter (`skipEmpty`, `skipHidden`,
+> `clean`, `simplified`) can drop rows (fewer items returned than scanned), and `unwind` can split a
+> row's array field into several items (more items returned than scanned). Where the API reports the
+> number of rows it scanned (`X-Apify-Pagination-Count`), `iterateItems` advances by that number
+> rather than by the number of items returned, so neither case repeats already-seen items, skips
+> rows, nor ends iteration early. (A reported `0` is trusted only when the page also returned
+> nothing, since scanning zero rows can never produce items; any other combination falls back to the
+> returned count, as if the header were absent.)
 
 ```java
 Dataset ds = client.datasets().getOrCreate("my-dataset").join();

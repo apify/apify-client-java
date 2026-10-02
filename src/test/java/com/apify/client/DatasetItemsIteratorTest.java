@@ -1,6 +1,7 @@
 package com.apify.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.dataset.DatasetClient;
@@ -112,12 +113,11 @@ class DatasetItemsIteratorTest {
 
   @Test
   void advancesByScannedCountNotReturnedCount() {
-    // Regression for the fully-filtered-page bug: a page can scan `limit` rows (reported via
-    // X-Apify-Pagination-Count) while a server-side filter (clean/skipEmpty/skipHidden) drops all
-    // of them. Advancing by the *returned* item count (0) would re-request the same offset forever
-    // (or, with the old "stop on empty page" rule, end iteration early and silently skip the
-    // remaining items). Advancing by the *scanned* count must skip past the filtered-out window and
-    // reach the real data on the next page.
+    // Regression for the fully-filtered-page bug (see AsyncPaginatedPublisher.applyPage): a
+    // server-side filter (clean/skipEmpty/skipHidden) can drop every item of a scanned page.
+    // Advancing by the *returned* count (0) would stop iteration right there; advancing by the
+    // *scanned* count (reported via X-Apify-Pagination-Count) must skip past the filtered-out
+    // window and reach the real data on the next page.
     MockTransport backend =
         new MockTransport(
             List.of(
@@ -141,6 +141,45 @@ class DatasetItemsIteratorTest {
   }
 
   @Test
+  void advancesByScannedCountEvenWhenUnwindReturnsMoreThanScanned() {
+    // Regression for the mirror-image bug the naive "trust the header only when it's >= the
+    // returned count" guard introduced: `unwind` splits one scanned row's array field into several
+    // output items, so returnedCount > scannedCount is a legitimate, common shape - not a sign the
+    // header is unpopulated. A guard that falls back to the (larger) returned count here advances
+    // the offset too far and silently drops the rows in between on the next page.
+    MockTransport backend =
+        new MockTransport(
+            List.of(
+                // Page 1: scanned 2 rows, each with a 2-element array that unwind splits in two.
+                MockTransport.ok(
+                    200,
+                    "[{\"n\":1},{\"n\":2},{\"n\":3},{\"n\":4}]",
+                    Map.of("X-Apify-Pagination-Count", "2")),
+                // Page 2 (offset must be 2, the scanned count - not 4, the returned count): the
+                // remaining 2 scanned rows, unwound into 4 items.
+                MockTransport.ok(
+                    200,
+                    "[{\"n\":5},{\"n\":6},{\"n\":7},{\"n\":8}]",
+                    Map.of("X-Apify-Pagination-Count", "2")),
+                // Nothing left to scan.
+                MockTransport.ok(200, "[]", Map.of("X-Apify-Pagination-Count", "0"))));
+    List<JsonNode> seen =
+        collect(
+            client(backend)
+                .dataset("d1")
+                .iterateItems(new DatasetListItemsOptions().unwind(List.of("arr")), 2L));
+    List<Integer> ns = seen.stream().map(n -> n.get("n").asInt()).toList();
+    assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8), ns, "no rows dropped between the unwound pages");
+    assertEquals(3, backend.calls);
+    // The decisive assertion: the second request's offset must be 2 (the scanned count), not 4
+    // (the returned count) - MockTransport serves its scripted pages in call order regardless of
+    // what offset is requested, so only inspecting the actual request URLs catches a guard that
+    // picks the wrong (larger) value.
+    assertTrue(backend.urls.get(1).contains("offset=2"), backend.urls.get(1));
+    assertFalse(backend.urls.get(1).contains("offset=4"), backend.urls.get(1));
+  }
+
+  @Test
   void fallsBackToReturnedCountWhenHeaderMissing() {
     // Endpoints/mocks that do not send X-Apify-Pagination-Count (every collection but dataset
     // items, and this one deliberately omitting it) must keep behaving exactly as before: advance
@@ -158,13 +197,13 @@ class DatasetItemsIteratorTest {
 
   @Test
   void fallsBackToReturnedCountWhenHeaderIsImplausiblyLow() {
-    // Regression for a real finding against the live API: it was observed sending
-    // X-Apify-Pagination-Count: 0 on every page of an *unfiltered* listing, even though each page
-    // genuinely scanned and returned real items. A scanned count can never be smaller than the
-    // number of items it produced, so a header value below the returned count cannot be a real
-    // "nothing scanned" answer - it means the header is not actually populated for this
-    // request/endpoint yet. Trusting it anyway would advance the offset by 0 and re-request (or,
-    // worse, treat the page as exhausted and stop) even though there is more data.
+    // Regression for a real finding against the live API (see PaginationList.getScannedCount): it
+    // was observed sending X-Apify-Pagination-Count: 0 on every page of an *unfiltered* listing,
+    // even though each page genuinely scanned and returned real items - a combination that can
+    // never
+    // be a real "nothing scanned" answer (0 scanned rows can't produce items), so it must mean the
+    // header is not populated for this request/endpoint yet. Trusting it anyway would advance the
+    // offset by 0 and re-request (or, worse, treat the page as exhausted and stop).
     MockTransport backend =
         new MockTransport(
             List.of(

@@ -233,14 +233,18 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
       // data ahead.
       //
       // getScannedCount() is null on every endpoint that does not report the header at all
-      // (everything but dataset items). It is also only trusted when it is at least the returned
-      // count: a scanned count can never be smaller than what it produced, so a smaller value (in
-      // practice, observed as a flat 0 on every page against the live API at the time of writing,
-      // even where real items were both scanned and returned) means the header is not actually
-      // populated yet rather than a real "nothing scanned" answer - falling back to the returned
-      // count there keeps this exactly as safe as before the header existed.
+      // (everything but dataset items). Where it is reported, a *nonzero* value is always trusted:
+      // the returned count can legitimately fall on either side of it (a filter drops rows, so
+      // returned < scanned; unwind splits one scanned row's array field into several output items,
+      // so returned > scanned), and the scanned count is what offset must advance by in both cases.
+      // A reported *zero* is trusted only when the page also returned nothing: scanning zero rows
+      // can never produce items, so "0 scanned, N>0 returned" is not a real answer the API can give
+      // - it means the header is not actually populated for this request yet (observed in practice
+      // as a flat 0 on every page of an unfiltered, non-unwound live-API request that did return
+      // real items), and falling back to the returned count there keeps this exactly as safe as
+      // before the header existed.
       Long reported = page.getScannedCount();
-      long scanned = reported != null && reported >= count ? reported : count;
+      long scanned = reported != null && (reported > 0 || count == 0) ? reported : count;
       offset += scanned;
       yielded += count;
       // Defensively trim the last page to the cap in case the server returned more than requested,

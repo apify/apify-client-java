@@ -22,10 +22,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ScheduleClient.getLog()` was fetching the raw response body as text; the endpoint's response is
   a JSON envelope wrapping an array of log entries. It now returns `List<ScheduleInvoked>`.
 - `DatasetClient.iterateItems`/the publisher driving it could repeat or silently skip items when
-  combined with server-side item filters (`clean`/`skipEmpty`/`skipHidden`): it now paginates by the
-  `X-Apify-Pagination-Count` scanned-row count the API reports (when that count is at least the
-  number of items returned; a smaller value is treated as the header not being populated and falls
-  back to the returned count, as before), not just by the number of items returned.
+  combined with server-side item filters (`clean`/`skipEmpty`/`skipHidden`) or `unwind`: it now
+  paginates by the `X-Apify-Pagination-Count` scanned-row count the API reports whenever that count
+  is nonzero (a reported `0` is trusted only when the page also returned nothing, since scanning zero
+  rows can never produce items; any other `0` falls back to the returned count, as before), not just
+  by the number of items returned.
 - `ApifyClientBuilder`'s `baseUrl`/`publicBaseUrl` doubled the `/v2` suffix when the caller already
   included it (e.g. `"https://api.apify.com/v2"` became `".../v2/v2"`).
 - `ResourceContext.toSafeId` replaced only the first `/` in a resource id; it now replaces all of

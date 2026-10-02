@@ -51,10 +51,14 @@ class ScheduleIntegrationTest extends IntegrationBase {
     ApifyClient client = requireClient();
     Schedule sch = client.schedules().create(scheduleDef(uniqueName("sch-log"))).join();
     try {
-      // Simple GET on the schedule-log endpoint; a fresh schedule has no invocations yet (an
-      // empty list), which is a valid result — we only assert the call itself succeeds and
-      // decodes the response envelope (a non-null list).
-      assertTrue(client.schedule(sch.getId()).getLog().join() != null);
+      // A fresh schedule has no invocations yet, so the only reachable real-API assertion is an
+      // empty (not null/absent) list: the endpoint's "no entries" response must still decode
+      // through the {"data": [...]} envelope rather than erroring or resolving to null. Decoding of
+      // populated entries (message/level/createdAt) is covered against a real wire-format example
+      // in ClientBehaviourRegressionTest#scheduleGetLogDecodesEnvelopeArray — producing a non-empty
+      // log here would require waiting for an actual cron invocation, which isn't practical in a
+      // short-lived integration test.
+      assertEquals(List.of(), client.schedule(sch.getId()).getLog().join());
     } finally {
       client.schedule(sch.getId()).delete().join();
     }

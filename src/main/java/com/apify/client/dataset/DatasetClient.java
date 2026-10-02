@@ -138,16 +138,14 @@ public final class DatasetClient {
    * of items yielded ({@code null} or non-positive = all); {@code chunkSize} is the per-request
    * page size ({@code null} = server default).
    *
-   * <p>Server-side item filters ({@code skipEmpty}, {@code skipHidden}, {@code clean}, {@code
-   * simplified}) are applied after {@code offset}/{@code limit}, so a page can scan up to {@code
-   * limit} rows while returning fewer, or none at all. Where the API reports the number of rows it
-   * scanned ({@code X-Apify-Pagination-Count}), this iterator advances by that number rather than
-   * by the number of items returned, so a fully-filtered page neither repeats already-seen items
-   * nor ends iteration early. A header value smaller than the returned count (observed in practice
-   * as a flat {@code 0} even on pages that did return real items) is treated as the header not
-   * being populated for that request, falling back to the returned count - exactly as if the header
-   * were absent - so this is safe whether or not a given deployment of the API actually sends it
-   * yet.
+   * <p>A server-side item filter ({@code skipEmpty}, {@code skipHidden}, {@code clean}, {@code
+   * simplified}) or {@code unwind} can make a page's returned item count diverge from the number of
+   * rows actually scanned - a filter drops rows (returns fewer), {@code unwind} splits one row's
+   * array field into several items (returns more). Where the API reports the scanned count ({@code
+   * X-Apify-Pagination-Count}), this iterator advances by that number rather than by the number of
+   * items returned, so neither case repeats already-seen items, skips rows, nor ends iteration
+   * early. See {@link PaginationList#getScannedCount()} for the one case that header value is not
+   * trusted (and why).
    */
   public <T> Flow.Publisher<T> iterateItems(
       DatasetListItemsOptions options, Long chunkSize, Class<T> itemClass) {

@@ -50,21 +50,23 @@ public final class PaginationList<T> extends ApifyResource {
   }
 
   /**
-   * The number of rows the API scanned to produce this page, before any item-level filtering (e.g.
-   * dataset items' {@code clean}/{@code skipEmpty}/{@code skipHidden}), as reported by the {@code
-   * X-Apify-Pagination-Count} response header. {@code null} when the endpoint does not send that
-   * header, in which case {@link #getCount()} (the number of items actually returned) is the right
-   * value to advance pagination by - the two always agree outside the dataset items endpoint.
+   * The number of rows the API scanned to produce this page, before any item-level transform (e.g.
+   * dataset items' {@code clean}/{@code skipEmpty}/{@code skipHidden} filters, which can make this
+   * larger than {@link #getCount()}, or {@code unwind}, which can make it smaller), as reported by
+   * the {@code X-Apify-Pagination-Count} response header. {@code null} when the endpoint does not
+   * send that header, in which case {@link #getCount()} is the right value to advance pagination by
+   * - the two always agree outside the dataset items endpoint.
    *
-   * <p>A value smaller than {@link #getCount()} cannot be a genuine "rows scanned" answer (scanning
-   * can never produce more items than it scanned), so it is treated as the header not actually
-   * being populated for that request rather than as real data - callers reading this field directly
-   * should apply the same {@code scannedCount != null && scannedCount >= getCount() ? scannedCount
-   * : getCount()} fallback that {@link com.apify.client.dataset.DatasetClient#iterateItems} uses.
+   * <p>A reported {@code 0} together with a nonzero {@link #getCount()} cannot be a genuine answer
+   * (scanning zero rows can never produce items), so that specific combination is treated as the
+   * header not actually being populated for the request rather than as real data. See {@code
+   * AsyncPaginatedPublisher.applyPage} for the exact fallback callers reading this field directly
+   * should mirror.
    *
    * <p>Internal pagination-engine detail, exposed here (rather than hidden) only because {@link
    * #getItems()} and this metadata necessarily travel together on the same page object; most
-   * callers never need it directly - {@code iterateItems} already accounts for it.
+   * callers never need it directly - {@link com.apify.client.dataset.DatasetClient#iterateItems}
+   * already accounts for it.
    */
   public Long getScannedCount() {
     return scannedCount;
