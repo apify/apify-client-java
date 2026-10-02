@@ -225,7 +225,23 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
       buffer = page.getItems();
       pos = 0;
       int count = buffer.size();
-      offset += count;
+      // Advance the offset (and decide exhaustion) by the number of rows the API scanned, not the
+      // number of items it returned: an endpoint with item-level filtering (dataset items' clean /
+      // skipEmpty / skipHidden) can scan up to the requested page size while returning fewer rows,
+      // or none at all. Using the returned count here would re-scan (and re-yield) already-seen
+      // rows, or stop iteration early on a page that filtered out everything but still had more
+      // data ahead.
+      //
+      // getScannedCount() is null on every endpoint that does not report the header at all
+      // (everything but dataset items). It is also only trusted when it is at least the returned
+      // count: a scanned count can never be smaller than what it produced, so a smaller value (in
+      // practice, observed as a flat 0 on every page against the live API at the time of writing,
+      // even where real items were both scanned and returned) means the header is not actually
+      // populated yet rather than a real "nothing scanned" answer - falling back to the returned
+      // count there keeps this exactly as safe as before the header existed.
+      Long reported = page.getScannedCount();
+      long scanned = reported != null && reported >= count ? reported : count;
+      offset += scanned;
       yielded += count;
       // Defensively trim the last page to the cap in case the server returned more than requested,
       // so the subscriber never sees more than `totalLimit` items.
@@ -233,9 +249,11 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
         buffer = buffer.subList(0, count - (int) (yielded - totalLimit));
         yielded = totalLimit;
       }
-      // Stop on the cap or an empty page; never on a short page (the API clamps large page sizes)
-      // or the reported total (unreliable on some endpoints — see class doc).
-      if (count == 0 || (totalLimit != null && yielded >= totalLimit)) {
+      // Stop on the cap or a page that scanned nothing (the source is exhausted); never on a short
+      // *returned* page (the API clamps large page sizes, and filtering can legitimately return
+      // fewer items than were scanned) or the reported total (unreliable on some endpoints — see
+      // class doc).
+      if (scanned == 0 || (totalLimit != null && yielded >= totalLimit)) {
         exhausted = true;
       }
     }

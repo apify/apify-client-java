@@ -22,6 +22,7 @@ public final class PaginationList<T> extends ApifyResource {
   private long count;
   private boolean desc;
   private List<T> items = List.of();
+  private Long scannedCount;
 
   /** Total number of items available across all pages. */
   public long getTotal() {
@@ -46,6 +47,27 @@ public final class PaginationList<T> extends ApifyResource {
   /** Whether the items are in descending order. */
   public boolean isDesc() {
     return desc;
+  }
+
+  /**
+   * The number of rows the API scanned to produce this page, before any item-level filtering (e.g.
+   * dataset items' {@code clean}/{@code skipEmpty}/{@code skipHidden}), as reported by the {@code
+   * X-Apify-Pagination-Count} response header. {@code null} when the endpoint does not send that
+   * header, in which case {@link #getCount()} (the number of items actually returned) is the right
+   * value to advance pagination by - the two always agree outside the dataset items endpoint.
+   *
+   * <p>A value smaller than {@link #getCount()} cannot be a genuine "rows scanned" answer (scanning
+   * can never produce more items than it scanned), so it is treated as the header not actually
+   * being populated for that request rather than as real data - callers reading this field directly
+   * should apply the same {@code scannedCount != null && scannedCount >= getCount() ? scannedCount
+   * : getCount()} fallback that {@link com.apify.client.dataset.DatasetClient#iterateItems} uses.
+   *
+   * <p>Internal pagination-engine detail, exposed here (rather than hidden) only because {@link
+   * #getItems()} and this metadata necessarily travel together on the same page object; most
+   * callers never need it directly - {@code iterateItems} already accounts for it.
+   */
+  public Long getScannedCount() {
+    return scannedCount;
   }
 
   /** The items of this page (never {@code null}; unmodifiable). */
@@ -78,6 +100,10 @@ public final class PaginationList<T> extends ApifyResource {
 
   public void setDesc(boolean desc) {
     this.desc = desc;
+  }
+
+  public void setScannedCount(Long scannedCount) {
+    this.scannedCount = scannedCount;
   }
 
   public void setItems(List<T> items) {

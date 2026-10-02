@@ -28,7 +28,7 @@ Task task = client.tasks().create(Map.of(
 | `start(Object input, TaskStartOptions)` | Start a task run (input overrides stored input; `null` uses it). Completes with `ActorRun`. |
 | `call(Object input, TaskStartOptions, Long waitSecs)` | Start and poll until finished; does **not** stream the run's log. Completes with `ActorRun`. |
 | `call(Object input, TaskCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default (matching the reference client's `call` defaulting `options.log` to `'default'`). Use `TaskCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
-| `getInput()` | The stored input. Completes with `Optional<JsonNode>`. |
+| `getInput()` | The stored input. Completes with `JsonNode`; throws `NotFoundError` if the task is gone (no separate "input absent" state). |
 | `updateInput(Object)` | Replace the stored input. Completes with `JsonNode`. |
 | `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run (see [`LastRunOptions`](actors.md#actorclient)). |
 | `runs()` | Nested run collection client. |

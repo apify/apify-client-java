@@ -12,6 +12,14 @@ import java.util.Map;
  * #getStatusCode() status code}, the number of the final {@link #getAttempt() attempt}, and the
  * request {@link #getHttpMethod() method}/{@link #getPath() path}.
  *
+ * <p>The client throws the subclass matching the response's status code - {@link
+ * InvalidRequestError} (400), {@link UnauthorizedError} (401), {@link ForbiddenError} (403), {@link
+ * NotFoundError} (404), {@link ConflictError} (409), {@link RateLimitError} (429) or {@link
+ * ServerError} (5xx) - so a {@code catch} block can branch with {@code instanceof} instead of
+ * comparing {@link #getStatusCode()} by number. Any other status is this plain class. Every
+ * subclass extends this one, so an existing {@code catch (ApifyApiException e)} keeps working
+ * unchanged.
+ *
  * <p>It is an unchecked exception so callers are not forced to wrap every call; recover from it
  * with a normal {@code try}/{@code catch} where relevant.
  */

@@ -76,9 +76,11 @@ transitive dependency of this client, so it is already on your classpath.
 A few methods return data whose shape is not modelled by this client and is instead exposed as a
 Jackson `JsonNode` (or accept an arbitrary `Object` serialized to JSON):
 
-- Read, returning a required `JsonNode` (never absent): `me().monthlyUsage(...)`, `me().limits()`.
-- Read, returning `Optional<JsonNode>` (empty when the underlying resource has none): `dataset(id).getStatistics()`,
-  `task(id).getInput()`, `build(id).getOpenApiDefinition()`.
+- Read, returning a required `JsonNode` (never absent; a 404 throws rather than returning empty —
+  see [error handling](../README.md#error-handling)): `me().monthlyUsage(...)`, `me().limits()`,
+  `dataset(id).getStatistics()`, `task(id).getInput()`.
+- Read, returning `Optional<JsonNode>` (empty when the underlying resource has none):
+  `build(id).getOpenApiDefinition()`.
 - Write: `task(id).updateInput(...)` (itself returning a required `JsonNode`, the updated input)
   and `me().updateLimits(...)` accept an arbitrary JSON-serializable value, as do
   definition/`update`/`create` arguments generally — a `Map`, a `JsonNode`, or your own POJO.

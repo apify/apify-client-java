@@ -51,9 +51,15 @@ public final class KeyValueStoreClient {
         ResourceContext.nestedCollection(http, base, subPath, inherited));
   }
 
-  /** Fetches the store metadata, or empty if it does not exist. */
+  /**
+   * Fetches the store metadata, or empty if it does not exist.
+   *
+   * <p>On a client reached through a run/task without an explicit store id (e.g. {@code
+   * run.keyValueStore()}), a 404 is ambiguous between "the run is gone" and "the run has no store",
+   * so it throws {@link com.apify.client.http.NotFoundError} instead of resolving to empty.
+   */
   public CompletableFuture<Optional<KeyValueStore>> get() {
-    return ctx.getResource("", new QueryParams(), KeyValueStore.class);
+    return ctx.getResourceUnlessAmbiguous("", new QueryParams(), KeyValueStore.class);
   }
 
   /** Updates the store metadata (e.g. name) and returns the updated object. */
@@ -61,9 +67,12 @@ public final class KeyValueStoreClient {
     return ctx.updateResource("", newFields, KeyValueStore.class);
   }
 
-  /** Deletes the store. */
+  /**
+   * Deletes the store. See {@link #get()} for why a client without an explicit store id throws on a
+   * 404 instead of treating it as a no-op.
+   */
   public CompletableFuture<Void> delete() {
-    return ctx.deleteResource("");
+    return ctx.deleteResourceUnlessAmbiguous("");
   }
 
   /** Lists the keys stored in this key-value store. */

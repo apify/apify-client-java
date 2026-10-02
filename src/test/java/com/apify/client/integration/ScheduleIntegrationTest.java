@@ -51,9 +51,10 @@ class ScheduleIntegrationTest extends IntegrationBase {
     ApifyClient client = requireClient();
     Schedule sch = client.schedules().create(scheduleDef(uniqueName("sch-log"))).join();
     try {
-      // Simple GET on the schedule-log endpoint; a fresh schedule may have no log yet (empty
-      // Optional), which is a valid result — we only assert the call itself succeeds.
-      client.schedule(sch.getId()).getLog().join();
+      // Simple GET on the schedule-log endpoint; a fresh schedule has no invocations yet (an
+      // empty list), which is a valid result — we only assert the call itself succeeds and
+      // decodes the response envelope (a non-null list).
+      assertTrue(client.schedule(sch.getId()).getLog().join() != null);
     } finally {
       client.schedule(sch.getId()).delete().join();
     }

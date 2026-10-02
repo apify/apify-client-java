@@ -66,7 +66,7 @@ class TaskIntegrationTest extends IntegrationBase {
       TaskClient tc = client.task(task.getId());
       assertTrue(tc.get().join().isPresent());
       tc.updateInput(Map.of("message", "updated")).join();
-      assertTrue(tc.getInput().join().isPresent());
+      assertTrue(tc.getInput().join() != null);
       tc.update(Map.of("name", uniqueName("task-renamed"))).join();
       tc.runs().list(new ListOptions(), new RunListOptions()).join();
 

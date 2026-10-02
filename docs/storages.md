@@ -38,25 +38,26 @@ any field not covered by a typed getter above is still available via the inherit
 
 | Method | Description |
 |---|---|
-| `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
+| `get()` / `update(Object)` / `delete()` | Metadata CRUD. On a client reached through a run/task with no dataset id of its own (e.g. `run.dataset()`), a 404 is ambiguous (parent vs. sub-resource gone) and throws `NotFoundError` instead of resolving to empty/no-op — see [Fetching single resources](../README.md#fetching-single-resources). |
 | `listItems(DatasetListItemsOptions)` | List items. Completes with `PaginationList<JsonNode>`. |
 | `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. Completes with `PaginationList<T>`. |
 | `iterateItems(DatasetListItemsOptions)` / `iterateItems(DatasetListItemsOptions, Long chunkSize)` | A lazy `Flow.Publisher<JsonNode>` over all items; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), the optional `chunkSize` sets the per-request page size (omitted/`null` = server default). |
 | `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Flow.Publisher<T>`. For typed iteration at the server-default page size, pass a `null` chunk size: `iterateItems(opts, null, T.class)`. |
 | `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes. `DownloadItemsFormat` is one of `JSON`, `JSONL`, `CSV`, `XLSX`, `XML`, `RSS`, `HTML`. Completes with `byte[]`. |
 | `pushItems(Object)` | Push a single item or a list of items. Completes with no value (`CompletableFuture<Void>`). |
-| `getStatistics()` | Dataset statistics. Completes with `Optional<JsonNode>`. |
-| `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL. Completes with `String`. |
+| `getStatistics()` | Dataset statistics. Completes with `JsonNode`; throws `NotFoundError` if the dataset is gone (no separate "statistics absent" state). |
+| `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL, served as `json`. Completes with `String`. |
+| `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs, DownloadItemsFormat format)` | As above, with the URL's serialization `format` set explicitly. |
 
 > **Server-side item filters and iteration.** The dataset-items endpoint applies `offset`/`limit` to
 > the raw items and then drops those removed by a server-side filter (`skipEmpty`, `skipHidden`,
-> `clean`, `simplified`), so a page can contain fewer items than requested. Because `iterateItems`
-> advances the offset by the number of items actually returned, combining it with those filters over a
-> multi-page dataset has two failure modes: page windows can overlap and **repeat items**, and — more
-> severely — if an entire offset window is filtered out the endpoint returns an empty page, which the
-> iterator treats as the end, so iteration **stops early and silently skips the remaining data** (an
-> all-filtered first page yields nothing at all). Prefer paging without server-side item filters when
-> iterating, or fetch pages explicitly with `listItems` and filter client-side.
+> `clean`, `simplified`), so a page can *scan* up to `limit` rows while *returning* fewer, or none at
+> all. Where the API reports the number of rows it scanned (`X-Apify-Pagination-Count`), `iterateItems`
+> advances by that number rather than by the number of items returned, so a fully-filtered page
+> neither repeats already-seen items nor ends iteration early. A reported count smaller than the
+> returned one (seen in practice as a flat `0` even on pages that did return items) is treated as the
+> header not being populated for that request and falls back to the returned count, so this is safe
+> whether or not a given deployment of the API sends the header yet.
 
 ```java
 Dataset ds = client.datasets().getOrCreate("my-dataset").join();
@@ -83,10 +84,11 @@ adds `attachment` (`Boolean`), `bom` (`Boolean`), `delimiter` (`String`), `skipH
 (`Boolean`), `xmlRoot` (`String`), `xmlRow` (`String`), `feedTitle` (`String`), `feedDescription`
 (`String`).
 
-`createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` completes with a `String` URL.
-If the dataset is private, the client fetches it, reads its URL-signing secret, and appends an
-HMAC-SHA256 signature (bounded by `expiresInSecs`, or non-expiring when `null`); for public datasets
-the URL is unsigned.
+`createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs[, DownloadItemsFormat format])`
+completes with a `String` URL. If the dataset is private, the client fetches it, reads its
+URL-signing secret, and appends an HMAC-SHA256 signature (bounded by `expiresInSecs`, or
+non-expiring when `null`); for public datasets the URL is unsigned. The optional `format` sets the
+serialization the URL serves items in (default `json` when omitted/`null`).
 
 > **Public-URL limitation (matches the JavaScript reference client).** The public-URL builders
 > (`createItemsPublicUrl`, and the key-value-store `getRecordPublicUrl` / `createKeysPublicUrl`)
@@ -108,7 +110,7 @@ datasets.
 
 | Method | Description |
 |---|---|
-| `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
+| `get()` / `update(Object)` / `delete()` | Metadata CRUD. On a client reached through a run/task with no store id of its own (e.g. `run.keyValueStore()`), a 404 is ambiguous (parent vs. sub-resource gone) and throws `NotFoundError` instead of resolving to empty/no-op — see [Fetching single resources](../README.md#fetching-single-resources). |
 | `listKeys(ListKeysOptions)` | List keys. Completes with `KeyValueStoreKeysPage`. |
 | `iterateKeys(ListKeysOptions)` / `iterateKeys(ListKeysOptions, Long chunkSize)` | A lazy `Flow.Publisher<KeyValueStoreKey>` over all keys, paging with the cursor (`exclusiveStartKey`). Note: here the options' `limit` caps the **total** number of keys yielded (`null`/unset or non-positive = all), whereas for `listKeys`/`createKeysPublicUrl` the same `ListKeysOptions.limit` is a single-request page size. `chunkSize` sets the per-request page size (`null` = server default). |
 | `recordExists(String key)` | Whether a record exists. Completes with `boolean`. |
@@ -158,7 +160,7 @@ overload here — the request-queue creation endpoint does not accept a creation
 
 | Method | Description |
 |---|---|
-| `get()` / `update(Object)` / `delete()` | Metadata CRUD. |
+| `get()` / `update(Object)` / `delete()` | Metadata CRUD. On a client reached through a run/task with no queue id of its own (e.g. `run.requestQueue()`), a 404 is ambiguous (parent vs. sub-resource gone) and throws `NotFoundError` instead of resolving to empty/no-op — see [Fetching single resources](../README.md#fetching-single-resources). |
 | `withClientKey(String)` | A copy that identifies its requests with a stable client key (required for lock operations). |
 | `listHead(Long limit)` | Requests at the head. Completes with `RequestQueueHead`. |
 | `addRequest(RequestQueueRequest, boolean forefront)` | Add a request. Completes with `RequestQueueOperationInfo`. |

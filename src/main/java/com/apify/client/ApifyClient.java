@@ -116,6 +116,15 @@ public final class ApifyClient {
     return baseUrl;
   }
 
+  /**
+   * Returns the fully-qualified public API base URL this client builds shareable URLs against
+   * (including the {@code /v2} suffix). Not part of the public API, for the same reason as {@link
+   * #getUserAgent()}.
+   */
+  String getPublicApiBaseUrl() {
+    return publicBaseUrl;
+  }
+
   // ----- Actor accessors -----------------------------------------------------
 
   /** A client for the Actor collection (list &amp; create Actors). */
