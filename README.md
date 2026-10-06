@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.6.5</version>
+  <version>0.7.0</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.6.5'
+  implementation 'com.apify:apify-client:0.7.0'
 }
 ```
 
@@ -218,13 +218,31 @@ methods directly on top of the JDK `HttpClient`'s own `sendAsync`.
 
 ## Fetching single resources
 
-Methods that fetch a single resource complete with an `Optional<T>`: a missing resource is reported
-by an empty `Optional` rather than an exception.
+Methods that fetch a single resource **addressed by an explicit id** complete with an `Optional<T>`:
+a missing resource is reported by an empty `Optional` rather than an exception, and `delete()`
+resolves without error if the resource is already gone.
 
 ```java
 client.actor("apify/hello-world").get()
     .thenAccept(actor -> actor.ifPresent(a -> System.out.println(a.getTitle())))
     .join();
+```
+
+Everywhere else, a 404 throws `NotFoundError` instead: a client chained off a run or build with no
+id of its own (e.g. `client.run(id).dataset()`, `client.build(id).log()`), where the missing
+resource could be the parent rather than the sub-resource, and a handful of fixed sub-paths where a
+missing value is not a meaningful state distinct from "the parent is gone" (`DatasetClient
+.getStatistics()`, `ScheduleClient.getLog()`, `TaskClient.getInput()`, `UserClient.monthlyUsage()` /
+`limits()`, `WebhookClient.test()`):
+
+```java
+try {
+  client.run("missing-run").dataset().get().join();
+} catch (CompletionException e) {
+  if (e.getCause() instanceof NotFoundError) {
+    // Either the run or its default dataset does not exist.
+  }
+}
 ```
 
 ## Error handling
@@ -239,7 +257,13 @@ original exception wrapped in an unchecked `CompletionException` (`.get()` wraps
 `ApifyApiException`/`ApifyTransportException`, or use `.handle(...)`/`.exceptionally(...)` to react
 to it without unwrapping at all:
 
-- `ApifyApiException` — the request reached the API, which answered with a non-success status.
+- `ApifyApiException` — the request reached the API, which answered with a non-success status. The
+  client throws the subclass matching the response's status code, so a `catch` can branch with
+  `instanceof` instead of comparing `getStatusCode()` by number — `InvalidRequestError` (400),
+  `UnauthorizedError` (401), `ForbiddenError` (403), `NotFoundError` (404), `ConflictError` (409),
+  `RateLimitError` (429) or `ServerError` (5xx). Any other status is the plain `ApifyApiException`
+  base class, which every subclass extends, so an existing `catch (ApifyApiException e)` keeps
+  working unchanged.
 - `ApifyTransportException` — the request never produced an API response at all (connection
   failure, DNS, timeout, or a local failure preparing the request/response, e.g. compression).
   `isTimeout()` reports whether the underlying cause was specifically a timeout (backed by
@@ -293,10 +317,10 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.6.5`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.7.0`).
 - `Version.API_SPEC_VERSION` — the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters and models were last generated
-  and checked against (`v2-2026-09-28T115051Z`). It is a snapshot, not a live compatibility
+  and checked against (`v2-2026-10-01T153946Z`). It is a snapshot, not a live compatibility
   guarantee: the client keeps working against newer, backward-compatible spec revisions, but a
   feature added to the API after this snapshot has no corresponding method here yet.
 

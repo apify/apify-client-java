@@ -78,8 +78,8 @@ Access a build's or run's log directly, or via `client.run(id).log()` / `client.
 
 | Method | Description |
 |---|---|
-| `get()` / `get(LogOptions)` | The whole log as text. Completes with `Optional<String>`. |
-| `stream()` / `stream(LogOptions)` | A live `InputStream` over the log (for redirection). Completes with `InputStream`. |
+| `get()` / `get(LogOptions)` | The whole log as text. Completes with `Optional<String>` when addressed by an explicit id (`client.log(id)`); on `run.log()`/`build.log()` (no log id of its own), a 404 is ambiguous and throws `NotFoundError` instead — see [Fetching single resources](../README.md#fetching-single-resources). |
+| `stream()` / `stream(LogOptions)` | A live `InputStream` over the log (for redirection). Completes with `InputStream`; throws on any error response, including a 404. |
 
 `LogOptions` fields: `raw(Boolean)`, `download(Boolean)`.
 

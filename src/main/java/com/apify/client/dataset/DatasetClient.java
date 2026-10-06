@@ -29,6 +29,13 @@ public final class DatasetClient {
   /** Header reporting the effective page size limit applied to this page. */
   private static final String HEADER_PAGINATION_LIMIT = "X-Apify-Pagination-Limit";
 
+  /**
+   * Header reporting the number of rows the API scanned to produce this page, before any item-level
+   * filtering ({@code clean}/{@code skipEmpty}/{@code skipHidden}) is applied. Absent on older API
+   * responses; see {@link PaginationList#getScannedCount()}.
+   */
+  private static final String HEADER_PAGINATION_COUNT = "X-Apify-Pagination-Count";
+
   private final HttpClientCore http;
   private final ResourceContext ctx;
 
@@ -65,9 +72,15 @@ public final class DatasetClient {
         http, ResourceContext.nestedCollection(http, base, subPath, inherited));
   }
 
-  /** Fetches the dataset metadata, or empty if it does not exist. */
+  /**
+   * Fetches the dataset metadata, or empty if it does not exist.
+   *
+   * <p>On a client reached through a run/task without an explicit dataset id (e.g. {@code
+   * run.dataset()}), a 404 is ambiguous between "the run is gone" and "the run has no dataset", so
+   * it throws {@link com.apify.client.http.NotFoundError} instead of resolving to empty.
+   */
   public CompletableFuture<Optional<Dataset>> get() {
-    return ctx.getResource("", new QueryParams(), Dataset.class);
+    return ctx.getResourceUnlessAmbiguous("", new QueryParams(), Dataset.class);
   }
 
   /** Updates the dataset metadata (e.g. name, title) and returns the updated object. */
@@ -75,9 +88,12 @@ public final class DatasetClient {
     return ctx.updateResource("", newFields, Dataset.class);
   }
 
-  /** Deletes the dataset. */
+  /**
+   * Deletes the dataset. See {@link #get()} for why a client without an explicit dataset id throws
+   * on a 404 instead of treating it as a no-op.
+   */
   public CompletableFuture<Void> delete() {
-    return ctx.deleteResource("");
+    return ctx.deleteResourceUnlessAmbiguous("");
   }
 
   /**
@@ -122,12 +138,14 @@ public final class DatasetClient {
    * of items yielded ({@code null} or non-positive = all); {@code chunkSize} is the per-request
    * page size ({@code null} = server default).
    *
-   * <p>Note: server-side item filters ({@code skipEmpty}, {@code skipHidden}, {@code clean}, {@code
-   * simplified}) are applied after {@code offset}/{@code limit}, so a page can return fewer items
-   * than requested. Combining those filters with iteration can repeat items (overlapping windows)
-   * and, if a whole offset window is filtered out, the endpoint returns an empty page which ends
-   * iteration early — silently skipping the remaining items. Iterate without server-side item
-   * filters, or page explicitly with {@link #listItems} and filter client-side.
+   * <p>A server-side item filter ({@code skipEmpty}, {@code skipHidden}, {@code clean}, {@code
+   * simplified}) or {@code unwind} can make a page's returned item count diverge from the number of
+   * rows actually scanned - a filter drops rows (returns fewer), {@code unwind} splits one row's
+   * array field into several items (returns more). Where the API reports the scanned count ({@code
+   * X-Apify-Pagination-Count}), this iterator advances by that number rather than by the number of
+   * items returned, so neither case repeats already-seen items, skips rows, nor ends iteration
+   * early. See {@link PaginationList#getScannedCount()} for the one case that header value is not
+   * trusted (and why).
    */
   public <T> Flow.Publisher<T> iterateItems(
       DatasetListItemsOptions options, Long chunkSize, Class<T> itemClass) {
@@ -169,6 +187,7 @@ public final class DatasetClient {
               result.setTotal(headerLong(resp, HEADER_PAGINATION_TOTAL, count));
               result.setOffset(headerLong(resp, HEADER_PAGINATION_OFFSET, 0));
               result.setLimit(headerLong(resp, HEADER_PAGINATION_LIMIT, count));
+              result.setScannedCount(headerLongOrNull(resp, HEADER_PAGINATION_COUNT));
               if (desc != null) {
                 result.setDesc(desc);
               }
@@ -207,14 +226,15 @@ public final class DatasetClient {
         .thenApply(resp -> null);
   }
 
-  /** Returns statistical information about the dataset, or empty if unavailable. */
-  public CompletableFuture<Optional<JsonNode>> getStatistics() {
-    return ctx.getRaw("statistics", new QueryParams())
-        .thenApply(
-            resp ->
-                resp == null
-                    ? Optional.empty()
-                    : Optional.of(Json.parseData(resp.body(), JsonNode.class)));
+  /**
+   * Returns statistical information about the dataset.
+   *
+   * <p>A 404 throws {@link com.apify.client.http.NotFoundError} rather than resolving to empty:
+   * unlike {@link #get()}, there is no meaningful "statistics are absent" state distinct from "the
+   * dataset is gone", so a missing dataset is reported as a failure here too.
+   */
+  public CompletableFuture<JsonNode> getStatistics() {
+    return ctx.getResourceRequired("statistics", new QueryParams(), JsonNode.class);
   }
 
   /**
@@ -227,8 +247,21 @@ public final class DatasetClient {
    */
   public CompletableFuture<String> createItemsPublicUrl(
       DatasetListItemsOptions options, Long expiresInSecs) {
+    return createItemsPublicUrl(options, expiresInSecs, null);
+  }
+
+  /**
+   * As {@link #createItemsPublicUrl(DatasetListItemsOptions, Long)}, additionally setting the
+   * {@code format} the URL serves items in (e.g. {@code csv}, {@code xml}); {@code null} leaves it
+   * unset, which the API serves as {@code json}.
+   */
+  public CompletableFuture<String> createItemsPublicUrl(
+      DatasetListItemsOptions options, Long expiresInSecs, DownloadItemsFormat format) {
     QueryParams params = new QueryParams();
     options.apply(params);
+    if (format != null) {
+      params.addString("format", format.wireValue());
+    }
     return get()
         .thenApply(
             dataset -> {
@@ -252,5 +285,16 @@ public final class DatasetClient {
 
   private static long headerLong(ApiResponse resp, String name, long fallback) {
     return resp.headers().firstValueAsLong(name).orElse(fallback);
+  }
+
+  /**
+   * As {@link #headerLong}, but returns {@code null} (rather than a fallback value) when the header
+   * is absent, so callers can distinguish "not reported" from any particular number - notably
+   * {@code 0}, a value the header can legitimately carry (see {@link
+   * PaginationList#getScannedCount()}).
+   */
+  private static Long headerLongOrNull(ApiResponse resp, String name) {
+    var value = resp.headers().firstValueAsLong(name);
+    return value.isPresent() ? value.getAsLong() : null;
   }
 }

@@ -5,8 +5,15 @@ import com.aayushatharva.brotli4j.encoder.Encoder;
 import com.apify.client.http.ApiResponse;
 import com.apify.client.http.ApifyApiException;
 import com.apify.client.http.ApifyTransportException;
+import com.apify.client.http.ConflictError;
+import com.apify.client.http.ForbiddenError;
 import com.apify.client.http.HttpTransport;
+import com.apify.client.http.InvalidRequestError;
+import com.apify.client.http.NotFoundError;
+import com.apify.client.http.RateLimitError;
 import com.apify.client.http.RetryConfig;
+import com.apify.client.http.ServerError;
+import com.apify.client.http.UnauthorizedError;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,7 +23,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -176,7 +186,7 @@ public final class HttpClientCore {
     // Compress the body once, up front, so every retry reuses the same encoded payload.
     byte[] requestBody = body;
     Map<String, String> headers = extraHeaders;
-    if (shouldCompress(requestBody, extraHeaders)) {
+    if (shouldCompress(requestBody, contentType, extraHeaders)) {
       Compressed compressed = compress(requestBody, BROTLI_AVAILABLE);
       requestBody = compressed.body();
       headers = new LinkedHashMap<>(extraHeaders == null ? Map.of() : extraHeaders);
@@ -351,10 +361,12 @@ public final class HttpClientCore {
 
   /**
    * Reports whether a request body should be compressed: it must be present, at least {@link
-   * #MIN_COMPRESS_BYTES} bytes, and the caller must not have already set a {@code Content-Encoding}
-   * header (which would mean the body is pre-encoded).
+   * #MIN_COMPRESS_BYTES} bytes, the caller must not have already set a {@code Content-Encoding}
+   * header (which would mean the body is pre-encoded), and {@code contentType} must not already
+   * carry its own compression (see {@link #isCompressibleContentType}).
    */
-  private static boolean shouldCompress(byte[] body, Map<String, String> extraHeaders) {
+  private static boolean shouldCompress(
+      byte[] body, String contentType, Map<String, String> extraHeaders) {
     if (body == null || body.length < MIN_COMPRESS_BYTES) {
       return false;
     }
@@ -363,6 +375,97 @@ public final class HttpClientCore {
         if (CONTENT_ENCODING_HEADER.equalsIgnoreCase(key)) {
           return false;
         }
+      }
+    }
+    return isCompressibleContentType(contentType);
+  }
+
+  /** Media type prefixes whose payloads already carry their own compression. */
+  private static final List<String> ALREADY_COMPRESSED_MEDIA_TYPE_PREFIXES =
+      List.of("audio/", "image/", "video/");
+
+  /** Exact media types whose payloads already carry their own compression. */
+  private static final Set<String> ALREADY_COMPRESSED_MEDIA_TYPES =
+      Set.of(
+          "application/epub+zip",
+          "application/gzip",
+          "application/java-archive",
+          "application/vnd.android.package-archive",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.rar",
+          "application/x-7z-compressed",
+          "application/x-bzip",
+          "application/x-bzip2",
+          "application/x-gzip",
+          "application/x-rar-compressed",
+          "application/x-xz",
+          "application/x-zip-compressed",
+          "application/zip",
+          "application/zstd",
+          "font/woff",
+          "font/woff2");
+
+  /** Uncompressed media types that sit under an already-compressed prefix but are still raw. */
+  private static final Set<String> COMPRESSIBLE_MEDIA_TYPES =
+      Set.of(
+          "audio/aiff",
+          "audio/basic",
+          "audio/l16",
+          "audio/l24",
+          "audio/midi",
+          "audio/vnd.wave",
+          "audio/wav",
+          "audio/wave",
+          "audio/x-aiff",
+          "audio/x-wav",
+          "image/bmp",
+          "image/tiff",
+          "image/vnd.adobe.photoshop",
+          "image/vnd.microsoft.icon",
+          "image/x-icon",
+          "image/x-ms-bmp");
+
+  /** Structured syntax suffixes that mark a media type as text even under a compressed prefix. */
+  private static final List<String> COMPRESSIBLE_MEDIA_TYPE_SUFFIXES = List.of("+json", "+xml");
+
+  /**
+   * Reports whether a request body with the given {@code Content-Type} is worth compressing.
+   * Images, audio, video and archives already carry their own compression: running them through
+   * brotli or gzip burns CPU, holds a second full copy of the body in memory, and usually produces
+   * output slightly larger than the input. A content type that is raw despite such a media type
+   * (e.g. {@code image/bmp}, {@code audio/wav}) is still compressed, as is a structured-syntax type
+   * ending in {@code +json}/{@code +xml} (e.g. {@code image/svg+xml}). A missing content type is
+   * assumed compressible. Matches the reference JS client's {@code isCompressibleContentType}.
+   *
+   * <p>Public (like {@link #compress} and {@link #brotliAvailable}) so {@code CompressionTest},
+   * outside this non-exported package, can exercise the classification directly.
+   */
+  public static boolean isCompressibleContentType(String contentType) {
+    if (contentType == null || contentType.isEmpty()) {
+      return true;
+    }
+    // Content-Type is case-insensitive and may carry parameters (e.g. "text/plain; charset=utf-8").
+    int semicolon = contentType.indexOf(';');
+    String mediaType =
+        (semicolon >= 0 ? contentType.substring(0, semicolon) : contentType)
+            .trim()
+            .toLowerCase(Locale.ROOT);
+    if (COMPRESSIBLE_MEDIA_TYPES.contains(mediaType)) {
+      return true;
+    }
+    for (String suffix : COMPRESSIBLE_MEDIA_TYPE_SUFFIXES) {
+      if (mediaType.endsWith(suffix)) {
+        return true;
+      }
+    }
+    if (ALREADY_COMPRESSED_MEDIA_TYPES.contains(mediaType)) {
+      return false;
+    }
+    for (String prefix : ALREADY_COMPRESSED_MEDIA_TYPE_PREFIXES) {
+      if (mediaType.startsWith(prefix)) {
+        return false;
       }
     }
     return true;
@@ -504,7 +607,34 @@ public final class HttpClientCore {
               ? "unexpected error with status " + status
               : "unexpected error: " + new String(body, java.nio.charset.StandardCharsets.UTF_8);
     }
-    return new ApifyApiException(status, type, message, attempt, method, path, data);
+    return newApiException(status, type, message, attempt, method, path, data);
+  }
+
+  /**
+   * Builds the {@link ApifyApiException} subclass matching {@code status}, so callers can branch
+   * with {@code instanceof} on the specific error (see the class Javadoc). A status with no
+   * dedicated subclass falls back to the plain base class.
+   */
+  private static ApifyApiException newApiException(
+      int status,
+      String type,
+      String message,
+      int attempt,
+      String method,
+      String path,
+      Map<String, Object> data) {
+    return switch (status) {
+      case 400 -> new InvalidRequestError(type, message, attempt, method, path, data);
+      case 401 -> new UnauthorizedError(type, message, attempt, method, path, data);
+      case 403 -> new ForbiddenError(type, message, attempt, method, path, data);
+      case 404 -> new NotFoundError(type, message, attempt, method, path, data);
+      case 409 -> new ConflictError(type, message, attempt, method, path, data);
+      case RATE_LIMIT_EXCEEDED -> new RateLimitError(type, message, attempt, method, path, data);
+      default ->
+          status >= MIN_SERVER_ERROR
+              ? new ServerError(status, type, message, attempt, method, path, data)
+              : new ApifyApiException(status, type, message, attempt, method, path, data);
+    };
   }
 
   /** Returns the path+query portion of a URL, for error reporting. */

@@ -5,6 +5,48 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-10-02
+
+### Added
+
+- `Build.getImageDigest()`, mirroring the OpenAPI spec's new `Build.imageDigest` field.
+- `ApifyApiException` subclasses by HTTP status, matching the reference JS client:
+  `InvalidRequestError` (400), `UnauthorizedError` (401), `ForbiddenError` (403), `NotFoundError`
+  (404), `ConflictError` (409), `RateLimitError` (429), `ServerError` (5xx).
+- `DatasetClient.createItemsPublicUrl(DatasetListItemsOptions, Long, DownloadItemsFormat)` overload
+  to set the public URL's serialization format.
+- `ScheduleInvoked` model.
+
+### Fixed
+
+- `ScheduleClient.getLog()` was fetching the raw response body as text; the endpoint's response is
+  a JSON envelope wrapping an array of log entries. It now returns `List<ScheduleInvoked>`.
+- `DatasetClient.iterateItems`/the publisher driving it could repeat or silently skip items when
+  combined with server-side item filters (`clean`/`skipEmpty`/`skipHidden`) or `unwind`: it now
+  paginates by the `X-Apify-Pagination-Count` scanned-row count the API reports whenever that count
+  is nonzero (a reported `0` is trusted only when the page also returned nothing, since scanning zero
+  rows can never produce items; any other `0` falls back to the returned count, as before), not just
+  by the number of items returned.
+- `ApifyClientBuilder`'s `baseUrl`/`publicBaseUrl` doubled the `/v2` suffix when the caller already
+  included it (e.g. `"https://api.apify.com/v2"` became `".../v2/v2"`).
+- `ResourceContext.toSafeId` replaced only the first `/` in a resource id; it now replaces all of
+  them, and `encodePathSegment` rejects an empty or dot-only (`.`/`..`) path segment instead of
+  encoding it, matching the reference client's URL path-traversal hardening.
+- Request-body compression now skips content types that already carry their own compression
+  (images, audio, video, archives, office/zip packages, web fonts), matching the reference client.
+
+### Changed
+
+- A 404 on a resource client reached through a run/task/build without an explicit id of its own
+  (`run.dataset()`, `run.keyValueStore()`, `run.requestQueue()`, `run.log()`, `build.log()`) now
+  throws `NotFoundError` from `get()`/`delete()`/`log().get()` instead of resolving to an empty
+  `Optional`/no-op, since the 404 is ambiguous between the parent and the sub-resource being gone.
+  Resources addressed by an explicit id are unaffected.
+- `DatasetClient.getStatistics()` and `TaskClient.getInput()` now throw `NotFoundError` on a 404
+  (returning `JsonNode` directly) instead of resolving to `Optional.empty()`, for the same reason.
+- Bumped `Version.API_SPEC_VERSION` to `v2-2026-10-01T153946Z` and `Version.CLIENT_VERSION` to
+  `0.7.0`.
+
 ## [0.6.5] - 2026-09-29
 
 ### Changed

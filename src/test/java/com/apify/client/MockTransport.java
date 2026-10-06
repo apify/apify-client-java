@@ -28,16 +28,22 @@ import javax.net.ssl.SSLSession;
  */
 final class MockTransport implements HttpTransport {
 
-  /** One scripted response: an HTTP status + body, or a transport error. */
+  /** One scripted response: an HTTP status + body (+ optional headers), or a transport error. */
   static final class Scripted {
     final int status;
     final byte[] body;
     final Exception error;
+    final Map<String, String> headers;
 
     Scripted(int status, String body, Exception error) {
+      this(status, body, error, Map.of());
+    }
+
+    Scripted(int status, String body, Exception error, Map<String, String> headers) {
       this.status = status;
       this.body = body == null ? new byte[0] : body.getBytes(StandardCharsets.UTF_8);
       this.error = error;
+      this.headers = headers;
     }
   }
 
@@ -49,6 +55,7 @@ final class MockTransport implements HttpTransport {
   String lastBody;
   byte[] lastBodyBytes;
   final List<String> bodies = new ArrayList<>();
+  final List<String> urls = new ArrayList<>();
 
   /**
    * Optional scripted response for {@link #sendStreamingResponse}; defaults to the first {@code
@@ -73,6 +80,11 @@ final class MockTransport implements HttpTransport {
     return new Scripted(status, body, null);
   }
 
+  /** As {@link #ok(int, String)}, additionally setting response headers (e.g. pagination ones). */
+  static Scripted ok(int status, String body, Map<String, String> headers) {
+    return new Scripted(status, body, null, headers);
+  }
+
   static Scripted networkError() {
     return new Scripted(0, null, new IOException("connection refused"));
   }
@@ -90,6 +102,7 @@ final class MockTransport implements HttpTransport {
     int idx = calls++;
     lastHeaders = request.headers();
     lastUrl = request.uri().toString();
+    urls.add(lastUrl);
     lastMethod = request.method();
     lastBodyBytes = readBody(request);
     lastBody = lastBodyBytes == null ? null : new String(lastBodyBytes, StandardCharsets.UTF_8);
@@ -105,7 +118,8 @@ final class MockTransport implements HttpTransport {
       failed.completeExceptionally(r.error);
       return failed;
     }
-    return CompletableFuture.completedFuture(new FakeResponse(request.uri(), r.status, r.body));
+    return CompletableFuture.completedFuture(
+        new FakeResponse(request.uri(), r.status, r.body, r.headers));
   }
 
   /** Scripts the next {@link #sendStreamingResponse} call to return the given status and body. */
@@ -187,11 +201,17 @@ final class MockTransport implements HttpTransport {
     private final URI uri;
     private final int status;
     private final byte[] body;
+    private final Map<String, String> headers;
 
     FakeResponse(URI uri, int status, byte[] body) {
+      this(uri, status, body, Map.of());
+    }
+
+    FakeResponse(URI uri, int status, byte[] body, Map<String, String> headers) {
       this.uri = uri;
       this.status = status;
       this.body = body;
+      this.headers = headers;
     }
 
     @Override
@@ -211,7 +231,9 @@ final class MockTransport implements HttpTransport {
 
     @Override
     public HttpHeaders headers() {
-      return HttpHeaders.of(Map.of(), (a, b) -> true);
+      Map<String, List<String>> multi = new java.util.LinkedHashMap<>();
+      headers.forEach((k, v) -> multi.put(k, List.of(v)));
+      return HttpHeaders.of(multi, (a, b) -> true);
     }
 
     @Override

@@ -29,7 +29,7 @@ Schedule schedule = client.schedules().create(Map.of(
 | Method | Description |
 |---|---|
 | `get()` / `update(Object)` / `delete()` | CRUD. |
-| `getLog()` | The schedule's invocation log. Completes with `Optional<String>`. |
+| `getLog()` | Up to the last 1000 entries of the schedule's invocation log. Completes with `List<ScheduleInvoked>`; throws `NotFoundError` if the schedule itself no longer exists. |
 
 ```java
 Optional<Schedule> s = client.schedule("SCHEDULE_ID").get().join();
@@ -44,3 +44,6 @@ s.ifPresent(sched -> System.out.println(sched.getCronExpression()));
 (`ScheduleNotifications`, exposing `isEmail()`). Any field not covered by a typed getter is still
 available via the inherited `getExtra()` (see
 [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
+
+`ScheduleInvoked` (one entry of `getLog()`): `getMessage()`, `getLevel()` (e.g. `INFO`, `ERROR`),
+`getCreatedAt()` (`Instant`).
