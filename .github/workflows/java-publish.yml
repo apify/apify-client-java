@@ -55,6 +55,13 @@ jobs:
           gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
 
+      # Maven 3.10 (now on ubuntu-latest) leaks local-repository files into the Central bundle,
+      # which the Central Portal rejects. Pin 3.9.x until central-publishing-maven-plugin handles it.
+      - name: Set up Maven
+        uses: stCarolas/setup-maven@v5
+        with:
+          maven-version: 3.9.16
+
       # Gate the release on the same quality bar as CI so a broken build can never be published.
       - name: Check formatting (Spotless)
         run: mvn -B spotless:check
