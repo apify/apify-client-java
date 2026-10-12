@@ -567,9 +567,9 @@ public final class ResourceContext {
 
   /**
    * One poll of the {@code waitForFinish} loop. {@code lastSeen} carries the most recently observed
-   * resource and {@code absentSinceMillis} the instant it was last seen present, both across
-   * recursive calls (there is no shared mutable state between polls, so each recursive step gets
-   * everything it needs as a parameter).
+   * resource and {@code absentSinceMillis} the instant it was first observed absent (404, or a null
+   * {@code data} body), both across recursive calls (there is no shared mutable state between
+   * polls, so each recursive step gets everything it needs as a parameter).
    */
   private <T> CompletableFuture<T> pollOnce(
       JavaType dataType,
