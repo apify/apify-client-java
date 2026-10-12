@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.log.StreamedLog;
@@ -435,6 +436,32 @@ class StreamedLogTest {
     streamedLog.start().join();
     streamedLog.stop();
     assertEquals(List.of("fallback content"), collected);
+  }
+
+  @Test
+  void stopDuringAnInFlightReopenStillCompletesPromptly() {
+    // Regression test: stop() must still unblock redirection (not hang) when it races a reopen that
+    // is already in flight - every scripted open comes back empty, so without draining into the
+    // "stopped, fetch once" path the reader would otherwise keep reopening for the whole backoff
+    // schedule (or, pre-fix, could block forever on a newly installed stream nothing then closes).
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(200, "");
+    backend.scriptStream(200, "");
+    backend.scriptStream(200, "");
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(m -> {}))
+            .join();
+    streamedLog.start().join();
+    long startedAt = System.currentTimeMillis();
+    assertTimeoutPreemptively(
+        Duration.ofSeconds(10),
+        streamedLog::stop,
+        "stop() must not hang while a stream reopen is in flight");
+    assertTrue(
+        System.currentTimeMillis() - startedAt < 10_000,
+        "stop() should return well within the full empty-stream backoff/retry schedule");
   }
 
   @Test

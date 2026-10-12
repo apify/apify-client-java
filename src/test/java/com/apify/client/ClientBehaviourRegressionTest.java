@@ -695,6 +695,23 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void waitForFinishToleratesNullDataBodyAsNotYetAvailable() {
+    // A 200 response with a null `data` body (as opposed to a 404) must be tolerated the same way -
+    // treated as "not yet available" and retried - not thrown as an NPE from testing a null value
+    // for
+    // terminality.
+    MockTransport backend =
+        new MockTransport(
+            List.of(
+                MockTransport.ok(200, "{\"data\":null}"),
+                MockTransport.ok(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}")));
+    ActorRun run = client(backend).run("r1").waitForFinish(5L).join();
+    assertEquals("r1", run.getId());
+    assertEquals("SUCCEEDED", run.getStatus());
+    assertEquals(2, backend.calls, "one null-data poll then the terminal poll");
+  }
+
+  @Test
   void waitForFinishThrowsWhenResourceNeverAppears() {
     // If the resource is never fetchable within the budget, the wait must fail loudly rather than
     // return a phantom result - with the actual 404 the server gave, matching the reference client,

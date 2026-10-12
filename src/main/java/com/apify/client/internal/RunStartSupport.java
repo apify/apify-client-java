@@ -45,6 +45,14 @@ public final class RunStartSupport {
   /** Delay between two attempts to start a run rejected for lack of resources. */
   private static final Duration WAIT_FOR_RESOURCES_RETRY_INTERVAL = Duration.ofSeconds(10);
 
+  /**
+   * Upper bound (seconds) a caller-supplied {@code waitForResourcesSecs} is clamped to before
+   * computing a deadline, so a value near {@link Long#MAX_VALUE} cannot overflow the millisecond
+   * deadline computation below - the same reason {@code ResourceContext.waitForFinish} clamps its
+   * own wait budget before converting it to milliseconds.
+   */
+  private static final long MAX_WAIT_FOR_RESOURCES_SECS = 999_999;
+
   private RunStartSupport() {}
 
   /**
@@ -74,7 +82,8 @@ public final class RunStartSupport {
     long deadlineMillis =
         waitForResourcesSecs == ActorStartOptions.WAIT_FOR_RESOURCES_INDEFINITELY
             ? Long.MAX_VALUE
-            : System.currentTimeMillis() + Math.max(0, waitForResourcesSecs) * 1000L;
+            : System.currentTimeMillis()
+                + Math.min(Math.max(0, waitForResourcesSecs), MAX_WAIT_FOR_RESOURCES_SECS) * 1000L;
     return startRetryingForResources(ctx, params, body, contentType, deadlineMillis);
   }
 

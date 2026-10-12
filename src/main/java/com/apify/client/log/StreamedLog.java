@@ -1,12 +1,14 @@
 package com.apify.client.log;
 
 import com.apify.client.http.ApifyApiException;
+import com.apify.client.internal.Async;
 import com.apify.client.internal.HttpClientCore;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -67,6 +69,12 @@ public final class StreamedLog implements AutoCloseable {
 
   /** Upper bound on the pause between reopens of an empty log stream. */
   private static final long EMPTY_STREAM_MAX_RETRY_MILLIS = 5_000;
+
+  /**
+   * How long {@link #stop()}/{@link #close()} wait for a message already in flight before
+   * force-closing the stream, matching the reference client's {@code STOP_GRACE_MILLIS}.
+   */
+  private static final long STOP_GRACE_MILLIS = 1_000;
 
   private final LogClient logClient;
   private final Consumer<String> destination;
@@ -180,33 +188,33 @@ public final class StreamedLog implements AutoCloseable {
   }
 
   /**
-   * Signals the reader to stop, unblocks it by closing the live stream, and joins it (unless called
-   * from the reader thread itself, which cannot join itself). Callers must hold the monitor and
-   * must have already checked that a thread is running.
+   * Signals the reader to stop and joins it (unless called from the reader thread itself, which
+   * cannot join itself). Callers must hold the monitor and must have already checked that a thread
+   * is running.
    */
   private void stopStreaming() {
     stopLogging = true;
-    // Close the live stream so a blocked read returns promptly instead of waiting for more bytes.
-    closeQuietly(activeStream);
-    // Wakes the reader if it is currently backing off before reopening a log stream that has not
-    // delivered anything yet (see awaitNonEmptyStream) - that wait is a plain Thread.sleep, not
-    // tied
-    // to the stream, so closing activeStream above does not interrupt it on its own. The interrupt
-    // is
-    // a pure wake signal here (stopLogging, checked right after, is the actual stop condition), not
-    // a
-    // cancellation request the reader needs to honor, so awaitNonEmptyStream clears rather than
-    // re-raises it - a lingering interrupt status would otherwise risk breaking the reader's next
-    // blocking I/O call. Callers have already checked a thread is running (see each's own
-    // contract).
+    // Grace window before force-closing the live stream, so a message already in flight (e.g. the
+    // run's last line, sent right as it finishes) still has a chance to arrive and be processed
+    // instead of being cut off - matching the reference client's STOP_GRACE_MILLIS. A blocked read
+    // either completes normally within this window or is unblocked by the forced close below.
+    InputStream streamToForceClose = activeStream;
+    CompletableFuture<Void> graceTimer =
+        Async.delay(Duration.ofMillis(STOP_GRACE_MILLIS))
+            .thenRun(() -> closeQuietly(streamToForceClose));
+    // Wakes the reader if it is currently backing off before reopening an empty log stream (a plain
+    // Thread.sleep - see awaitNonEmptyStream), which neither the stream close above nor the grace
+    // window otherwise interrupts. It is a wake signal only, not a cancellation the reader must
+    // honor: sleepAsWakeableBackoff clears it, matching its own javadoc.
     streamingThread.interrupt();
     // A thread must never join itself. The destination consumer runs on the streaming thread, so a
     // user calling stop()/close() from inside that consumer (e.g. "stop redirecting once I see line
     // X") would otherwise join() the current thread on itself and block forever - and because
     // stop()/close() are synchronized, that hung thread keeps the monitor, deadlocking every later
-    // start/stop/close with no exception. Setting stopLogging + closing the stream already unwinds
-    // the reader loop, so in that self-stop case we skip only the join; the field is still cleared
-    // below so lifecycle state stays consistent.
+    // start/stop/close with no exception. Setting stopLogging already unwinds the reader loop
+    // cooperatively (no read is blocked from inside the consumer's own call stack), so in that
+    // self-stop case we skip only the join; the field is still cleared below so lifecycle state
+    // stays consistent.
     if (Thread.currentThread() != streamingThread) {
       try {
         streamingThread.join();
@@ -214,6 +222,11 @@ public final class StreamedLog implements AutoCloseable {
         Thread.currentThread().interrupt();
       }
     }
+    // The reader has exited (or, in the self-stop case, will unwind on its own without needing the
+    // forced close) - cancelling here is what makes the grace window end early instead of always
+    // costing the full STOP_GRACE_MILLIS, and prevents a late timer firing from closing a stream a
+    // subsequent start() may already have replaced.
+    graceTimer.cancel(false);
     streamingThread = null;
   }
 
@@ -241,7 +254,13 @@ public final class StreamedLog implements AutoCloseable {
     }
     if (stream == null) {
       // Stopped before any stream ever delivered a byte: fetch whatever the log holds right now in
-      // one plain request instead of redirecting nothing at all.
+      // one plain request instead of redirecting nothing at all. Clears a pending interrupt status
+      // first - stopStreaming()'s wake-up interrupt (see its javadoc) may not yet have been
+      // consumed
+      // by a Thread.sleep if it landed between two awaitNonEmptyStream attempts, and it must not
+      // leak
+      // into the destination consumer invoked below or into the blocking HTTP call just below that.
+      Thread.interrupted();
       try {
         String logContent = logClient.get(new LogOptions().raw(true)).join().orElse("");
         if (!forwardingFailed) {
@@ -286,6 +305,12 @@ public final class StreamedLog implements AutoCloseable {
         LOG.warn("Log redirection stopped due to error", e);
       }
     } finally {
+      // Clears a pending interrupt status before the flush below can invoke the destination
+      // consumer: stopStreaming()'s wake-up interrupt (see its javadoc) is only guaranteed consumed
+      // when it lands during awaitNonEmptyStream's Thread.sleep; landing instead while this loop
+      // was
+      // running would otherwise leak it into user code.
+      Thread.interrupted();
       // Flush whatever is left when the stream ends OR when a stop closes the stream mid-read: the
       // last complete message is held back in `pending` by emitMessages(..., false), and a stop
       // unblocks the read via an IOException that skips the loop body. Running the final flush in
@@ -349,11 +374,20 @@ public final class StreamedLog implements AutoCloseable {
         }
         throw new IOException("failed to reopen log stream", cause);
       }
-      // Published under the monitor stop()/close() also use for their own activeStream read, so a
-      // concurrent stop cannot race this assignment: it either closes the old stream (and this
-      // method's own stopLogging check above then closes the new one too) or the new one.
-      synchronized (this) {
-        activeStream = stream;
+      // A plain volatile write (no lock needed for a single field): stop()/close() read this same
+      // field to decide what to force-close, and a `synchronized` publish here could instead
+      // deadlock against a concurrent stop()/close() - both are `synchronized` methods that may be
+      // blocked in streamingThread.join() while holding that monitor, which this reader thread
+      // could
+      // never then acquire.
+      activeStream = stream;
+      // A stop() requested while the reopen above was in flight force-closed the *previous* stream
+      // (the one this method already closed on seeing it empty), not this newly opened one - so it
+      // would otherwise be handed to the caller with nothing left able to unblock a read that then
+      // blocks. Closing it here too keeps every reopened stream subject to the same stop signal.
+      if (stopLogging) {
+        closeQuietly(stream);
+        return null;
       }
     }
   }

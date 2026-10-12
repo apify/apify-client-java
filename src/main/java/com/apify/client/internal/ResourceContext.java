@@ -545,7 +545,12 @@ public final class ResourceContext {
         dataType, isTerminal, resourceName, start, budgetMillis, serverWaitCap, null, null);
   }
 
-  /** The outcome of a single {@code waitForFinish} poll: either a fetched value, or a 404. */
+  /**
+   * The outcome of a single {@code waitForFinish} poll: either a usable fetched value, or "absent"
+   * - a 404 ({@code notFoundError} set), or a 200 whose {@code data} was {@code null} (tolerated
+   * the same as "not yet available", not a programming error, matching {@link #getResource}'s own
+   * null-tolerant handling of that case).
+   */
   private record PollOutcome<T>(T value, ApifyApiException notFoundError) {
     static <T> PollOutcome<T> of(T value) {
       return new PollOutcome<>(value, null);
@@ -555,16 +560,16 @@ public final class ResourceContext {
       return new PollOutcome<>(null, error);
     }
 
-    boolean isNotFound() {
-      return notFoundError != null;
+    boolean isAbsent() {
+      return value == null;
     }
   }
 
   /**
    * One poll of the {@code waitForFinish} loop. {@code lastSeen} carries the most recently observed
-   * resource and {@code notFoundSinceMillis} the instant 404s started, both across recursive calls
-   * (there is no shared mutable state between polls, so each recursive step gets everything it
-   * needs as a parameter).
+   * resource and {@code absentSinceMillis} the instant it was last seen present, both across
+   * recursive calls (there is no shared mutable state between polls, so each recursive step gets
+   * everything it needs as a parameter).
    */
   private <T> CompletableFuture<T> pollOnce(
       JavaType dataType,
@@ -574,7 +579,7 @@ public final class ResourceContext {
       long budgetMillis,
       long serverWaitCap,
       T lastSeen,
-      Long notFoundSinceMillis) {
+      Long absentSinceMillis) {
     long elapsed = System.currentTimeMillis() - start;
     long remainingSecs = (budgetMillis - elapsed) / 1000L;
     long requestSecs =
@@ -598,17 +603,14 @@ public final class ResourceContext {
         .thenCompose(
             outcome -> {
               long now = System.currentTimeMillis();
-              if (!outcome.isNotFound() && isTerminal.test(outcome.value())) {
+              if (!outcome.isAbsent() && isTerminal.test(outcome.value())) {
                 return CompletableFuture.completedFuture(outcome.value());
               }
-              T seen = outcome.isNotFound() ? lastSeen : outcome.value();
-              Long notFoundSince =
-                  outcome.isNotFound()
-                      ? (notFoundSinceMillis != null ? notFoundSinceMillis : now)
-                      : null;
+              T seen = outcome.isAbsent() ? lastSeen : outcome.value();
+              Long absentSince =
+                  outcome.isAbsent() ? (absentSinceMillis != null ? absentSinceMillis : now) : null;
               boolean missingTooLong =
-                  notFoundSince != null
-                      && now - notFoundSince >= MAX_WAIT_FOR_MISSING_RESOURCE_MILLIS;
+                  absentSince != null && now - absentSince >= MAX_WAIT_FOR_MISSING_RESOURCE_MILLIS;
               if (missingTooLong || now - start >= budgetMillis) {
                 if (seen != null) {
                   return CompletableFuture.completedFuture(seen);
@@ -636,7 +638,7 @@ public final class ResourceContext {
                               budgetMillis,
                               serverWaitCap,
                               seen,
-                              notFoundSince));
+                              absentSince));
             });
   }
 
