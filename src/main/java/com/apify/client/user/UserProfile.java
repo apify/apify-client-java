@@ -5,6 +5,7 @@ import com.apify.client.ApifyResource;
 /** The public profile of a {@link User}. */
 public final class UserProfile extends ApifyResource {
   private String bio;
+  private String readme;
   private String name;
   private String pictureUrl;
   private String githubUsername;
@@ -14,6 +15,11 @@ public final class UserProfile extends ApifyResource {
   /** A short biography, if set. */
   public String getBio() {
     return bio;
+  }
+
+  /** Markdown README shown on the user's public profile page, if set. */
+  public String getReadme() {
+    return readme;
   }
 
   /** The user's display name, if set. */

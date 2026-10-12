@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.log.StreamedLog;
@@ -395,6 +396,72 @@ class StreamedLogTest {
         List.of("2999-01-01T00:00:00.000Z a", "2999-01-01T00:00:01.000Z b"),
         collected,
         "self-close from inside the consumer must not deadlock and must flush the retained message");
+  }
+
+  @Test
+  void reopensEmptyStreamUntilItDeliversContent() {
+    // The API serves the log of a run that has not logged anything yet as a stream that ends at
+    // once. The first open is scripted empty (as if the run were still queued/starting); the
+    // redirector must reopen rather than giving up, and the second open's content must still be
+    // delivered.
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(200, "");
+    backend.scriptStream(200, "2999-01-01T00:00:00.000Z hello\n");
+    List<String> collected = new CopyOnWriteArrayList<>();
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(collected::add))
+            .join();
+    streamedLog.start().join();
+    pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> !collected.isEmpty());
+    streamedLog.stop();
+    assertEquals(List.of("2999-01-01T00:00:00.000Z hello"), collected);
+  }
+
+  @Test
+  void stopBeforeAnyBytesStreamedFallsBackToOneShotFetch() {
+    // If stop() is requested before any stream ever delivers a byte, redirection must not simply
+    // end
+    // with nothing: it fetches the log in one plain request instead, so whatever was logged by then
+    // is still delivered.
+    MockTransport backend = MockTransport.ofConstant(200, "fallback content");
+    backend.scriptStream(200, ""); // every streamed open stays empty - the run never logs anything
+    List<String> collected = new CopyOnWriteArrayList<>();
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(collected::add))
+            .join();
+    streamedLog.start().join();
+    streamedLog.stop();
+    assertEquals(List.of("fallback content"), collected);
+  }
+
+  @Test
+  void stopDuringAnInFlightReopenStillCompletesPromptly() {
+    // Regression test: stop() must still unblock redirection (not hang) when it races a reopen that
+    // is already in flight - every scripted open comes back empty, so without draining into the
+    // "stopped, fetch once" path the reader would otherwise keep reopening for the whole backoff
+    // schedule (or, pre-fix, could block forever on a newly installed stream nothing then closes).
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(200, "");
+    backend.scriptStream(200, "");
+    backend.scriptStream(200, "");
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(m -> {}))
+            .join();
+    streamedLog.start().join();
+    long startedAt = System.currentTimeMillis();
+    assertTimeoutPreemptively(
+        Duration.ofSeconds(10),
+        streamedLog::stop,
+        "stop() must not hang while a stream reopen is in flight");
+    assertTrue(
+        System.currentTimeMillis() - startedAt < 10_000,
+        "stop() should return well within the full empty-stream backoff/retry schedule");
   }
 
   @Test

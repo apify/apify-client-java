@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.actor.Actor;
 import com.apify.client.actor.ActorListOptions;
+import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.actor.ActorVersion;
 import com.apify.client.dataset.DatasetDownloadOptions;
 import com.apify.client.dataset.DatasetListItemsOptions;
@@ -694,15 +695,126 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void waitForFinishToleratesNullDataBodyAsNotYetAvailable() {
+    // A 200 response with a null `data` body (as opposed to a 404) must be tolerated the same way -
+    // treated as "not yet available" and retried - not thrown as an NPE from testing a null value
+    // for
+    // terminality.
+    MockTransport backend =
+        new MockTransport(
+            List.of(
+                MockTransport.ok(200, "{\"data\":null}"),
+                MockTransport.ok(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}")));
+    ActorRun run = client(backend).run("r1").waitForFinish(5L).join();
+    assertEquals("r1", run.getId());
+    assertEquals("SUCCEEDED", run.getStatus());
+    assertEquals(2, backend.calls, "one null-data poll then the terminal poll");
+  }
+
+  @Test
   void waitForFinishThrowsWhenResourceNeverAppears() {
     // If the resource is never fetchable within the budget, the wait must fail loudly rather than
-    // return a phantom result.
+    // return a phantom result - with the actual 404 the server gave, matching the reference client,
+    // not a generic wrapped error.
     MockTransport backend =
         MockTransport.ofConstant(
             404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}");
+    NotFoundError ex =
+        assertThrows(
+            NotFoundError.class,
+            () -> TestAsync.await(client(backend).run("r1").waitForFinish(0L)));
+    assertEquals(404, ex.getStatusCode());
+  }
+
+  @Test
+  void waitForFinishGivesUpOnSustained404BeforeTheFullWaitBudget() {
+    // A run/build id that never existed 404s forever. waitForFinish must not poll it for the whole
+    // (here effectively indefinite, waitSecs omitted) wait budget - it gives up once the resource
+    // has
+    // been missing continuously for a few seconds, bounding how long a bad id can hang the caller.
+    MockTransport backend =
+        MockTransport.ofConstant(
+            404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}");
+    long startedAt = System.currentTimeMillis();
     assertThrows(
-        IllegalStateException.class,
-        () -> TestAsync.await(client(backend).run("r1").waitForFinish(0L)));
+        NotFoundError.class, () -> TestAsync.await(client(backend).run("r1").waitForFinish(null)));
+    long elapsedMillis = System.currentTimeMillis() - startedAt;
+    assertTrue(
+        elapsedMillis < 10_000,
+        "a sustained 404 must give up within a few seconds, not run for the full wait budget, took "
+            + elapsedMillis
+            + "ms");
+  }
+
+  @Test
+  void startDoesNotRetryAResourceLimitErrorByDefault() {
+    // waitForResources is opt-in; without it, a start rejected for lack of resources is thrown
+    // immediately like any other error, with no retry.
+    MockTransport backend =
+        MockTransport.ofConstant(
+            400,
+            "{\"error\":{\"type\":\"actor-memory-limit-exceeded\",\"message\":\"not enough memory\"}}");
+    assertThrows(
+        ApifyApiException.class,
+        () -> TestAsync.await(client(backend).actor("a1").start(null, new ActorStartOptions())));
+    assertEquals(1, backend.calls, "no retry without waitForResources");
+  }
+
+  @Test
+  void startDoesNotRetryANonResourceLimitErrorEvenWithWaitForResources() {
+    // Only the two resource-limit error types are retried; any other error (even with
+    // waitForResources enabled) is thrown on the first attempt.
+    MockTransport backend =
+        MockTransport.ofConstant(
+            400, "{\"error\":{\"type\":\"invalid-input\",\"message\":\"bad input\"}}");
+    assertThrows(
+        ApifyApiException.class,
+        () ->
+            TestAsync.await(
+                client(backend)
+                    .actor("a1")
+                    .start(null, new ActorStartOptions().waitForResources(true))));
+    assertEquals(1, backend.calls, "a non-resource-limit error must not be retried");
+  }
+
+  @Test
+  void startRetriesOnResourceLimitErrorUntilItStarts() {
+    // The first attempt is rejected for lack of resources; the retry (bounded here to keep the test
+    // fast) succeeds once resources free up, and the caller sees the created run, not the error.
+    MockTransport backend =
+        new MockTransport(
+            List.of(
+                MockTransport.ok(
+                    400,
+                    "{\"error\":{\"type\":\"concurrent-runs-limit-exceeded\",\"message\":\"too many"
+                        + " runs\"}}"),
+                MockTransport.ok(200, "{\"data\":{\"id\":\"run1\",\"status\":\"READY\"}}")));
+    ActorRun run =
+        TestAsync.await(
+            client(backend).actor("a1").start(null, new ActorStartOptions().waitForResources(3L)));
+    assertEquals("run1", run.getId());
+    assertEquals(2, backend.calls, "one rejected attempt, then the retry that succeeds");
+  }
+
+  @Test
+  void startGivesUpOnResourceLimitErrorOnceTheBoundIsExceeded() {
+    // Resources never free up within the caller's bound, so the last resource-limit error is
+    // eventually thrown rather than retrying forever.
+    MockTransport backend =
+        MockTransport.ofConstant(
+            400,
+            "{\"error\":{\"type\":\"actor-memory-limit-exceeded\",\"message\":\"not enough"
+                + " memory\"}}");
+    ApifyApiException ex =
+        assertThrows(
+            ApifyApiException.class,
+            () ->
+                TestAsync.await(
+                    client(backend)
+                        .actor("a1")
+                        .start(null, new ActorStartOptions().waitForResources(1L))));
+    assertEquals("actor-memory-limit-exceeded", ex.getType());
+    assertTrue(backend.calls >= 2, "must have retried at least once before giving up");
   }
 
   @Test

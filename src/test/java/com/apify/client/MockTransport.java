@@ -57,16 +57,26 @@ final class MockTransport implements HttpTransport {
   final List<String> bodies = new ArrayList<>();
   final List<String> urls = new ArrayList<>();
 
+  /** One scripted response for {@link #sendStreamingAsync}: a status + ready-made body stream. */
+  private static final class StreamEntry {
+    final int status;
+    final InputStream body;
+
+    StreamEntry(int status, InputStream body) {
+      this.status = status;
+      this.body = body;
+    }
+  }
+
   /**
-   * Optional scripted response for {@link #sendStreamingResponse}; defaults to the first {@code
-   * send} entry.
+   * Queue of scripted {@link #sendStreamingAsync} responses, consumed one per call (the last entry
+   * repeats once exhausted, like {@link #responses}). Lets a test script a sequence - e.g. an empty
+   * stream followed by one with content, to exercise {@code StreamedLog}'s reopen-on-empty-stream
+   * behavior - instead of only ever the same single response.
    */
-  private Scripted streamResponse;
+  private final List<StreamEntry> streamQueue = new ArrayList<>();
 
-  /** Optional custom stream body (e.g. a blocking stream that simulates a live, open log). */
-  private InputStream streamBody;
-
-  private int streamBodyStatus;
+  private int streamCallIndex = 0;
 
   MockTransport(List<Scripted> responses) {
     this.responses = responses;
@@ -122,22 +132,24 @@ final class MockTransport implements HttpTransport {
         new FakeResponse(request.uri(), r.status, r.body, r.headers));
   }
 
-  /** Scripts the next {@link #sendStreamingResponse} call to return the given status and body. */
-  void scriptStream(int status, String body) {
-    this.streamResponse = new Scripted(status, body, null);
-    this.streamBody = null;
+  /**
+   * Appends a scripted {@link #sendStreamingAsync} response (status + in-memory body). A test that
+   * calls this once (the common case) gets that same response for every streaming call, since the
+   * single queued entry repeats; calling it several times scripts a sequence consumed in order.
+   */
+  synchronized void scriptStream(int status, String body) {
+    streamQueue.add(
+        new StreamEntry(
+            status, new java.io.ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8))));
   }
 
   /**
-   * Scripts the next {@link #sendStreamingResponse} call to return the given status and an
-   * arbitrary, possibly blocking, {@link InputStream}. Unlike {@link #scriptStream(int, String)},
-   * the body is not a finite in-memory buffer, so {@code read()} does not naturally reach
+   * As {@link #scriptStream(int, String)}, with an arbitrary, possibly blocking, {@link
+   * InputStream} instead of a finite in-memory buffer - so {@code read()} does not naturally reach
    * end-of-stream; this models a live log that only ends when the stream is closed.
    */
-  void scriptStream(int status, InputStream body) {
-    this.streamBodyStatus = status;
-    this.streamBody = body;
-    this.streamResponse = null;
+  synchronized void scriptStream(int status, InputStream body) {
+    streamQueue.add(new StreamEntry(status, body));
   }
 
   @Override
@@ -146,13 +158,16 @@ final class MockTransport implements HttpTransport {
     calls++;
     lastUrl = request.uri().toString();
     lastMethod = request.method();
-    if (streamBody != null) {
+    if (streamQueue.isEmpty()) {
+      Scripted r = responses.get(0);
       return CompletableFuture.completedFuture(
-          new FakeStreamResponse(request.uri(), streamBodyStatus, streamBody));
+          new FakeStreamResponse(
+              request.uri(), r.status, new java.io.ByteArrayInputStream(r.body)));
     }
-    Scripted r = streamResponse != null ? streamResponse : responses.get(0);
+    int idx = Math.min(streamCallIndex++, streamQueue.size() - 1);
+    StreamEntry entry = streamQueue.get(idx);
     return CompletableFuture.completedFuture(
-        new FakeStreamResponse(request.uri(), r.status, new java.io.ByteArrayInputStream(r.body)));
+        new FakeStreamResponse(request.uri(), entry.status, entry.body));
   }
 
   private static byte[] readBody(HttpRequest request) {

@@ -5,6 +5,30 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-10-12
+
+### Added
+
+- `UserProfile.getReadme()`, mirroring the OpenAPI spec's new `Profile.readme` field.
+- `ActorStartOptions.waitForResources()`/`TaskStartOptions.waitForResources()` (and the matching
+  `ActorCallOptions`/`TaskCallOptions` overloads): retry starting a run while the account lacks the
+  memory or a concurrent-run slot for it, matching the reference client.
+
+### Fixed
+
+- `RunClient.waitForFinish()`/`BuildClient.waitForFinish()` polled a run/build id that kept
+  returning 404 for the entire wait budget (up to ~11.5 days when unbounded) instead of giving up
+  promptly; they now throw the `NotFoundError` once the id has been missing for 3 seconds straight,
+  matching the reference client.
+- `StreamedLog` silently stopped redirecting (without ever reopening) when the live log stream ended
+  immediately with no bytes - the case for a run that has not logged anything yet (e.g. still queued
+  for resources). It now reopens the stream, with capped exponential backoff, until it delivers
+  content; if stopped first, it fetches the log in one plain request instead of redirecting nothing.
+
+### Changed
+
+- Updated to Apify OpenAPI specification `v2-2026-10-08T073338Z`.
+
 ## [0.7.0] - 2026-10-02
 
 ### Added

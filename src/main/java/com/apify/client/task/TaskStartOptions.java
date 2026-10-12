@@ -12,8 +12,9 @@ import java.util.List;
  * accept (the Actor-only {@code contentType} and {@code forcePermissionLevel}), matching the
  * reference client.
  *
- * <p>{@link #apply}/{@link #contentTypeOrDefault} are package-private on purpose — see {@link
- * com.apify.client.internal.RunStartSupport}'s class javadoc for why.
+ * <p>{@link #apply}/{@link #contentTypeOrDefault}/{@link #waitForResourcesSecsValue} are
+ * package-private on purpose — see {@link com.apify.client.internal.RunStartSupport}'s class
+ * javadoc for why.
  */
 public final class TaskStartOptions {
   private String build;
@@ -24,6 +25,7 @@ public final class TaskStartOptions {
   private Double maxTotalChargeUsd;
   private Boolean restartOnError;
   private List<Object> webhooks;
+  private Long waitForResourcesSecs;
 
   /** The tag or number of the build to run (e.g. {@code "latest"}, {@code "0.1.2"}). */
   public TaskStartOptions build(String build) {
@@ -71,6 +73,34 @@ public final class TaskStartOptions {
   public TaskStartOptions webhooks(List<Object> webhooks) {
     this.webhooks = webhooks == null ? null : List.copyOf(webhooks);
     return this;
+  }
+
+  /**
+   * Retries the start while the account lacks the memory or a concurrent-run slot for the run (the
+   * API rejects it with {@code actor-memory-limit-exceeded} or {@code
+   * concurrent-runs-limit-exceeded}, both of which clear as other runs or builds finish), waiting
+   * 10 seconds between attempts. {@code true} retries until the run starts ({@link
+   * ActorStartOptions#WAIT_FOR_RESOURCES_INDEFINITELY}); {@code false} (the default) does not retry
+   * — a resource-limit error is thrown immediately, like any other error.
+   */
+  public TaskStartOptions waitForResources(boolean waitForResources) {
+    this.waitForResourcesSecs =
+        waitForResources ? ActorStartOptions.WAIT_FOR_RESOURCES_INDEFINITELY : null;
+    return this;
+  }
+
+  /**
+   * As {@link #waitForResources(boolean)}, bounding the retrying to at most {@code maxSecs} seconds
+   * - once exceeded, the last resource-limit error is thrown. {@code null} disables retrying (the
+   * default).
+   */
+  public TaskStartOptions waitForResources(Long maxSecs) {
+    this.waitForResourcesSecs = maxSecs;
+    return this;
+  }
+
+  Long waitForResourcesSecsValue() {
+    return waitForResourcesSecs;
   }
 
   void apply(QueryParams q) {

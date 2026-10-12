@@ -78,7 +78,12 @@ public final class TaskClient {
    * input} optionally overrides the task's stored input ({@code null} to use the stored input).
    */
   public CompletableFuture<ActorRun> start(Object input, TaskStartOptions options) {
-    return RunStartSupport.start(ctx, input, options::apply, options.contentTypeOrDefault());
+    return RunStartSupport.start(
+        ctx,
+        input,
+        options::apply,
+        options.contentTypeOrDefault(),
+        options.waitForResourcesSecsValue());
   }
 
   /**
@@ -90,7 +95,13 @@ public final class TaskClient {
    */
   public CompletableFuture<ActorRun> call(Object input, TaskStartOptions options, Long waitSecs) {
     return RunStartSupport.call(
-        root, ctx, input, options::apply, options.contentTypeOrDefault(), waitSecs);
+        root,
+        ctx,
+        input,
+        options::apply,
+        options.contentTypeOrDefault(),
+        waitSecs,
+        options.waitForResourcesSecsValue());
   }
 
   /**
@@ -115,7 +126,8 @@ public final class TaskClient {
         startOptions.contentTypeOrDefault(),
         opts.logStreamingEnabledValue(),
         opts.logOptionsValue(),
-        waitSecs);
+        waitSecs,
+        startOptions.waitForResourcesSecsValue());
   }
 
   /**

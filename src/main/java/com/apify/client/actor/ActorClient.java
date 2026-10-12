@@ -65,7 +65,12 @@ public final class ActorClient {
    * input} is any JSON-serializable value (or {@code null} for no input).
    */
   public CompletableFuture<ActorRun> start(Object input, ActorStartOptions options) {
-    return RunStartSupport.start(ctx, input, options::apply, options.contentTypeOrDefault());
+    return RunStartSupport.start(
+        ctx,
+        input,
+        options::apply,
+        options.contentTypeOrDefault(),
+        options.waitForResourcesSecsValue());
   }
 
   /**
@@ -78,7 +83,13 @@ public final class ActorClient {
    */
   public CompletableFuture<ActorRun> call(Object input, ActorStartOptions options, Long waitSecs) {
     return RunStartSupport.call(
-        root, ctx, input, options::apply, options.contentTypeOrDefault(), waitSecs);
+        root,
+        ctx,
+        input,
+        options::apply,
+        options.contentTypeOrDefault(),
+        waitSecs,
+        options.waitForResourcesSecsValue());
   }
 
   /**
@@ -104,7 +115,8 @@ public final class ActorClient {
         startOptions.contentTypeOrDefault(),
         opts.logStreamingEnabledValue(),
         opts.logOptionsValue(),
-        waitSecs);
+        waitSecs,
+        startOptions.waitForResourcesSecsValue());
   }
 
   /** Validates the given input against the Actor's default-build input schema. */

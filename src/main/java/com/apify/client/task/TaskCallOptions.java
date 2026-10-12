@@ -70,6 +70,18 @@ public final class TaskCallOptions {
     return this;
   }
 
+  /** See {@link TaskStartOptions#waitForResources(boolean)}. */
+  public TaskCallOptions waitForResources(boolean waitForResources) {
+    startOptions.waitForResources(waitForResources);
+    return this;
+  }
+
+  /** See {@link TaskStartOptions#waitForResources(Long)}. */
+  public TaskCallOptions waitForResources(Long maxSecs) {
+    startOptions.waitForResources(maxSecs);
+    return this;
+  }
+
   /**
    * Disables the default log streaming, matching the reference client's {@code log: null}. {@code
    * call} then only starts the run and polls for completion, as if built from {@link

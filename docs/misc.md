@@ -57,8 +57,9 @@ me.ifPresent(
 JsonNode usage = client.me().monthlyUsage().join();
 ```
 
-`User` fields: `getId()`, `getUsername()`, `getProfile()` (`UserProfile` — `getBio()`, `getName()`,
-`getPictureUrl()`, `getGithubUsername()`, `getWebsiteUrl()`, `getTwitterUsername()`, all nullable).
+`User` fields: `getId()`, `getUsername()`, `getProfile()` (`UserProfile` — `getBio()`, `getReadme()`,
+`getName()`, `getPictureUrl()`, `getGithubUsername()`, `getWebsiteUrl()`, `getTwitterUsername()`, all
+nullable).
 Only present for `me()`: `getEmail()`, `getProxy()` (`UserProxy` — `getPassword()`, `getGroups()`
 as `List<ProxyGroup>`, each with `getName()`/`getDescription()`/`getAvailableCount()` as `Long`),
 `getPlan()` (`UserPlan` — `getId()`, `getDescription()`, `getIsEnabled()`,
