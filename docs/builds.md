@@ -18,7 +18,7 @@ builds) and a single build with `client.build(id)`.
 | `getWithWait(Long waitForFinishSecs)` | Fetch, optionally waiting server-side for the build to finish (clamped to the request timeout; the API caps server-side waiting at 60s). Completes with `Optional<Build>`. |
 | `abort()` | Abort the build. Completes with `Build`. |
 | `delete()` | Delete the build. |
-| `waitForFinish(Long waitSecs)` | Poll until the build finishes (`null` waits indefinitely). Completes with `Build`. |
+| `waitForFinish(Long waitSecs)` | Poll until the build finishes (`null` waits indefinitely); see [the run equivalent](runs.md#runclient) for its 404 handling. Completes with `Build`. |
 | `getOpenApiDefinition()` | The build's OpenAPI definition. Completes with `Optional<JsonNode>`. |
 | `log()` | A `LogClient` for the build's log. |
 

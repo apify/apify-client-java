@@ -65,9 +65,12 @@ to charge, pay-per-result Actors), `maxTotalChargeUsd(Double)` (maximum total ch
 pay-per-event Actors), `contentType(String)` (content type of the input body, defaults to
 `application/json`), `restartOnError(Boolean)` (restart the run if it fails),
 `forcePermissionLevel(String)` (override the Actor's permission level for this run:
-`LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), and `webhooks(List<Object>)` — ad-hoc webhook definitions
+`LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), `webhooks(List<Object>)` — ad-hoc webhook definitions
 (each a JSON-serializable `Map`, as in [Webhooks](webhooks.md)) that the client base64-encodes on the
-wire.
+wire — and `waitForResources(boolean)`/`waitForResources(Long maxSecs)`: retry the start, every 10
+seconds, while the account lacks the memory or a concurrent-run slot for the run (`true` retries
+until it starts — `ActorStartOptions.WAIT_FOR_RESOURCES_INDEFINITELY`; a bound throws the last such
+error once exceeded; omitted, the default, does not retry at all).
 
 `ActorCallOptions` (for the log-streaming `call` overload) mirrors `ActorStartOptions` field for
 field, but omits `waitForFinish`: that field asks the API to hold the HTTP response open

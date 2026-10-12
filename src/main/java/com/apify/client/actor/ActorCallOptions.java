@@ -85,6 +85,18 @@ public final class ActorCallOptions {
     return this;
   }
 
+  /** See {@link ActorStartOptions#waitForResources(boolean)}. */
+  public ActorCallOptions waitForResources(boolean waitForResources) {
+    startOptions.waitForResources(waitForResources);
+    return this;
+  }
+
+  /** See {@link ActorStartOptions#waitForResources(Long)}. */
+  public ActorCallOptions waitForResources(Long maxSecs) {
+    startOptions.waitForResources(maxSecs);
+    return this;
+  }
+
   /**
    * Disables the default log streaming, matching the reference client's {@code log: null}. {@code
    * call} then only starts the run and polls for completion, as if built from {@link

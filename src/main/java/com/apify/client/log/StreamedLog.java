@@ -2,8 +2,10 @@ package com.apify.client.log;
 
 import com.apify.client.http.ApifyApiException;
 import com.apify.client.internal.HttpClientCore;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -54,6 +56,17 @@ public final class StreamedLog implements AutoCloseable {
 
   /** Read buffer size for pulling bytes off the live log stream. */
   private static final int READ_BUFFER_BYTES = 8192;
+
+  /**
+   * Pause before the first reopen of a log stream that ended before the run had logged anything
+   * (the API serves that case as a stream that ends at once). Doubles on each further reopen, up to
+   * {@link #EMPTY_STREAM_MAX_RETRY_MILLIS}, which bounds the request rate while a run takes a long
+   * time to start producing output (e.g. while queued for resources).
+   */
+  private static final long EMPTY_STREAM_RETRY_MILLIS = 500;
+
+  /** Upper bound on the pause between reopens of an empty log stream. */
+  private static final long EMPTY_STREAM_MAX_RETRY_MILLIS = 5_000;
 
   private final LogClient logClient;
   private final Consumer<String> destination;
@@ -175,6 +188,18 @@ public final class StreamedLog implements AutoCloseable {
     stopLogging = true;
     // Close the live stream so a blocked read returns promptly instead of waiting for more bytes.
     closeQuietly(activeStream);
+    // Wakes the reader if it is currently backing off before reopening a log stream that has not
+    // delivered anything yet (see awaitNonEmptyStream) - that wait is a plain Thread.sleep, not
+    // tied
+    // to the stream, so closing activeStream above does not interrupt it on its own. The interrupt
+    // is
+    // a pure wake signal here (stopLogging, checked right after, is the actual stop condition), not
+    // a
+    // cancellation request the reader needs to honor, so awaitNonEmptyStream clears rather than
+    // re-raises it - a lingering interrupt status would otherwise risk breaking the reader's next
+    // blocking I/O call. Callers have already checked a thread is running (see each's own
+    // contract).
+    streamingThread.interrupt();
     // A thread must never join itself. The destination consumer runs on the streaming thread, so a
     // user calling stop()/close() from inside that consumer (e.g. "stop redirecting once I see line
     // X") would otherwise join() the current thread on itself and block forever - and because
@@ -202,15 +227,41 @@ public final class StreamedLog implements AutoCloseable {
     // (not a shared field) so that if a start() ever races a still-draining reader, the two readers
     // never mutate the same non-thread-safe buffer.
     StringBuilder pending = new StringBuilder();
-    // The stream was opened in start() and stored in activeStream; own its lifecycle here via
-    // try-with-resources so the reader closes it when it exits (idempotent with stop()'s close,
-    // which may close it first to unblock a pending read).
-    try (InputStream stream = activeStream) {
+    InputStream stream;
+    try {
+      // The API serves the log of a run that has not logged anything yet as a stream that ends at
+      // once; reopen it until it actually delivers a byte, so redirection does not silently give up
+      // on a run that is still queued or starting.
+      stream = awaitNonEmptyStream();
+    } catch (IOException e) {
+      if (!stopLogging) {
+        LOG.warn("Log redirection stopped due to error", e);
+      }
+      return;
+    }
+    if (stream == null) {
+      // Stopped before any stream ever delivered a byte: fetch whatever the log holds right now in
+      // one plain request instead of redirecting nothing at all.
+      try {
+        String logContent = logClient.get(new LogOptions().raw(true)).join().orElse("");
+        if (!forwardingFailed) {
+          emitMessages(pending, logContent, true);
+        }
+      } catch (RuntimeException e) {
+        LOG.warn("Log redirection stopped due to error", e);
+      }
+      return;
+    }
+    // The stream was opened (possibly reopened by awaitNonEmptyStream) and stored in activeStream;
+    // own its lifecycle here via try-with-resources so the reader closes it when it exits
+    // (idempotent
+    // with stop()'s close, which may close it first to unblock a pending read).
+    try (InputStream liveStream = stream) {
       byte[] readBuffer = new byte[READ_BUFFER_BYTES];
       int read;
       // Process each chunk before honouring a stop request, so a stop issued right after start
       // still redirects whatever the run has already produced (matching the reference client).
-      while ((read = stream.read(readBuffer)) != -1) {
+      while ((read = liveStream.read(readBuffer)) != -1) {
         byte[] combined = new byte[lineRemainder.length + read];
         System.arraycopy(lineRemainder, 0, combined, 0, lineRemainder.length);
         System.arraycopy(readBuffer, 0, combined, lineRemainder.length, read);
@@ -244,6 +295,80 @@ public final class StreamedLog implements AutoCloseable {
       if (!forwardingFailed) {
         emitMessages(pending, new String(lineRemainder, StandardCharsets.UTF_8), true);
       }
+    }
+  }
+
+  /**
+   * Waits for the log stream to actually start delivering bytes, reopening it (pausing {@link
+   * #EMPTY_STREAM_RETRY_MILLIS}, doubled on each further attempt) while it keeps ending with none.
+   * Returns a stream with any bytes already consumed while probing it stitched back onto the front,
+   * as soon as one delivers at least one byte; or {@code null} if {@link #stop()}/{@link #close()}
+   * is requested before any stream ever delivers a byte.
+   */
+  private InputStream awaitNonEmptyStream() throws IOException {
+    InputStream stream = activeStream;
+    long backoffMillis = EMPTY_STREAM_RETRY_MILLIS;
+    while (true) {
+      // Always attempt the read before consulting stopLogging - like the main loop below, which
+      // processes a chunk before honouring a stop request - so a stop issued right after start()
+      // still drains whatever is already buffered (e.g. a finite stream in tests) instead of
+      // discarding it.
+      byte[] probe = new byte[READ_BUFFER_BYTES];
+      int read;
+      try {
+        read = stream.read(probe);
+      } catch (IOException e) {
+        // An explicit stop can close `stream` out from under this read; that is expected, not a
+        // genuine failure (mirrors the main loop's own IOException handling below).
+        if (stopLogging) {
+          return null;
+        }
+        throw e;
+      }
+      if (read != -1) {
+        return new SequenceInputStream(new ByteArrayInputStream(probe, 0, read), stream);
+      }
+      closeQuietly(stream);
+      if (stopLogging) {
+        return null;
+      }
+      sleepAsWakeableBackoff(backoffMillis);
+      backoffMillis = Math.min(backoffMillis * 2, EMPTY_STREAM_MAX_RETRY_MILLIS);
+      if (stopLogging) {
+        return null;
+      }
+      try {
+        stream = logClient.stream(new LogOptions().raw(true)).join();
+      } catch (RuntimeException e) {
+        if (stopLogging) {
+          return null;
+        }
+        Throwable cause = HttpClientCore.unwrapCompletion(e);
+        if (cause instanceof IOException ioException) {
+          throw ioException;
+        }
+        throw new IOException("failed to reopen log stream", cause);
+      }
+      // Published under the monitor stop()/close() also use for their own activeStream read, so a
+      // concurrent stop cannot race this assignment: it either closes the old stream (and this
+      // method's own stopLogging check above then closes the new one too) or the new one.
+      synchronized (this) {
+        activeStream = stream;
+      }
+    }
+  }
+
+  /**
+   * Sleeps for {@code millis}, waking early if interrupted and clearing (rather than re-raising)
+   * the interrupt status - {@link #stopStreaming()} uses interruption purely to wake this wait
+   * promptly; {@link #stopLogging}, checked by the caller right after, is the actual stop signal,
+   * so a lingering interrupt status would only risk breaking a later, unrelated blocking call.
+   */
+  private static void sleepAsWakeableBackoff(long millis) {
+    try {
+      Thread.sleep(millis);
+    } catch (InterruptedException ignored) {
+      // Intentionally not restoring the interrupt status - see method javadoc.
     }
   }
 

@@ -398,6 +398,46 @@ class StreamedLogTest {
   }
 
   @Test
+  void reopensEmptyStreamUntilItDeliversContent() {
+    // The API serves the log of a run that has not logged anything yet as a stream that ends at
+    // once. The first open is scripted empty (as if the run were still queued/starting); the
+    // redirector must reopen rather than giving up, and the second open's content must still be
+    // delivered.
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(200, "");
+    backend.scriptStream(200, "2999-01-01T00:00:00.000Z hello\n");
+    List<String> collected = new CopyOnWriteArrayList<>();
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(collected::add))
+            .join();
+    streamedLog.start().join();
+    pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> !collected.isEmpty());
+    streamedLog.stop();
+    assertEquals(List.of("2999-01-01T00:00:00.000Z hello"), collected);
+  }
+
+  @Test
+  void stopBeforeAnyBytesStreamedFallsBackToOneShotFetch() {
+    // If stop() is requested before any stream ever delivers a byte, redirection must not simply
+    // end
+    // with nothing: it fetches the log in one plain request instead, so whatever was logged by then
+    // is still delivered.
+    MockTransport backend = MockTransport.ofConstant(200, "fallback content");
+    backend.scriptStream(200, ""); // every streamed open stays empty - the run never logs anything
+    List<String> collected = new CopyOnWriteArrayList<>();
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(collected::add))
+            .join();
+    streamedLog.start().join();
+    streamedLog.stop();
+    assertEquals(List.of("fallback content"), collected);
+  }
+
+  @Test
   void defaultPrefixLookupFailureStillCreatesHelper() {
     // The no-arg getStreamedLog() builds a cosmetic per-run prefix by GETting the run (and its
     // Actor). Those getters swallow only 404; a 401/403/5xx-after-retries would otherwise fail the

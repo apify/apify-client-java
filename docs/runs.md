@@ -51,6 +51,10 @@ this same possibly-non-terminal `ActorRun` for the same reason: `call` is `start
 `waitForFinish`, so a `call` with a short `waitSecs` on a long-running Actor can return before the
 run finishes.
 
+If the id instead keeps returning 404 (e.g. a typo, or it was never created) `waitForFinish` does
+not poll it for the whole wait budget: a 404 is tolerated for up to 3 seconds (database-replica lag
+right after a run/build is created), past which it throws that `NotFoundError`.
+
 ### Streamed log redirection
 
 `getStreamedLog()` completes with a `StreamedLog`: a helper that follows the run's live raw log in a
@@ -67,6 +71,12 @@ Actor name and run id (looked up automatically). `StreamedLogOptions` customizes
 - `prefix(String)` — override the auto-built prefix used by the default logger.
 - `fromStart(boolean)` — when `false`, skip log lines produced before redirection started
   (default `true`).
+
+A run that has not logged anything yet (e.g. still queued for resources, see
+[`waitForResources`](actors.md#actorclient)) serves its log as a stream that ends at once;
+`StreamedLog` reopens it, with capped exponential backoff, until it actually delivers content,
+rather than silently giving up. If `stop()`/`close()` is called before that happens, it fetches the
+log in one plain request instead, so whatever was logged by then is still delivered.
 
 ```java
 RunClient runClient = client.run("RUN_ID");

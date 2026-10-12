@@ -36,7 +36,8 @@ Task task = client.tasks().create(Map.of(
 
 `TaskStartOptions` mirrors `ActorStartOptions` but omits the Actor-only `contentType` and
 `forcePermissionLevel`: `build`, `memoryMbytes`, `timeoutSecs`, `waitForFinish`, `maxItems`,
-`maxTotalChargeUsd`, `restartOnError`, `webhooks`. `TaskCallOptions` mirrors `TaskStartOptions` in
+`maxTotalChargeUsd`, `restartOnError`, `webhooks`, `waitForResources` (see
+[`ActorStartOptions`](actors.md#actorclient)). `TaskCallOptions` mirrors `TaskStartOptions` in
 turn, but additionally omits `waitForFinish`: that field asks the API to hold the HTTP response
 open server-side while the run finishes, which is redundant with (and wastes a request slot next
 to) `call`'s own client-side `waitSecs` polling.

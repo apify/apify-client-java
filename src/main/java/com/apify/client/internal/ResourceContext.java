@@ -52,6 +52,15 @@ public final class ResourceContext {
 
   private static final int NOT_FOUND = 404;
 
+  /**
+   * Upper bound on how long {@link #waitForFinish} keeps polling a resource that keeps answering
+   * 404, before giving up and throwing that {@link ApifyApiException}. A resource that was just
+   * created can 404 briefly (database-replica lag), which this bound rides out; anything longer
+   * means the id most likely never existed, so polling for the rest of a long (or indefinite) wait
+   * budget would only delay reporting that. Mirrors the reference client.
+   */
+  private static final long MAX_WAIT_FOR_MISSING_RESOURCE_MILLIS = 3000;
+
   /** API error type for a resource that does not exist. */
   private static final String ERROR_TYPE_RECORD_NOT_FOUND = "record-not-found";
 
@@ -511,7 +520,11 @@ public final class ResourceContext {
    *
    * <p>The budget is a pure time bound, evaluated independently of whether the resource is
    * currently present: a just-started run/build can transiently return 404 (database-replica lag),
-   * which is treated as "not yet available".
+   * which is treated as "not yet available" - but only for up to {@link
+   * #MAX_WAIT_FOR_MISSING_RESOURCE_MILLIS}. A resource that keeps 404-ing past that almost
+   * certainly never existed (e.g. a typo'd id), so continuing to poll it for the rest of a long or
+   * indefinite wait budget would only delay reporting that; past the bound, the 404 is rethrown
+   * instead.
    *
    * <p>Each poll is chained via {@link CompletableFuture#thenCompose}, and the inter-poll delay is
    * a scheduled timer (see {@link Async}), so waiting never blocks a thread.
@@ -528,13 +541,30 @@ public final class ResourceContext {
     long budgetMillis = effectiveWaitSecs * 1000L;
     long start = System.currentTimeMillis();
     long serverWaitCap = serverWaitCapSecs();
-    return pollOnce(dataType, isTerminal, resourceName, start, budgetMillis, serverWaitCap, null);
+    return pollOnce(
+        dataType, isTerminal, resourceName, start, budgetMillis, serverWaitCap, null, null);
+  }
+
+  /** The outcome of a single {@code waitForFinish} poll: either a fetched value, or a 404. */
+  private record PollOutcome<T>(T value, ApifyApiException notFoundError) {
+    static <T> PollOutcome<T> of(T value) {
+      return new PollOutcome<>(value, null);
+    }
+
+    static <T> PollOutcome<T> notFound(ApifyApiException error) {
+      return new PollOutcome<>(null, error);
+    }
+
+    boolean isNotFound() {
+      return notFoundError != null;
+    }
   }
 
   /**
    * One poll of the {@code waitForFinish} loop. {@code lastSeen} carries the most recently observed
-   * resource across recursive calls (there is no shared mutable state between polls, so each
-   * recursive step gets everything it needs as a parameter).
+   * resource and {@code notFoundSinceMillis} the instant 404s started, both across recursive calls
+   * (there is no shared mutable state between polls, so each recursive step gets everything it
+   * needs as a parameter).
    */
   private <T> CompletableFuture<T> pollOnce(
       JavaType dataType,
@@ -543,7 +573,8 @@ public final class ResourceContext {
       long start,
       long budgetMillis,
       long serverWaitCap,
-      T lastSeen) {
+      T lastSeen,
+      Long notFoundSinceMillis) {
     long elapsed = System.currentTimeMillis() - start;
     long remainingSecs = (budgetMillis - elapsed) / 1000L;
     long requestSecs =
@@ -552,25 +583,46 @@ public final class ResourceContext {
     QueryParams params = new QueryParams();
     params.addLong("waitForFinish", requestSecs);
 
-    return this.<T>getResource("", params, dataType)
-        .thenCompose(
-            res -> {
-              T seen = res.orElse(lastSeen);
-              if (res.isPresent() && isTerminal.test(res.get())) {
-                return CompletableFuture.completedFuture(res.get());
+    return this.<T>getResourceRequired("", params, dataType)
+        .handle(
+            (value, error) -> {
+              if (error == null) {
+                return PollOutcome.of(value);
               }
-              if (System.currentTimeMillis() - start >= budgetMillis) {
+              Throwable cause = HttpClientCore.unwrapCompletion(error);
+              if (cause instanceof ApifyApiException apiError && isNotFound(apiError)) {
+                return PollOutcome.<T>notFound(apiError);
+              }
+              throw asRuntimeException(cause);
+            })
+        .thenCompose(
+            outcome -> {
+              long now = System.currentTimeMillis();
+              if (!outcome.isNotFound() && isTerminal.test(outcome.value())) {
+                return CompletableFuture.completedFuture(outcome.value());
+              }
+              T seen = outcome.isNotFound() ? lastSeen : outcome.value();
+              Long notFoundSince =
+                  outcome.isNotFound()
+                      ? (notFoundSinceMillis != null ? notFoundSinceMillis : now)
+                      : null;
+              boolean missingTooLong =
+                  notFoundSince != null
+                      && now - notFoundSince >= MAX_WAIT_FOR_MISSING_RESOURCE_MILLIS;
+              if (missingTooLong || now - start >= budgetMillis) {
                 if (seen != null) {
                   return CompletableFuture.completedFuture(seen);
                 }
                 CompletableFuture<T> failed = new CompletableFuture<>();
                 failed.completeExceptionally(
-                    new IllegalStateException(
-                        "waiting for "
-                            + resourceName
-                            + " to finish failed: cannot fetch "
-                            + resourceName
-                            + " details from the server"));
+                    outcome.notFoundError() != null
+                        ? outcome.notFoundError()
+                        : new IllegalStateException(
+                            "waiting for "
+                                + resourceName
+                                + " to finish failed: cannot fetch "
+                                + resourceName
+                                + " details from the server"));
                 return failed;
               }
               return Async.delay(WAIT_POLL_INTERVAL)
@@ -583,7 +635,8 @@ public final class ResourceContext {
                               start,
                               budgetMillis,
                               serverWaitCap,
-                              seen));
+                              seen,
+                              notFoundSince));
             });
   }
 
