@@ -203,10 +203,7 @@ public final class DatasetClient {
    */
   public CompletableFuture<byte[]> downloadItems(
       DownloadItemsFormat format, DatasetDownloadOptions options) {
-    QueryParams params = new QueryParams();
-    params.addString("format", format.wireValue());
-    options.apply(params);
-    String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
+    String url = itemsUrl(format, options);
     return http.call("GET", url, null, "", http.baseRequestTimeout()).thenApply(ApiResponse::body);
   }
 
@@ -220,11 +217,18 @@ public final class DatasetClient {
    */
   public CompletableFuture<InputStream> streamItems(
       DownloadItemsFormat format, DatasetDownloadOptions options) {
+    return http.streamOrThrow(itemsUrl(format, options));
+  }
+
+  /**
+   * Builds the export URL shared by {@link #downloadItems} and {@link #streamItems}: the {@code
+   * items} sub-path with {@code format} and the given options applied as query params.
+   */
+  private String itemsUrl(DownloadItemsFormat format, DatasetDownloadOptions options) {
     QueryParams params = new QueryParams();
     params.addString("format", format.wireValue());
     options.apply(params);
-    String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
-    return http.streamOrThrow(url);
+    return ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
   }
 
   /**
