@@ -10,6 +10,7 @@ import com.apify.client.internal.ResourceContext;
 import com.apify.client.internal.Signatures;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
@@ -308,10 +309,18 @@ public final class KeyValueStoreClient {
 
   /**
    * Stores a record with raw bytes and the given content type, honoring the given write options
-   * ({@code timeoutSecs}, {@code doNotRetryTimeouts}).
+   * ({@code timeoutSecs}, {@code doNotRetryTimeouts}, {@code contentEncoding}).
+   *
+   * @throws IllegalArgumentException if {@code options.contentEncoding()} is set but blank
    */
   public CompletableFuture<Void> setRecord(
       String key, byte[] value, String contentType, SetRecordOptions options) {
+    String contentEncoding = options.contentEncodingValue();
+    if (contentEncoding != null && contentEncoding.isBlank()) {
+      throw new IllegalArgumentException("contentEncoding must not be blank");
+    }
+    Map<String, String> extraHeaders =
+        contentEncoding == null ? null : Map.of(HttpHeaders.CONTENT_ENCODING, contentEncoding);
     Duration timeout =
         options.timeoutSecsValue() != null
             ? Duration.ofSeconds(options.timeoutSecsValue())
@@ -321,6 +330,7 @@ public final class KeyValueStoreClient {
         new QueryParams(),
         value,
         contentType,
+        extraHeaders,
         timeout,
         options.doNotRetryTimeoutsValue());
   }

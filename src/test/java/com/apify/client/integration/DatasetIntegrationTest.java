@@ -11,6 +11,7 @@ import com.apify.client.dataset.DatasetClient;
 import com.apify.client.dataset.DatasetDownloadOptions;
 import com.apify.client.dataset.DatasetListItemsOptions;
 import com.apify.client.dataset.DownloadItemsFormat;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +40,7 @@ class DatasetIntegrationTest extends IntegrationBase {
   }
 
   @Test
-  void datasetCrudFlow() {
+  void datasetCrudFlow() throws java.io.IOException {
     ApifyClient client = requireClient();
     Dataset ds = client.datasets().getOrCreate(uniqueName("ds-crud")).join();
     try {
@@ -64,6 +65,13 @@ class DatasetIntegrationTest extends IntegrationBase {
               .downloadItems(DownloadItemsFormat.CSV, new DatasetDownloadOptions().bom(true))
               .join();
       assertTrue(new String(csv, StandardCharsets.UTF_8).contains("url"));
+
+      byte[] streamed;
+      try (InputStream stream =
+          dataset.streamItems(DownloadItemsFormat.JSONL, new DatasetDownloadOptions()).join()) {
+        streamed = stream.readAllBytes();
+      }
+      assertTrue(new String(streamed, StandardCharsets.UTF_8).contains("https://a.com"));
 
       String url = dataset.createItemsPublicUrl(new DatasetListItemsOptions(), null).join();
       assertTrue(url != null && !url.isEmpty());

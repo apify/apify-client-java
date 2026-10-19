@@ -64,9 +64,6 @@ public final class HttpClientCore {
    */
   private static final int MIN_COMPRESS_BYTES = 1024;
 
-  /** Header announcing the request-body content coding to the server. */
-  private static final String CONTENT_ENCODING_HEADER = "Content-Encoding";
-
   /** {@code Content-Encoding} value for brotli-compressed bodies (matches the reference client). */
   private static final String ENCODING_BROTLI = "br";
 
@@ -190,7 +187,7 @@ public final class HttpClientCore {
       Compressed compressed = compress(requestBody, BROTLI_AVAILABLE);
       requestBody = compressed.body();
       headers = new LinkedHashMap<>(extraHeaders == null ? Map.of() : extraHeaders);
-      headers.put(CONTENT_ENCODING_HEADER, compressed.encoding());
+      headers.put(HttpHeaders.CONTENT_ENCODING, compressed.encoding());
     }
 
     String path = extractPath(url);
@@ -372,7 +369,7 @@ public final class HttpClientCore {
     }
     if (extraHeaders != null) {
       for (String key : extraHeaders.keySet()) {
-        if (CONTENT_ENCODING_HEADER.equalsIgnoreCase(key)) {
+        if (HttpHeaders.CONTENT_ENCODING.equalsIgnoreCase(key)) {
           return false;
         }
       }

@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.8.0</version>
+  <version>0.9.0</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.8.0'
+  implementation 'com.apify:apify-client:0.9.0'
 }
 ```
 
@@ -203,7 +203,7 @@ non-blocking. `HttpRequest` and `HttpResponse<T>` below are the JDK's `java.net.
 | Method | Signature | Contract |
 |---|---|---|
 | `sendAsync` | `CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request)` | Sends the single, fully-prepared request (auth, `User-Agent` and any other headers are already set by the client) and completes the future with the response with its body fully buffered as `byte[]`. Used for every non-streaming call. |
-| `sendStreamingAsync` | `CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request)` | Sends the request and completes the future with the response body as a live `InputStream` for incremental consumption, used by log streaming (`LogClient.stream(...)`). The *caller* (the client) is responsible for closing the returned stream; an implementation must not close it itself before completing the future. |
+| `sendStreamingAsync` | `CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request)` | Sends the request and completes the future with the response body as a live `InputStream` for incremental consumption, used by log streaming (`LogClient.stream(...)`) and dataset export streaming (`DatasetClient.streamItems(...)`). The *caller* (the client) is responsible for closing the returned stream; an implementation must not close it itself before completing the future. |
 
 Both methods perform exactly one network round-trip each — no retrying, no request mutation
 (retries, auth, and the `User-Agent` header are handled one layer up, by the client itself), and
@@ -317,7 +317,7 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.8.0`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.9.0`).
 - `Version.API_SPEC_VERSION` — the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters and models were last generated
   and checked against (`v2-2026-10-08T073338Z`). It is a snapshot, not a live compatibility

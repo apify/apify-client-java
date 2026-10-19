@@ -10,6 +10,8 @@ import com.apify.client.keyvalue.KeyValueStore;
 import com.apify.client.keyvalue.KeyValueStoreClient;
 import com.apify.client.keyvalue.KeyValueStoreRecord;
 import com.apify.client.keyvalue.ListKeysOptions;
+import com.apify.client.keyvalue.SetRecordOptions;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -18,6 +20,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
+import java.util.zip.GZIPOutputStream;
 import org.junit.jupiter.api.Test;
 
 class KeyValueStoreIntegrationTest extends IntegrationBase {
@@ -94,6 +97,42 @@ class KeyValueStoreIntegrationTest extends IntegrationBase {
                       .anyMatch(s -> store.getId().equals(s.getId())));
       assertTrue(
           foundInList, "expected the just-created key-value store to appear in the top-level list");
+    } finally {
+      client.keyValueStore(store.getId()).delete().join();
+    }
+  }
+
+  @Test
+  void setRecordWithContentEncodingStoresPrecompressedValueAsIs() throws IOException {
+    ApifyClient client = requireClient();
+    KeyValueStore store = client.keyValueStores().getOrCreate(uniqueName("kvs-gzip")).join();
+    try {
+      KeyValueStoreClient kvs = client.keyValueStore(store.getId());
+      // Large and trivially compressible, so a double-gzip (the explicit header failing to
+      // suppress the client's own automatic compression) would silently corrupt it into different
+      // bytes rather than merely failing to shrink.
+      String original = "{\"hello\":\"world\",\"padding\":\"" + "x".repeat(4096) + "\"}";
+      ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+      try (GZIPOutputStream gzip = new GZIPOutputStream(buffer)) {
+        gzip.write(original.getBytes(StandardCharsets.UTF_8));
+      }
+      byte[] gzipped = buffer.toByteArray();
+
+      kvs.setRecord(
+              "report.json",
+              gzipped,
+              "application/json",
+              new SetRecordOptions().contentEncoding("gzip"))
+          .join();
+
+      // This client sends no `Accept-Encoding`, so the platform transparently decompresses the
+      // stored gzip record on the way back out - reading back the exact original plaintext proves
+      // the upload carried a single layer of gzip (the explicit header suppressed the client's own
+      // automatic compression); a double-gzip would leave one undecoded layer behind instead,
+      // failing this exact comparison.
+      Optional<KeyValueStoreRecord> rec = kvs.getRecord("report.json").join();
+      assertTrue(rec.isPresent());
+      assertEquals(original, new String(rec.get().getValue(), StandardCharsets.UTF_8));
     } finally {
       client.keyValueStore(store.getId()).delete().join();
     }

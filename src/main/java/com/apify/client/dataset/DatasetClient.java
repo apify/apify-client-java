@@ -10,6 +10,8 @@ import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import com.apify.client.internal.Signatures;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -207,6 +209,41 @@ public final class DatasetClient {
     options.apply(params);
     String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
     return http.call("GET", url, null, "", http.baseRequestTimeout()).thenApply(ApiResponse::body);
+  }
+
+  /**
+   * As {@link #downloadItems}, but resolves to the response body as a live {@link InputStream}
+   * instead of fully buffering it, so a large export can be processed in chunks without holding all
+   * of it in memory. The caller is responsible for closing the returned stream (or reading it to
+   * the end). Like {@link com.apify.client.log.LogClient#stream}, this bypasses the
+   * buffered/retrying transport, so a non-2xx response is read to completion and thrown as an
+   * {@link com.apify.client.http.ApifyApiException} rather than retried.
+   */
+  public CompletableFuture<InputStream> streamItems(
+      DownloadItemsFormat format, DatasetDownloadOptions options) {
+    QueryParams params = new QueryParams();
+    params.addString("format", format.wireValue());
+    options.apply(params);
+    String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
+
+    return http.streamAsync(url)
+        .thenApply(
+            resp -> {
+              if (resp.statusCode() >= HttpClientCore.MAX_SUCCESS_STATUS) {
+                byte[] body = drain(resp.body());
+                throw HttpClientCore.buildApiError(
+                    resp.statusCode(), body, 1, "GET", HttpClientCore.extractPath(url));
+              }
+              return resp.body();
+            });
+  }
+
+  private static byte[] drain(InputStream in) {
+    try (InputStream stream = in) {
+      return stream.readAllBytes();
+    } catch (IOException e) {
+      return new byte[0];
+    }
   }
 
   /**
