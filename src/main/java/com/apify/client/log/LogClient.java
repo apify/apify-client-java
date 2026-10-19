@@ -4,7 +4,6 @@ import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
@@ -94,25 +93,6 @@ public final class LogClient {
     params.addBool("stream", true);
     options.apply(params);
     String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl(""));
-
-    return ctx.http
-        .streamAsync(url)
-        .thenApply(
-            resp -> {
-              if (resp.statusCode() >= HttpClientCore.MAX_SUCCESS_STATUS) {
-                byte[] body = drain(resp.body());
-                throw HttpClientCore.buildApiError(
-                    resp.statusCode(), body, 1, "GET", HttpClientCore.extractPath(url));
-              }
-              return resp.body();
-            });
-  }
-
-  private static byte[] drain(InputStream in) {
-    try (InputStream stream = in) {
-      return stream.readAllBytes();
-    } catch (IOException e) {
-      return new byte[0];
-    }
+    return ctx.http.streamOrThrow(url);
   }
 }

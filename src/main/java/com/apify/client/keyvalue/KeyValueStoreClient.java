@@ -315,9 +315,14 @@ public final class KeyValueStoreClient {
    */
   public CompletableFuture<Void> setRecord(
       String key, byte[] value, String contentType, SetRecordOptions options) {
+    // Trimmed before validating/forwarding, matching the reference client's
+    // z.string().trim().min(1) schema (it sends the trimmed value, not the original).
     String contentEncoding = options.contentEncodingValue();
-    if (contentEncoding != null && contentEncoding.isBlank()) {
-      throw new IllegalArgumentException("contentEncoding must not be blank");
+    if (contentEncoding != null) {
+      contentEncoding = contentEncoding.trim();
+      if (contentEncoding.isEmpty()) {
+        throw new IllegalArgumentException("contentEncoding must not be blank");
+      }
     }
     Map<String, String> extraHeaders =
         contentEncoding == null ? null : Map.of(HttpHeaders.CONTENT_ENCODING, contentEncoding);

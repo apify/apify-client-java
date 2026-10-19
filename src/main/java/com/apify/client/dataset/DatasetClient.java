@@ -10,7 +10,6 @@ import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import com.apify.client.internal.Signatures;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
@@ -225,25 +224,7 @@ public final class DatasetClient {
     params.addString("format", format.wireValue());
     options.apply(params);
     String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
-
-    return http.streamAsync(url)
-        .thenApply(
-            resp -> {
-              if (resp.statusCode() >= HttpClientCore.MAX_SUCCESS_STATUS) {
-                byte[] body = drain(resp.body());
-                throw HttpClientCore.buildApiError(
-                    resp.statusCode(), body, 1, "GET", HttpClientCore.extractPath(url));
-              }
-              return resp.body();
-            });
-  }
-
-  private static byte[] drain(InputStream in) {
-    try (InputStream stream = in) {
-      return stream.readAllBytes();
-    } catch (IOException e) {
-      return new byte[0];
-    }
+    return http.streamOrThrow(url);
   }
 
   /**

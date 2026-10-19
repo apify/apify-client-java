@@ -984,6 +984,23 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void setRecordTrimsContentEncodingBeforeForwarding() {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    client(backend)
+        .keyValueStore("s")
+        .setRecord(
+            "k",
+            new byte[] {1},
+            "application/octet-stream",
+            new SetRecordOptions().contentEncoding("  gzip  "))
+        .join();
+    assertEquals(
+        "gzip",
+        backend.lastHeaders.firstValue("Content-Encoding").orElse(null),
+        "the header value must be trimmed, matching the reference client's schema");
+  }
+
+  @Test
   void streamItemsResolvesToReadableStreamOfExport() throws java.io.IOException {
     MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(200, "a;b\n1;2\n");

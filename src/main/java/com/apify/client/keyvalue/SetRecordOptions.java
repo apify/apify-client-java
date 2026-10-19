@@ -28,11 +28,11 @@ public final class SetRecordOptions {
 
   /**
    * Encoding already applied to the record's {@code value}, sent as the {@code Content-Encoding}
-   * header. Set it to upload a pre-compressed value (e.g. a gzipped file read from disk): the
-   * client then sends the bytes as they are and does not compress them again. The API accepts
-   * {@code gzip}, {@code br}, {@code deflate}, and {@code identity} (matched case-insensitively)
-   * and stores the record exactly as uploaded; since this client does not advertise support for a
-   * compressed response ({@code Accept-Encoding}), a later {@link
+   * header (trimmed first; it must not be blank). Set it to upload a pre-compressed value (e.g. a
+   * gzipped file read from disk): the client then sends the bytes as they are and does not compress
+   * them again. The API accepts {@code gzip}, {@code br}, {@code deflate}, and {@code identity}
+   * (matched case-insensitively) and stores the record exactly as uploaded; since this client does
+   * not advertise support for a compressed response ({@code Accept-Encoding}), a later {@link
    * KeyValueStoreClient#getRecord(String) getRecord} transparently receives the decompressed value
    * rather than the stored compressed bytes. Passing {@code identity} turns the client's own
    * automatic compression off for this upload without changing how the client is configured.

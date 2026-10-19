@@ -150,12 +150,13 @@ rec.ifPresent(r -> System.out.println(new String(r.getValue())));
 (request a download disposition) and `signature(String)` (a pre-computed access signature).
 
 `SetRecordOptions.contentEncoding(String)` names an encoding already applied to `value` (e.g.
-`"gzip"` for a pre-compressed file), sent as the `Content-Encoding` header; the client then sends
-the bytes as they are and does not compress them again, and the API accepts `gzip`, `br`, `deflate`,
-or `identity` (matched case-insensitively — `identity` turns the client's own automatic compression
-off for this upload). It must not be blank. The record is stored exactly as uploaded, but since this
-client sends no `Accept-Encoding`, a later `getRecord(...)` transparently receives the decompressed
-value rather than the stored compressed bytes.
+`"gzip"` for a pre-compressed file), sent as the `Content-Encoding` header (trimmed first); the
+client then sends the bytes as they are and does not compress them again, and the API accepts
+`gzip`, `br`, `deflate`, or `identity` (matched case-insensitively — `identity` turns the client's
+own automatic compression off for this upload). It must not be blank after trimming. The record is
+stored exactly as uploaded, but since this client sends no `Accept-Encoding`, a later
+`getRecord(...)` transparently receives the decompressed value rather than the stored compressed
+bytes.
 
 ```java
 ByteArrayOutputStream buffer = new ByteArrayOutputStream();
