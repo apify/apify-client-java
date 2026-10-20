@@ -483,8 +483,25 @@ public final class ResourceContext {
       String contentType,
       Duration timeout,
       boolean doNotRetryTimeouts) {
+    return putRaw(subPath, params, body, contentType, null, timeout, doNotRetryTimeouts);
+  }
+
+  /**
+   * As {@link #putRaw(String, QueryParams, byte[], String, Duration, boolean)}, additionally
+   * setting {@code extraHeaders} on the request (used to forward a caller-supplied {@code
+   * Content-Encoding} on a key-value-store record upload - see {@link HttpHeaders#CONTENT_ENCODING}
+   * - which also stops {@link HttpClientCore} from compressing the already-encoded body again).
+   */
+  public CompletableFuture<Void> putRaw(
+      String subPath,
+      QueryParams params,
+      byte[] body,
+      String contentType,
+      Map<String, String> extraHeaders,
+      Duration timeout,
+      boolean doNotRetryTimeouts) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("PUT", u, body, contentType, timeout, doNotRetryTimeouts)
+    return http.call("PUT", u, body, contentType, extraHeaders, timeout, doNotRetryTimeouts)
         .thenApply(resp -> null);
   }
 

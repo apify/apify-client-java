@@ -59,6 +59,11 @@ class AmbiguousNotFoundTest {
     assertTrue(client(404).log("missing").get().join().isEmpty());
   }
 
+  @Test
+  void logGetAsBytesByIdSwallows404ToEmpty() {
+    assertTrue(client(404).log("missing").getAsBytes().join().isEmpty());
+  }
+
   // ---- Reached through a run/build with no id of its own: throw -------------------------
 
   @Test

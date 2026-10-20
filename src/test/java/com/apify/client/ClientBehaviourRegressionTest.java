@@ -1,5 +1,6 @@
 package com.apify.client;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -945,5 +946,94 @@ class ClientBehaviourRegressionTest {
             .createItemsPublicUrl(new DatasetListItemsOptions(), null)
             .join();
     assertFalse(url.contains("format="), url);
+  }
+
+  @Test
+  void setRecordForwardsContentEncodingAndSkipsDoubleCompression() {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    // Larger than HttpClientCore's auto-compression threshold (1024 bytes) and trivially
+    // compressible, so sending it verbatim (rather than gzipping it again) is what proves the
+    // explicit header suppressed the client's own compression.
+    byte[] precompressed = "a".repeat(2000).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    client(backend)
+        .keyValueStore("s")
+        .setRecord(
+            "k",
+            precompressed,
+            "application/octet-stream",
+            new SetRecordOptions().contentEncoding("gzip"))
+        .join();
+    assertEquals("gzip", backend.lastHeaders.firstValue("Content-Encoding").orElse(null));
+    assertArrayEquals(precompressed, backend.lastBodyBytes);
+  }
+
+  @Test
+  void setRecordRejectsBlankContentEncoding() {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            client(backend)
+                .keyValueStore("s")
+                .setRecord(
+                    "k",
+                    new byte[] {1},
+                    "application/octet-stream",
+                    new SetRecordOptions().contentEncoding("  ")));
+    assertEquals(0, backend.calls, "no request should be sent for a blank contentEncoding");
+  }
+
+  @Test
+  void setRecordTrimsContentEncodingBeforeForwarding() {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    client(backend)
+        .keyValueStore("s")
+        .setRecord(
+            "k",
+            new byte[] {1},
+            "application/octet-stream",
+            new SetRecordOptions().contentEncoding("  gzip  "))
+        .join();
+    assertEquals(
+        "gzip",
+        backend.lastHeaders.firstValue("Content-Encoding").orElse(null),
+        "the header value must be trimmed, matching the reference client's schema");
+  }
+
+  @Test
+  void streamItemsResolvesToReadableStreamOfExport() throws java.io.IOException {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(200, "a;b\n1;2\n");
+    java.io.InputStream stream =
+        TestAsync.await(
+            client(backend)
+                .dataset("d1")
+                .streamItems(DownloadItemsFormat.CSV, new DatasetDownloadOptions()));
+    byte[] bytes = stream.readAllBytes();
+    assertEquals("a;b\n1;2\n", new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+    assertTrue(backend.lastUrl.contains("format=csv"), backend.lastUrl);
+  }
+
+  @Test
+  void streamItemsThrowsOnNonSuccessStatus() {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"no\"}}");
+    ApifyApiException ex =
+        assertThrows(
+            ApifyApiException.class,
+            () ->
+                TestAsync.await(
+                    client(backend)
+                        .dataset("d1")
+                        .streamItems(DownloadItemsFormat.JSON, new DatasetDownloadOptions())));
+    assertEquals(404, ex.getStatusCode());
+  }
+
+  @Test
+  void logGetAsBytesReturnsRawBytes() {
+    MockTransport backend = MockTransport.ofConstant(200, "log line 1\nlog line 2\n");
+    byte[] bytes = client(backend).log("l1").getAsBytes().join().orElseThrow();
+    assertEquals(
+        "log line 1\nlog line 2\n", new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
   }
 }

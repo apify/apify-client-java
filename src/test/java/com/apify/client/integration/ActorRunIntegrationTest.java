@@ -61,6 +61,9 @@ class ActorRunIntegrationTest extends IntegrationBase {
     Optional<String> log = client.run(run.getId()).log().get().join();
     assertTrue(log.isPresent() && !log.get().isEmpty());
 
+    Optional<byte[]> logBytes = client.run(run.getId()).log().getAsBytes().join();
+    assertTrue(logBytes.isPresent() && logBytes.get().length > 0);
+
     client.run(run.getId()).dataset().listItems(new DatasetListItemsOptions()).join();
     client.run(run.getId()).keyValueStore().getRecord("OUTPUT").join();
     client.run(run.getId()).requestQueue().listHead(null).join();

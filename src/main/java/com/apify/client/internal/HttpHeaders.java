@@ -16,5 +16,12 @@ public final class HttpHeaders {
   /** The request/response body media-type header name. */
   public static final String CONTENT_TYPE = "Content-Type";
 
+  /**
+   * The request/response body compression header name. Set explicitly on a key-value-store {@code
+   * setRecord} upload, it tells {@link HttpClientCore} the body is already encoded, which both
+   * skips the client's own automatic compression and forwards the caller's encoding verbatim.
+   */
+  public static final String CONTENT_ENCODING = "Content-Encoding";
+
   private HttpHeaders() {}
 }

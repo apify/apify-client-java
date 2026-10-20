@@ -64,9 +64,6 @@ public final class HttpClientCore {
    */
   private static final int MIN_COMPRESS_BYTES = 1024;
 
-  /** Header announcing the request-body content coding to the server. */
-  private static final String CONTENT_ENCODING_HEADER = "Content-Encoding";
-
   /** {@code Content-Encoding} value for brotli-compressed bodies (matches the reference client). */
   private static final String ENCODING_BROTLI = "br";
 
@@ -190,7 +187,7 @@ public final class HttpClientCore {
       Compressed compressed = compress(requestBody, BROTLI_AVAILABLE);
       requestBody = compressed.body();
       headers = new LinkedHashMap<>(extraHeaders == null ? Map.of() : extraHeaders);
-      headers.put(CONTENT_ENCODING_HEADER, compressed.encoding());
+      headers.put(HttpHeaders.CONTENT_ENCODING, compressed.encoding());
     }
 
     String path = extractPath(url);
@@ -372,7 +369,7 @@ public final class HttpClientCore {
     }
     if (extraHeaders != null) {
       for (String key : extraHeaders.keySet()) {
-        if (CONTENT_ENCODING_HEADER.equalsIgnoreCase(key)) {
+        if (HttpHeaders.CONTENT_ENCODING.equalsIgnoreCase(key)) {
           return false;
         }
       }
@@ -671,5 +668,38 @@ public final class HttpClientCore {
               }
             });
     return result;
+  }
+
+  /**
+   * As {@link #streamAsync(String)}, additionally inspecting the response itself: a non-2xx status
+   * is drained and thrown as the matching {@link ApifyApiException} subclass (single attempt - this
+   * bypasses the retrying transport, so the attempt number is always 1), while a success response
+   * completes with its live body stream. Shared by every streaming resource method (log streaming,
+   * dataset export streaming) so the drain-and-throw logic lives in one place.
+   */
+  public CompletableFuture<InputStream> streamOrThrow(String url) {
+    return streamAsync(url)
+        .thenApply(
+            resp -> {
+              if (resp.statusCode() >= MAX_SUCCESS_STATUS) {
+                byte[] body = drainQuietly(resp.body());
+                throw buildApiError(resp.statusCode(), body, 1, "GET", extractPath(url));
+              }
+              return resp.body();
+            });
+  }
+
+  /**
+   * Reads a stream to the end and closes it, for capturing a non-2xx streaming response's error
+   * body; a read failure is swallowed (the stream is being drained only to describe an error that
+   * already happened, so a second failure here is not worth surfacing over the original one) and
+   * yields an empty body instead.
+   */
+  private static byte[] drainQuietly(InputStream in) {
+    try (InputStream stream = in) {
+      return stream.readAllBytes();
+    } catch (IOException e) {
+      return new byte[0];
+    }
   }
 }

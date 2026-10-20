@@ -4,7 +4,6 @@ import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
@@ -59,6 +58,24 @@ public final class LogClient {
   }
 
   /**
+   * As {@link #get()}, but resolves to the log's raw bytes instead of decoding them as text -
+   * mirroring the reference clients' {@code buffer}/{@code get_as_bytes} option. Useful when the
+   * log is not UTF-8 text, or the caller wants to avoid the decoding step. See {@link #get()} for
+   * 404 handling.
+   */
+  public CompletableFuture<Optional<byte[]>> getAsBytes() {
+    return getAsBytes(new LogOptions());
+  }
+
+  /** As {@link #getAsBytes()}, with explicit options (raw, download). */
+  public CompletableFuture<Optional<byte[]>> getAsBytes(LogOptions options) {
+    QueryParams params = new QueryParams();
+    options.apply(params);
+    return ctx.getRawUnlessAmbiguous("", params)
+        .thenApply(resp -> resp == null ? Optional.empty() : Optional.of(resp.body()));
+  }
+
+  /**
    * Opens a live, streaming connection to the log and completes with a stream over the log bytes.
    * The caller is responsible for closing the returned {@link InputStream}.
    *
@@ -76,25 +93,6 @@ public final class LogClient {
     params.addBool("stream", true);
     options.apply(params);
     String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl(""));
-
-    return ctx.http
-        .streamAsync(url)
-        .thenApply(
-            resp -> {
-              if (resp.statusCode() >= HttpClientCore.MAX_SUCCESS_STATUS) {
-                byte[] body = drain(resp.body());
-                throw HttpClientCore.buildApiError(
-                    resp.statusCode(), body, 1, "GET", HttpClientCore.extractPath(url));
-              }
-              return resp.body();
-            });
-  }
-
-  private static byte[] drain(InputStream in) {
-    try (InputStream stream = in) {
-      return stream.readAllBytes();
-    } catch (IOException e) {
-      return new byte[0];
-    }
+    return ctx.http.streamOrThrow(url);
   }
 }

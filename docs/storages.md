@@ -44,6 +44,7 @@ any field not covered by a typed getter above is still available via the inherit
 | `iterateItems(DatasetListItemsOptions)` / `iterateItems(DatasetListItemsOptions, Long chunkSize)` | A lazy `Flow.Publisher<JsonNode>` over all items; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), the optional `chunkSize` sets the per-request page size (omitted/`null` = server default). |
 | `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Flow.Publisher<T>`. For typed iteration at the server-default page size, pass a `null` chunk size: `iterateItems(opts, null, T.class)`. |
 | `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes. `DownloadItemsFormat` is one of `JSON`, `JSONL`, `CSV`, `XLSX`, `XML`, `RSS`, `HTML`. Completes with `byte[]`. |
+| `streamItems(DownloadItemsFormat, DatasetDownloadOptions)` | As above, but resolves to a live `InputStream` over the export instead of fully buffering it, so a large export is processed in chunks. The caller closes the stream (or reads it to the end). Throws on any error response, including a 404. |
 | `pushItems(Object)` | Push a single item or a list of items. Completes with no value (`CompletableFuture<Void>`). |
 | `getStatistics()` | Dataset statistics. Completes with `JsonNode`; throws `NotFoundError` if the dataset is gone (no separate "statistics absent" state). |
 | `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL, served as `json`. Completes with `String`. |
@@ -66,6 +67,15 @@ PaginationList<JsonNode> page = client.dataset(ds.getId()).listItems(new Dataset
 byte[] csv = client.dataset(ds.getId()).downloadItems(DownloadItemsFormat.CSV, new DatasetDownloadOptions().bom(true)).join();
 ```
 
+For a large export, `streamItems` avoids holding the whole serialized export in memory:
+
+```java
+try (InputStream stream =
+    client.dataset("my-dataset").streamItems(DownloadItemsFormat.CSV, new DatasetDownloadOptions()).join()) {
+  stream.transferTo(System.out);
+}
+```
+
 `DatasetListItemsOptions` fields: `offset` (`Long`, number of items to skip), `limit` (`Long`,
 maximum number of items to return), `desc` (`Boolean`, return items newest-first), `fields`
 (`List<String>`, restrict the output to these source fields), `outputFields` (`List<String>`,
@@ -78,7 +88,8 @@ becomes a separate item), `flatten` (`List<String>`, flatten these nested fields
 keys), `view` (`String`, select a predefined dataset view for field selection), `simplified`
 (`Boolean`, return simplified — flattened and cleaned — items), `skipFailedPages` (`Boolean`, skip
 items that come from failed pages), `signature` (`String`, a pre-shared URL signature granting
-access without an API token). `downloadItems(...)` returns `byte[]` (the serialized export).
+access without an API token). `downloadItems(...)` returns `byte[]` (the serialized export);
+`streamItems(...)` takes the same two arguments but returns a live `InputStream` over it instead.
 `DatasetDownloadOptions` wraps a `DatasetListItemsOptions` (`items(DatasetListItemsOptions)`) and
 adds `attachment` (`Boolean`), `bom` (`Boolean`), `delimiter` (`String`), `skipHeaderRow`
 (`Boolean`), `xmlRoot` (`String`), `xmlRow` (`String`), `feedTitle` (`String`), `feedDescription`
@@ -116,7 +127,7 @@ datasets.
 | `recordExists(String key)` | Whether a record exists. Completes with `boolean`. |
 | `getRecord(String key)` / `getRecord(String key, GetRecordOptions)` | Fetch a record. Completes with `Optional<KeyValueStoreRecord>`. |
 | `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. Completes with no value (`CompletableFuture<Void>`). |
-| `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`SetRecordOptions`: `timeoutSecs` (`Long`), `doNotRetryTimeouts` (`Boolean`)). Completes with no value. |
+| `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`SetRecordOptions`: `timeoutSecs` (`Long`), `doNotRetryTimeouts` (`Boolean`), `contentEncoding` (`String`, see below)). Completes with no value. |
 | `setRecordJson(String key, Object value)` | Store JSON. Completes with no value. |
 | `deleteRecord(String key)` | Delete a record. Completes with no value. |
 | `getRecordPublicUrl(String key)` | A public (optionally signed) record URL. Completes with `String`. |
@@ -137,6 +148,27 @@ rec.ifPresent(r -> System.out.println(new String(r.getValue())));
 
 `GetRecordOptions` (for `getRecord(String key, GetRecordOptions)`) fields: `attachment(Boolean)`
 (request a download disposition) and `signature(String)` (a pre-computed access signature).
+
+`SetRecordOptions.contentEncoding(String)` names an encoding already applied to `value` (e.g.
+`"gzip"` for a pre-compressed file), sent as the `Content-Encoding` header (trimmed first); the
+client then sends the bytes as they are and does not compress them again, and the API accepts
+`gzip`, `br`, `deflate`, or `identity` (matched case-insensitively — `identity` turns the client's
+own automatic compression off for this upload). It must not be blank after trimming. The record is
+stored exactly as uploaded, but since this client sends no `Accept-Encoding`, a later
+`getRecord(...)` transparently receives the decompressed value rather than the stored compressed
+bytes.
+
+```java
+ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+try (java.util.zip.GZIPOutputStream gzip = new java.util.zip.GZIPOutputStream(buffer)) {
+  gzip.write("{\"answer\":42}".getBytes());
+}
+byte[] gzippedReport = buffer.toByteArray();
+
+client.keyValueStore("my-store")
+    .setRecord("report.json", gzippedReport, "application/json", new SetRecordOptions().contentEncoding("gzip"))
+    .join();
+```
 
 `KeyValueStoreRecord` exposes `getKey()`, `getValue()` (raw bytes) and `getContentType()`.
 `KeyValueStoreKeysPage` exposes `getItems()` (a list of `KeyValueStoreKey` with `getKey()`/`getSize()`),
