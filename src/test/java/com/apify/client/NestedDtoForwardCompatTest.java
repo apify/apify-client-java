@@ -1,6 +1,7 @@
 package com.apify.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,6 +17,7 @@ import com.apify.client.schedule.ScheduleNotifications;
 import com.apify.client.store.PricingInfo;
 import com.apify.client.task.TaskStats;
 import com.apify.client.user.UserProfile;
+import com.apify.client.webhook.Webhook;
 import com.apify.client.webhook.WebhookStats;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -101,6 +103,23 @@ class NestedDtoForwardCompatTest {
     assertEquals("TEXT", untagged.getActVersion().getSourceFiles().get(0).getFormat());
     assertEquals("x", untagged.getActVersion().getSourceFiles().get(0).getContent());
     assertEquals("SOURCE_FILES", untagged.getActVersion().getSourceType());
+  }
+
+  @Test
+  void webhookModelsAdHocFlagAndCondition() {
+    Webhook adHoc =
+        parse(
+            "{\"id\":\"w1\",\"isAdHoc\":true,\"condition\":{\"actorRunId\":\"run1\"}}",
+            Webhook.class);
+    assertTrue(adHoc.isAdHoc());
+    assertEquals("run1", adHoc.getCondition().get("actorRunId").asText());
+
+    Webhook persistent =
+        parse(
+            "{\"id\":\"w2\",\"isAdHoc\":false,\"condition\":{\"actorTaskId\":\"t1\"}}",
+            Webhook.class);
+    assertFalse(persistent.isAdHoc());
+    assertEquals("t1", persistent.getCondition().get("actorTaskId").asText());
   }
 
   /**

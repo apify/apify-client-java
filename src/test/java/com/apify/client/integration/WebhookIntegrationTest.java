@@ -1,7 +1,6 @@
 package com.apify.client.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
@@ -125,8 +124,7 @@ class WebhookIntegrationTest extends IntegrationBase {
 
         // Typed getters (previously only reachable via getExtra()): verify the API's response
         // actually deserializes into them, not just that the code compiles.
-        assertFalse(wh.isAdHoc());
-        assertTrue(wh.getCondition() != null);
+        assertEquals(task.getId(), wh.getCondition().get("actorTaskId").asText());
         assertTrue(wh.getCreatedAt() != null);
         assertTrue(wh.getModifiedAt() != null);
         assertTrue(wh.getStats() != null);
