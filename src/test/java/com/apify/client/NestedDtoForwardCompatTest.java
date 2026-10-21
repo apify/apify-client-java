@@ -87,6 +87,7 @@ class NestedDtoForwardCompatTest {
     assertEquals("0.1", tagged.getActVersion().getVersionNumber());
     assertEquals("GIT_REPO", tagged.getActVersion().getSourceType());
     assertEquals("https://github.com/apify/x.git", tagged.getActVersion().getGitRepoUrl());
+    assertTrue(tagged.getActVersion().getSourceFiles().isEmpty());
 
     Build untagged =
         parse(

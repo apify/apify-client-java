@@ -40,8 +40,11 @@ public final class BuildActVersion extends ApifyResource {
     return gitRepoUrl;
   }
 
-  /** The inline source files; present when the source type is {@code SOURCE_FILES}. */
+  /**
+   * The inline source files; non-empty only when the source type is {@code SOURCE_FILES}, an empty
+   * list otherwise.
+   */
   public List<SourceCodeFile> getSourceFiles() {
-    return sourceFiles == null ? null : Collections.unmodifiableList(sourceFiles);
+    return sourceFiles == null ? List.of() : Collections.unmodifiableList(sourceFiles);
   }
 }
