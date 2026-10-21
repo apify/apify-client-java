@@ -124,7 +124,7 @@ class WebhookIntegrationTest extends IntegrationBase {
 
         // Typed getters (previously only reachable via getExtra()): verify the API's response
         // actually deserializes into them, not just that the code compiles.
-        assertEquals(task.getId(), wh.getCondition().get("actorTaskId").asText());
+        assertEquals(task.getId(), wh.getCondition().get("actorTaskId").asString());
         assertTrue(wh.getCreatedAt() != null);
         assertTrue(wh.getModifiedAt() != null);
         assertTrue(wh.getStats() != null);

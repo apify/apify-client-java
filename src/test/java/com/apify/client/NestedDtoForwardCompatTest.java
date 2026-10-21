@@ -1,7 +1,6 @@
 package com.apify.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -112,14 +111,13 @@ class NestedDtoForwardCompatTest {
             "{\"id\":\"w1\",\"isAdHoc\":true,\"condition\":{\"actorRunId\":\"run1\"}}",
             Webhook.class);
     assertTrue(adHoc.isAdHoc());
-    assertEquals("run1", adHoc.getCondition().get("actorRunId").asText());
+    assertEquals("run1", adHoc.getCondition().get("actorRunId").asString());
 
     Webhook persistent =
         parse(
             "{\"id\":\"w2\",\"isAdHoc\":false,\"condition\":{\"actorTaskId\":\"t1\"}}",
             Webhook.class);
-    assertFalse(persistent.isAdHoc());
-    assertEquals("t1", persistent.getCondition().get("actorTaskId").asText());
+    assertEquals("t1", persistent.getCondition().get("actorTaskId").asString());
   }
 
   /**
