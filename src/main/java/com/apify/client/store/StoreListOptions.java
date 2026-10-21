@@ -56,8 +56,9 @@ public final class StoreListOptions implements ListOptionsLike {
   }
 
   /**
-   * Filter Actors by pricing model ({@code FREE}, {@code FLAT_PRICE_PER_MONTH}, {@code
-   * PRICE_PER_DATASET_ITEM}, {@code PAY_PER_EVENT}).
+   * Filter Actors by pricing model ({@code FREE}, {@code PRICE_PER_DATASET_ITEM}, {@code
+   * PAY_PER_EVENT}). The rental model ({@code FLAT_PRICE_PER_MONTH}) is no longer supported and is
+   * not accepted as a filter.
    */
   public StoreListOptions pricingModel(String pricingModel) {
     this.pricingModel = pricingModel;

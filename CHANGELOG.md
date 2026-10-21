@@ -5,6 +5,21 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-10-21
+
+### Added
+
+- `RunChargeOptions.requestId(String)`, sent as `requestId` in the charge request body: the ID of the
+  Server Actor request being charged, required for multi-tenant Server Actor runs.
+- `Build.getActVersion()` and the `BuildActVersion` model; `buildTag` is `null` for a version without
+  a build tag.
+
+### Changed
+
+- Updated to Apify OpenAPI specification `v2-2026-10-20T121847Z`.
+- Documented that the `FLAT_PRICE_PER_MONTH` (rental) pricing model is no longer supported and is no
+  longer accepted by the Store `pricingModel` filter.
+
 ## [0.9.0] - 2026-10-19
 
 ### Added

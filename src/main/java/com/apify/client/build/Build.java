@@ -14,6 +14,7 @@ public final class Build extends ApifyResource {
   private Instant finishedAt;
   private String buildNumber;
   private String imageDigest;
+  private BuildActVersion actVersion;
   private BuildMeta meta;
   private BuildStats stats;
   private BuildOptions options;
@@ -67,6 +68,15 @@ public final class Build extends ApifyResource {
    */
   public String getImageDigest() {
     return imageDigest;
+  }
+
+  /**
+   * A snapshot of the Actor version this build was created from. Its {@link
+   * BuildActVersion#getBuildTag()} is {@code null} for a version without a build tag. Inline source
+   * files, when present, stay reachable through {@link BuildActVersion#getExtra()}.
+   */
+  public BuildActVersion getActVersion() {
+    return actVersion;
   }
 
   /** Metadata about how the build was initiated. */

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.actor.ActorStandby;
+import com.apify.client.build.Build;
 import com.apify.client.build.BuildStats;
 import com.apify.client.internal.Json;
 import com.apify.client.keyvalue.KeyValueStoreKeysPage;
@@ -71,6 +72,25 @@ class NestedDtoForwardCompatTest {
 
     assertEquals(975770223L, stats.getImageSizeBytes().longValue());
     assertEquals(true, stats.getExtra().get("someFutureStatField"));
+  }
+
+  @Test
+  void buildActVersionAcceptsNullBuildTag() {
+    Build tagged =
+        parse(
+            "{\"id\":\"b1\",\"actVersion\":{\"sourceType\":\"GIT_REPO\","
+                + "\"buildTag\":\"latest\",\"versionNumber\":\"0.1\"}}",
+            Build.class);
+    assertEquals("latest", tagged.getActVersion().getBuildTag());
+    assertEquals("0.1", tagged.getActVersion().getVersionNumber());
+
+    Build untagged =
+        parse(
+            "{\"id\":\"b2\",\"actVersion\":{\"sourceType\":\"SOURCE_FILES\","
+                + "\"buildTag\":null,\"versionNumber\":\"0.0\"}}",
+            Build.class);
+    assertEquals(null, untagged.getActVersion().getBuildTag());
+    assertEquals("SOURCE_FILES", untagged.getActVersion().getSourceType());
   }
 
   /**

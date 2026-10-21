@@ -151,9 +151,10 @@ nullable), `getMemoryMbytes()` (`Long`, nullable), `getDiskMbytes()` (`Long`, nu
 `getMaxItems()` (`Long`, nullable), `getMaxTotalChargeUsd()` (`Double`, nullable),
 `getRestartOnError()` (`Boolean`, nullable).
 
-`RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)` and
-`idempotencyKey(String)` — the latter is auto-generated when unset so a transport-retried charge is
-applied at most once.
+`RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)`,
+`idempotencyKey(String)` — auto-generated when unset so a transport-retried charge is applied at
+most once — and `requestId(String)`, the `X-Actor-Request-ID` of the Server Actor request being
+charged (required for multi-tenant Server Actor runs, omitted otherwise).
 
 ```java
 client.run("RUN_ID").charge(new RunChargeOptions("my-event").count(3L)).join();

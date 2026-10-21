@@ -18,8 +18,8 @@
 
   2. UWF_UNWRITTEN_FIELD / UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD on Jackson-populated DTOs/response
      shapes ({@code KeyValueStoreKey}, {@code DeletedRequestInfo}, {@code ActorRunMeta}, {@code
-     TaskOptions}, {@code WebhookLastDispatch}, {@code ActorDefaultRunOptions}, {@code BuildMeta},
-     {@code BuildOptions}, {@code BuildStats}, {@code PricingInfo}, {@code ProxyGroup}, {@code
+     TaskOptions}, {@code WebhookLastDispatch}, {@code ActorDefaultRunOptions}, {@code BuildActVersion},
+     {@code BuildMeta}, {@code BuildOptions}, {@code BuildStats}, {@code PricingInfo}, {@code ProxyGroup}, {@code
      UserProxy}, {@code WebhookDispatchEventData}, {@code WebhookDispatchWebhookInfo}, the internal
      error-response mapping in {@code HttpClientCore}): their fields are written by the
      deserializer via reflection, which SpotBugs cannot see - a known false positive for
@@ -74,6 +74,7 @@
       <Class name="com.apify.client.task.TaskOptions"/>
       <Class name="com.apify.client.webhook.WebhookLastDispatch"/>
       <Class name="com.apify.client.actor.ActorDefaultRunOptions"/>
+      <Class name="com.apify.client.build.BuildActVersion"/>
       <Class name="com.apify.client.build.BuildMeta"/>
       <Class name="com.apify.client.build.BuildOptions"/>
       <Class name="com.apify.client.build.BuildStats"/>
@@ -111,6 +112,7 @@
   <Match>
     <Class name="com.apify.client.build.Build"/>
     <Or>
+      <Method name="getActVersion"/>
       <Method name="getMeta"/>
       <Method name="getOptions"/>
       <Method name="getStats"/>

@@ -120,6 +120,20 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void chargeSendsRequestIdOnlyWhenSet() {
+    MockTransport withId = MockTransport.ofConstant(200, "{\"data\":{}}");
+    client(withId)
+        .run("run123")
+        .charge(new RunChargeOptions("e").requestId("7Hs2kQw9LxP4mN1vB"))
+        .join();
+    assertTrue(withId.lastBody.contains("\"requestId\":\"7Hs2kQw9LxP4mN1vB\""), withId.lastBody);
+
+    MockTransport without = MockTransport.ofConstant(200, "{\"data\":{}}");
+    client(without).run("run123").charge(new RunChargeOptions("e")).join();
+    assertFalse(without.lastBody.contains("requestId"), without.lastBody);
+  }
+
+  @Test
   void chargeRejectsMissingEventName() {
     MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
     ApifyClient client = client(backend);
