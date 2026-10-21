@@ -11,14 +11,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `RunChargeOptions.requestId(String)`, sent as `requestId` in the charge request body: the ID of the
   Server Actor request being charged, required for multi-tenant Server Actor runs.
-- `Build.getActVersion()` and the `BuildActVersion` model; `buildTag` is `null` for a version without
-  a build tag.
+- `Build.getActVersion()` and the `BuildActVersion` model (with the `SourceCodeFile` model for its
+  inline `sourceFiles`); `buildTag` is `null` for a version without a build tag.
 
 ### Changed
 
 - Updated to Apify OpenAPI specification `v2-2026-10-20T121847Z`.
-- Documented that the `FLAT_PRICE_PER_MONTH` (rental) pricing model is no longer supported and is no
-  longer accepted by the Store `pricingModel` filter.
+- Documented that the `FLAT_PRICE_PER_MONTH` (rental) pricing model is deprecated and no longer
+  listed as a Store `pricingModel` filter value.
 
 ## [0.9.0] - 2026-10-19
 

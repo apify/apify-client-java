@@ -1,6 +1,7 @@
 package com.apify.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.actor.ActorStandby;
@@ -79,17 +80,25 @@ class NestedDtoForwardCompatTest {
     Build tagged =
         parse(
             "{\"id\":\"b1\",\"actVersion\":{\"sourceType\":\"GIT_REPO\","
-                + "\"buildTag\":\"latest\",\"versionNumber\":\"0.1\"}}",
+                + "\"buildTag\":\"latest\",\"versionNumber\":\"0.1\","
+                + "\"gitRepoUrl\":\"https://github.com/apify/x.git\"}}",
             Build.class);
     assertEquals("latest", tagged.getActVersion().getBuildTag());
     assertEquals("0.1", tagged.getActVersion().getVersionNumber());
+    assertEquals("GIT_REPO", tagged.getActVersion().getSourceType());
+    assertEquals("https://github.com/apify/x.git", tagged.getActVersion().getGitRepoUrl());
 
     Build untagged =
         parse(
             "{\"id\":\"b2\",\"actVersion\":{\"sourceType\":\"SOURCE_FILES\","
-                + "\"buildTag\":null,\"versionNumber\":\"0.0\"}}",
+                + "\"buildTag\":null,\"versionNumber\":\"0.0\",\"sourceFiles\":["
+                + "{\"name\":\"main.js\",\"format\":\"TEXT\",\"content\":\"x\"}]}}",
             Build.class);
-    assertEquals(null, untagged.getActVersion().getBuildTag());
+    assertNull(untagged.getActVersion().getBuildTag());
+    assertEquals(1, untagged.getActVersion().getSourceFiles().size());
+    assertEquals("main.js", untagged.getActVersion().getSourceFiles().get(0).getName());
+    assertEquals("TEXT", untagged.getActVersion().getSourceFiles().get(0).getFormat());
+    assertEquals("x", untagged.getActVersion().getSourceFiles().get(0).getContent());
     assertEquals("SOURCE_FILES", untagged.getActVersion().getSourceType());
   }
 

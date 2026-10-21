@@ -24,7 +24,8 @@ builds) and a single build with `client.build(id)`.
 
 `Build` fields: `getId()`, `getActId()`, `getUserId()`, `getStatus()`, `getStartedAt()`,
 `getFinishedAt()`, `getBuildNumber()`, `getActVersion()` (`BuildActVersion` — `getSourceType()`, `getBuildTag()`
-(nullable), `getVersionNumber()`, `getGitRepoUrl()`), `getImageDigest()` (`String`, nullable — the built Docker
+(nullable), `getVersionNumber()`, `getGitRepoUrl()`, `getSourceFiles()` (`List<SourceCodeFile>` — `getName()`,
+`getFormat()`, `getContent()`)), `getImageDigest()` (`String`, nullable — the built Docker
 image manifest's digest, without the `sha256:` prefix; compare two builds' digests to tell whether
 their image contents differ), `getMeta()` (`BuildMeta` — `getOrigin()`, `getClientIp()`,
 `getUserAgent()`), `getStats()` (`BuildStats` — `getDurationMillis()`/`getRunTimeSecs()` as `Long`,

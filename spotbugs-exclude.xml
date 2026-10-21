@@ -75,6 +75,7 @@
       <Class name="com.apify.client.webhook.WebhookLastDispatch"/>
       <Class name="com.apify.client.actor.ActorDefaultRunOptions"/>
       <Class name="com.apify.client.build.BuildActVersion"/>
+      <Class name="com.apify.client.actor.SourceCodeFile"/>
       <Class name="com.apify.client.build.BuildMeta"/>
       <Class name="com.apify.client.build.BuildOptions"/>
       <Class name="com.apify.client.build.BuildStats"/>

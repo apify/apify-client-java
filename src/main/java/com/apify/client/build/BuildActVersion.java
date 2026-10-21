@@ -1,6 +1,9 @@
 package com.apify.client.build;
 
 import com.apify.client.ApifyResource;
+import com.apify.client.actor.SourceCodeFile;
+import java.util.Collections;
+import java.util.List;
 
 /** A snapshot of the Actor version a {@link Build} was created from. */
 public final class BuildActVersion extends ApifyResource {
@@ -8,6 +11,7 @@ public final class BuildActVersion extends ApifyResource {
   private String buildTag;
   private String versionNumber;
   private String gitRepoUrl;
+  private List<SourceCodeFile> sourceFiles;
 
   /**
    * How the version's source was provided (e.g. {@code "SOURCE_FILES"}, {@code "GIT_REPO"}, {@code
@@ -34,5 +38,10 @@ public final class BuildActVersion extends ApifyResource {
   /** URL of the Git repository; present when the source type is {@code GIT_REPO}. */
   public String getGitRepoUrl() {
     return gitRepoUrl;
+  }
+
+  /** The inline source files; present when the source type is {@code SOURCE_FILES}. */
+  public List<SourceCodeFile> getSourceFiles() {
+    return sourceFiles == null ? null : Collections.unmodifiableList(sourceFiles);
   }
 }

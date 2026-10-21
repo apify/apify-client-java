@@ -72,8 +72,7 @@ public final class Build extends ApifyResource {
 
   /**
    * A snapshot of the Actor version this build was created from. Its {@link
-   * BuildActVersion#getBuildTag()} is {@code null} for a version without a build tag. Inline source
-   * files, when present, stay reachable through {@link BuildActVersion#getExtra()}.
+   * BuildActVersion#getBuildTag()} is {@code null} for a version without a build tag.
    */
   public BuildActVersion getActVersion() {
     return actVersion;
