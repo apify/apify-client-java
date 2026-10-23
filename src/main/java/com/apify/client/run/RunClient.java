@@ -172,6 +172,10 @@ public final class RunClient {
     Map<String, Object> body = new LinkedHashMap<>();
     body.put("eventName", eventName);
     body.put("count", options.countValue());
+    String requestId = options.requestIdValue();
+    if (requestId != null && !requestId.isEmpty()) {
+      body.put("requestId", requestId);
+    }
     Map<String, String> headers = Map.of(CHARGE_IDEMPOTENCY_HEADER, idempotencyKey);
     // Route through mergedParams like the run's other actions, so a last-run-seeded context charges
     // the same run its read methods resolve to (its pinned status/origin filters are preserved).

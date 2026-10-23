@@ -7,7 +7,7 @@ public final class PricingInfo extends ApifyResource {
   private String pricingModel;
 
   /**
-   * The pricing model, e.g. {@code "FREE"}, {@code "FLAT_PRICE_PER_MONTH"}, {@code
+   * The pricing model, e.g. {@code "FREE"}, {@code "PRICE_PER_DATASET_ITEM"}, {@code
    * "PAY_PER_EVENT"}.
    */
   public String getPricingModel() {

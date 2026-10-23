@@ -12,7 +12,8 @@ Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollec
 `StoreListOptions` fields: `offset` (number of Actors to skip), `limit` (maximum number of Actors to
 return), `search` (full-text search query), `sortBy` (the sort field, e.g. `popularity`, `newest`),
 `category` (filter Actors by category), `username` (filter Actors by owner username), `pricingModel`
-(filter by pricing model: `FREE`, `FLAT_PRICE_PER_MONTH`, `PRICE_PER_DATASET_ITEM`, `PAY_PER_EVENT`),
+(filter by pricing model: `FREE`, `PRICE_PER_DATASET_ITEM`, `PAY_PER_EVENT`; the deprecated rental model
+`FLAT_PRICE_PER_MONTH` is no longer listed),
 `includeUnrunnableActors` (include Actors the current user cannot run), `allowsAgenticUsers` (only
 Actors that allow agentic users), `responseFormat` (the response shape: `full` or `agent`).
 

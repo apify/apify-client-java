@@ -5,6 +5,7 @@ public final class RunChargeOptions {
   private String eventName;
   private Long count;
   private String idempotencyKey;
+  private String requestId;
 
   /** Creates options for the given (required) event name. */
   public RunChargeOptions(String eventName) {
@@ -32,6 +33,16 @@ public final class RunChargeOptions {
     return this;
   }
 
+  /**
+   * The ID of the Server Actor request being charged, taken from the {@code X-Actor-Request-ID}
+   * header of the incoming request. Required for multi-tenant Server Actor runs, where it
+   * identifies the request the charge belongs to; omit it otherwise.
+   */
+  public RunChargeOptions requestId(String requestId) {
+    this.requestId = requestId;
+    return this;
+  }
+
   String eventNameValue() {
     return eventName;
   }
@@ -42,5 +53,9 @@ public final class RunChargeOptions {
 
   String idempotencyKeyValue() {
     return idempotencyKey;
+  }
+
+  String requestIdValue() {
+    return requestId;
   }
 }

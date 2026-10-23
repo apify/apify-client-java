@@ -300,12 +300,15 @@ class IterationIntegrationTest extends IntegrationBase {
   void iterateWebhooks() {
     ApifyClient client = requireClient();
     Set<String> ids = new HashSet<>();
+    Task task = WebhookIntegrationTest.createOwnedTask(client);
     try {
       for (int i = 0; i < 2; i++) {
         ids.add(
             client
                 .webhooks()
-                .create(WebhookIntegrationTest.webhookDef("https://example.com/it-wh-" + i))
+                .create(
+                    WebhookIntegrationTest.webhookDef(
+                        "https://example.com/it-wh-" + i, task.getId()))
                 .join()
                 .getId());
       }
@@ -315,8 +318,12 @@ class IterationIntegrationTest extends IntegrationBase {
               Webhook::getId,
               ids));
     } finally {
-      for (String id : ids) {
-        client.webhook(id).delete().join();
+      try {
+        for (String id : ids) {
+          client.webhook(id).delete().join();
+        }
+      } finally {
+        client.task(task.getId()).delete().join();
       }
     }
   }

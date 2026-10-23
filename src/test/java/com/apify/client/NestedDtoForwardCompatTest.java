@@ -1,9 +1,11 @@
 package com.apify.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.actor.ActorStandby;
+import com.apify.client.build.Build;
 import com.apify.client.build.BuildStats;
 import com.apify.client.internal.Json;
 import com.apify.client.keyvalue.KeyValueStoreKeysPage;
@@ -14,6 +16,7 @@ import com.apify.client.schedule.ScheduleNotifications;
 import com.apify.client.store.PricingInfo;
 import com.apify.client.task.TaskStats;
 import com.apify.client.user.UserProfile;
+import com.apify.client.webhook.Webhook;
 import com.apify.client.webhook.WebhookStats;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -71,6 +74,50 @@ class NestedDtoForwardCompatTest {
 
     assertEquals(975770223L, stats.getImageSizeBytes().longValue());
     assertEquals(true, stats.getExtra().get("someFutureStatField"));
+  }
+
+  @Test
+  void buildActVersionAcceptsNullBuildTag() {
+    Build tagged =
+        parse(
+            "{\"id\":\"b1\",\"actVersion\":{\"sourceType\":\"GIT_REPO\","
+                + "\"buildTag\":\"latest\",\"versionNumber\":\"0.1\","
+                + "\"gitRepoUrl\":\"https://github.com/apify/x.git\"}}",
+            Build.class);
+    assertEquals("latest", tagged.getActVersion().getBuildTag());
+    assertEquals("0.1", tagged.getActVersion().getVersionNumber());
+    assertEquals("GIT_REPO", tagged.getActVersion().getSourceType());
+    assertEquals("https://github.com/apify/x.git", tagged.getActVersion().getGitRepoUrl());
+    assertTrue(tagged.getActVersion().getSourceFiles().isEmpty());
+
+    Build untagged =
+        parse(
+            "{\"id\":\"b2\",\"actVersion\":{\"sourceType\":\"SOURCE_FILES\","
+                + "\"buildTag\":null,\"versionNumber\":\"0.0\",\"sourceFiles\":["
+                + "{\"name\":\"main.js\",\"format\":\"TEXT\",\"content\":\"x\"}]}}",
+            Build.class);
+    assertNull(untagged.getActVersion().getBuildTag());
+    assertEquals(1, untagged.getActVersion().getSourceFiles().size());
+    assertEquals("main.js", untagged.getActVersion().getSourceFiles().get(0).getName());
+    assertEquals("TEXT", untagged.getActVersion().getSourceFiles().get(0).getFormat());
+    assertEquals("x", untagged.getActVersion().getSourceFiles().get(0).getContent());
+    assertEquals("SOURCE_FILES", untagged.getActVersion().getSourceType());
+  }
+
+  @Test
+  void webhookModelsAdHocFlagAndCondition() {
+    Webhook adHoc =
+        parse(
+            "{\"id\":\"w1\",\"isAdHoc\":true,\"condition\":{\"actorRunId\":\"run1\"}}",
+            Webhook.class);
+    assertTrue(adHoc.isAdHoc());
+    assertEquals("run1", adHoc.getCondition().get("actorRunId").asString());
+
+    Webhook persistent =
+        parse(
+            "{\"id\":\"w2\",\"isAdHoc\":false,\"condition\":{\"actorTaskId\":\"t1\"}}",
+            Webhook.class);
+    assertEquals("t1", persistent.getCondition().get("actorTaskId").asString());
   }
 
   /**

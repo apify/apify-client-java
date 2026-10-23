@@ -23,7 +23,9 @@ builds) and a single build with `client.build(id)`.
 | `log()` | A `LogClient` for the build's log. |
 
 `Build` fields: `getId()`, `getActId()`, `getUserId()`, `getStatus()`, `getStartedAt()`,
-`getFinishedAt()`, `getBuildNumber()`, `getImageDigest()` (`String`, nullable — the built Docker
+`getFinishedAt()`, `getBuildNumber()`, `getActVersion()` (`BuildActVersion` — `getSourceType()`, `getBuildTag()`
+(nullable), `getVersionNumber()`, `getGitRepoUrl()`, `getSourceFiles()` (`List<SourceCodeFile>` — `getName()`,
+`getFormat()`, `getContent()`)), `getImageDigest()` (`String`, nullable — the built Docker
 image manifest's digest, without the `sha256:` prefix; compare two builds' digests to tell whether
 their image contents differ), `getMeta()` (`BuildMeta` — `getOrigin()`, `getClientIp()`,
 `getUserAgent()`), `getStats()` (`BuildStats` — `getDurationMillis()`/`getRunTimeSecs()` as `Long`,
@@ -32,7 +34,7 @@ their image contents differ), `getMeta()` (`BuildMeta` — `getOrigin()`, `getCl
 `getUsage()` / `getUsageUsd()` (`BuildUsage` — `getActorComputeUnits()` as `Double`, the latter as
 its USD cost), `getUsageTotalUsd()` (`Double`), plus `isTerminal()` and `getExtra()`. The status is
 one of `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`, `ABORTING`, `ABORTED`.
-Every nested model above (`BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage`) also has its own
+Every nested model above (`BuildActVersion`, `BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage`) also has its own
 `getExtra()`, so a field not yet listed here is still reachable rather than dropped.
 
 ```java
