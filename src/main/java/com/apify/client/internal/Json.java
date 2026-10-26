@@ -2,10 +2,13 @@ package com.apify.client.internal;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.Nulls;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JavaType;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.cfg.DateTimeFeature;
 import tools.jackson.databind.json.JsonMapper;
@@ -37,6 +40,12 @@ public final class Json {
           // live API instead of every such field having to be widened to a boxed type.
           .configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false)
           .configure(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS, false)
+          // Jackson materializes an explicit JSON null for a JsonNode field as a NullNode, which
+          // is not a Java null. Models document nullable raw-JSON fields as returning null, so a
+          // null value is skipped and the field keeps its default of null.
+          .withConfigOverride(
+              JsonNode.class,
+              override -> override.setNullHandling(JsonSetter.Value.forValueNulls(Nulls.SKIP)))
           .changeDefaultPropertyInclusion(
               incl -> incl.withValueInclusion(JsonInclude.Include.NON_NULL))
           // Bind directly to (private) fields so models need no setters — getters remain the

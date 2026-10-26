@@ -26,8 +26,8 @@ public final class ActorDefinition extends ApifyResource {
   private String changelog;
   private ActorDefinitionStorages storages;
   private JsonNode defaultMemoryMbytes;
-  private Integer minMemoryMbytes;
-  private Integer maxMemoryMbytes;
+  private Long minMemoryMbytes;
+  private Long maxMemoryMbytes;
   private Boolean usesStandbyMode;
   private JsonNode webServerSchema;
   private String webServerMcpPath;
@@ -122,12 +122,12 @@ public final class ActorDefinition extends ApifyResource {
   }
 
   /** The minimum memory in megabytes required by the Actor. */
-  public Integer getMinMemoryMbytes() {
+  public Long getMinMemoryMbytes() {
     return minMemoryMbytes;
   }
 
   /** The maximum memory in megabytes required by the Actor. */
-  public Integer getMaxMemoryMbytes() {
+  public Long getMaxMemoryMbytes() {
     return maxMemoryMbytes;
   }
 

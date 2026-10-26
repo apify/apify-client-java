@@ -14,6 +14,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `description`, `output`, `meta`, `storages.datasets`, `storages.keyValueStore`,
   `webServerSchema` and `webServerMcpPath` fields.
 
+### Fixed
+
+- An explicit JSON `null` for a raw-JSON (`JsonNode`) model field, such as `Task.getInput()`, is now
+  returned as Java `null` instead of a `NullNode`.
+
 ### Changed
 
 - Updated to Apify OpenAPI specification `v2-2026-10-26T112451Z`.

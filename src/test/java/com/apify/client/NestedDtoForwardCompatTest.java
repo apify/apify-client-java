@@ -15,6 +15,7 @@ import com.apify.client.run.ActorRunMeta;
 import com.apify.client.run.ActorRunStats;
 import com.apify.client.schedule.ScheduleNotifications;
 import com.apify.client.store.PricingInfo;
+import com.apify.client.task.Task;
 import com.apify.client.task.TaskStats;
 import com.apify.client.user.UserProfile;
 import com.apify.client.webhook.Webhook;
@@ -145,8 +146,8 @@ class NestedDtoForwardCompatTest {
     assertEquals(
         1, def.getStorages().getKeyValueStore().get("actorKeyValueStoreSchemaVersion").asInt());
     assertEquals("get(input, 'n', 1) * 1024", def.getDefaultMemoryMbytes().asString());
-    assertEquals(128, def.getMinMemoryMbytes().intValue());
-    assertEquals(4096, def.getMaxMemoryMbytes().intValue());
+    assertEquals(128L, def.getMinMemoryMbytes().longValue());
+    assertEquals(4096L, def.getMaxMemoryMbytes().longValue());
     assertEquals(true, def.getUsesStandbyMode());
     assertEquals("3.0.0", def.getWebServerSchema().get("openapi").asString());
     assertEquals("/mcp", def.getWebServerMcpPath());
@@ -156,6 +157,12 @@ class NestedDtoForwardCompatTest {
         parse("{\"id\":\"b2\",\"actorDefinition\":{}}", Build.class).getActorDefinition();
     assertTrue(empty.getEnvironmentVariables().isEmpty());
     assertNull(empty.getStorages());
+    ActorDefinition nulls =
+        parse("{\"id\":\"b5\",\"actorDefinition\":{\"input\":null,\"output\":null}}", Build.class)
+            .getActorDefinition();
+    assertNull(nulls.getInput());
+    assertNull(nulls.getOutput());
+    assertNull(parse("{\"id\":\"t1\",\"input\":null}", Task.class).getInput());
     assertNull(parse("{\"id\":\"b3\",\"actorDefinition\":null}", Build.class).getActorDefinition());
     assertNull(parse("{\"id\":\"b4\"}", Build.class).getActorDefinition());
   }
