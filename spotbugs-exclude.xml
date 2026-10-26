@@ -19,6 +19,7 @@
   2. UWF_UNWRITTEN_FIELD / UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD on Jackson-populated DTOs/response
      shapes ({@code KeyValueStoreKey}, {@code DeletedRequestInfo}, {@code ActorRunMeta}, {@code
      TaskOptions}, {@code WebhookLastDispatch}, {@code ActorDefaultRunOptions}, {@code BuildActVersion},
+     {@code ActorDefinitionMeta}, {@code ActorDefinitionStorages},
      {@code BuildMeta}, {@code BuildOptions}, {@code BuildStats}, {@code PricingInfo}, {@code ProxyGroup}, {@code
      UserProxy}, {@code WebhookDispatchEventData}, {@code WebhookDispatchWebhookInfo}, the internal
      error-response mapping in {@code HttpClientCore}): their fields are written by the
@@ -75,6 +76,8 @@
       <Class name="com.apify.client.webhook.WebhookLastDispatch"/>
       <Class name="com.apify.client.actor.ActorDefaultRunOptions"/>
       <Class name="com.apify.client.build.BuildActVersion"/>
+      <Class name="com.apify.client.build.ActorDefinitionMeta"/>
+      <Class name="com.apify.client.build.ActorDefinitionStorages"/>
       <Class name="com.apify.client.actor.SourceCodeFile"/>
       <Class name="com.apify.client.build.BuildMeta"/>
       <Class name="com.apify.client.build.BuildOptions"/>
@@ -111,9 +114,18 @@
     <Bug pattern="EI_EXPOSE_REP"/>
   </Match>
   <Match>
+    <Class name="com.apify.client.build.ActorDefinition"/>
+    <Or>
+      <Method name="getMeta"/>
+      <Method name="getStorages"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
     <Class name="com.apify.client.build.Build"/>
     <Or>
       <Method name="getActVersion"/>
+      <Method name="getActorDefinition"/>
       <Method name="getMeta"/>
       <Method name="getOptions"/>
       <Method name="getStats"/>
