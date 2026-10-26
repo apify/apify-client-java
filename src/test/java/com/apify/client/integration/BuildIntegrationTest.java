@@ -7,6 +7,7 @@ import com.apify.client.ApifyClient;
 import com.apify.client.ListOptions;
 import com.apify.client.actor.Actor;
 import com.apify.client.actor.ActorBuildOptions;
+import com.apify.client.build.ActorDefinition;
 import com.apify.client.build.Build;
 import com.apify.client.build.BuildClient;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,16 @@ class BuildIntegrationTest extends IntegrationBase {
     ApifyClient client = requireClient();
     var page = client.builds().list(new ListOptions().limit(5L)).join();
     assertTrue(page.getTotal() >= 0);
+  }
+
+  @Test
+  void storeActorBuildCarriesActorDefinition() {
+    ApifyClient client = requireClient();
+    Build build =
+        client.actor("apify/hello-world").defaultBuild(60L).join().get().join().orElseThrow();
+    ActorDefinition definition = build.getActorDefinition();
+    assertNotNull(definition, "the default build of a store Actor carries its actorDefinition");
+    assertNotNull(definition.getInput(), "hello-world declares an input schema");
   }
 
   @Test

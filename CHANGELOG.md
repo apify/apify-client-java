@@ -5,7 +5,14 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.10.1] - 2026-10-26
+## [0.11.0] - 2026-10-26
+
+### Added
+
+- `Build.getActorDefinition()` and the `ActorDefinition`, `ActorDefinitionMeta` and
+  `ActorDefinitionStorages` models for the build's `actorDefinition`, including the new `title`,
+  `description`, `output`, `meta`, `storages.datasets`, `storages.keyValueStore`,
+  `webServerSchema` and `webServerMcpPath` fields.
 
 ### Changed
 

@@ -25,7 +25,14 @@ builds) and a single build with `client.build(id)`.
 `Build` fields: `getId()`, `getActId()`, `getUserId()`, `getStatus()`, `getStartedAt()`,
 `getFinishedAt()`, `getBuildNumber()`, `getActVersion()` (`BuildActVersion` — `getSourceType()`, `getBuildTag()`
 (nullable), `getVersionNumber()`, `getGitRepoUrl()`, `getSourceFiles()` (`List<SourceCodeFile>` — `getName()`,
-`getFormat()`, `getContent()`)), `getImageDigest()` (`String`, nullable — the built Docker
+`getFormat()`, `getContent()`)), `getActorDefinition()` (`ActorDefinition`, nullable — the Actor's `.actor/actor.json` at build time:
+`getActorSpecification()`, `getName()`, `getTitle()`, `getDescription()`, `getVersion()`, `getBuildTag()`,
+`getMeta()` (`ActorDefinitionMeta` — `getTemplateId()`, `getGeneratedBy()`), `getEnvironmentVariables()`,
+`getDockerfile()`, `getDockerContextDir()`, `getReadme()`, `getInput()`/`getOutput()` (`JsonNode` schemas),
+`getChangelog()`, `getStorages()` (`ActorDefinitionStorages` — `getDataset()`, `getDatasets()`,
+`getKeyValueStore()`), `getDefaultMemoryMbytes()` (`JsonNode`, an integer or a dynamic memory
+expression), `getMinMemoryMbytes()`, `getMaxMemoryMbytes()`, `getUsesStandbyMode()`, `getWebServerSchema()`,
+`getWebServerMcpPath()`), `getImageDigest()` (`String`, nullable — the built Docker
 image manifest's digest, without the `sha256:` prefix; compare two builds' digests to tell whether
 their image contents differ), `getMeta()` (`BuildMeta` — `getOrigin()`, `getClientIp()`,
 `getUserAgent()`), `getStats()` (`BuildStats` — `getDurationMillis()`/`getRunTimeSecs()` as `Long`,
@@ -34,7 +41,7 @@ their image contents differ), `getMeta()` (`BuildMeta` — `getOrigin()`, `getCl
 `getUsage()` / `getUsageUsd()` (`BuildUsage` — `getActorComputeUnits()` as `Double`, the latter as
 its USD cost), `getUsageTotalUsd()` (`Double`), plus `isTerminal()` and `getExtra()`. The status is
 one of `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`, `ABORTING`, `ABORTED`.
-Every nested model above (`BuildActVersion`, `BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage`) also has its own
+Every nested model above (`BuildActVersion`, `ActorDefinition`, `ActorDefinitionMeta`, `ActorDefinitionStorages`, `BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage`) also has its own
 `getExtra()`, so a field not yet listed here is still reachable rather than dropped.
 
 ```java
