@@ -142,7 +142,10 @@ public final class RunClient {
     return ctx.postWithBody("reboot", new QueryParams(), null, "", ActorRun.class);
   }
 
-  /** Resurrects a finished run, starting it again from the beginning. */
+  /**
+   * Resurrects a finished run, starting it again from the beginning. Only runs with status {@code
+   * SUCCEEDED}, {@code FAILED}, {@code ABORTED} or {@code TIMED-OUT} can be resurrected.
+   */
   public CompletableFuture<ActorRun> resurrect(RunResurrectOptions options) {
     if (options == null) {
       throw new IllegalArgumentException("options is required and must not be null");

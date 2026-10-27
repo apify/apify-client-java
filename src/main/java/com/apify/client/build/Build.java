@@ -15,6 +15,7 @@ public final class Build extends ApifyResource {
   private String buildNumber;
   private String imageDigest;
   private BuildActVersion actVersion;
+  private ActorDefinition actorDefinition;
   private BuildMeta meta;
   private BuildStats stats;
   private BuildOptions options;
@@ -76,6 +77,14 @@ public final class Build extends ApifyResource {
    */
   public BuildActVersion getActVersion() {
     return actVersion;
+  }
+
+  /**
+   * The definition of the Actor this build was created from, as stored in its {@code
+   * .actor/actor.json}. {@code null} if the build has none.
+   */
+  public ActorDefinition getActorDefinition() {
+    return actorDefinition;
   }
 
   /** Metadata about how the build was initiated. */

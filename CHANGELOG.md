@@ -5,6 +5,26 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-10-26
+
+### Added
+
+- `Build.getActorDefinition()` and the `ActorDefinition`, `ActorDefinitionMeta` and
+  `ActorDefinitionStorages` models for the build's `actorDefinition`, including the new `title`,
+  `description`, `output`, `meta`, `storages.datasets`, `storages.keyValueStore`,
+  `webServerSchema` and `webServerMcpPath` fields.
+
+### Fixed
+
+- An explicit JSON `null` for a raw-JSON (`JsonNode`) model field, such as `Task.getInput()`, is now
+  returned as Java `null` instead of a `NullNode`.
+
+### Changed
+
+- Updated to Apify OpenAPI specification `v2-2026-10-26T112451Z`.
+- Documented that only runs with status `SUCCEEDED`, `FAILED`, `ABORTED` or `TIMED-OUT` can be
+  resurrected with `RunClient.resurrect`.
+
 ## [0.10.0] - 2026-10-21
 
 ### Added

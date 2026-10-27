@@ -35,7 +35,7 @@ PaginationList<ActorRun> runs = client.runs().list(
 | `abort(Boolean gracefully)` | Abort the run (`null` = server default). Completes with `ActorRun`. |
 | `metamorph(String targetActorId, Object input, MetamorphOptions)` | Metamorph into another Actor. Completes with `ActorRun`. |
 | `reboot()` | Reboot the run. Completes with `ActorRun`. |
-| `resurrect(RunResurrectOptions)` | Resurrect a finished run. Completes with `ActorRun`. |
+| `resurrect(RunResurrectOptions)` | Resurrect a finished run (status `SUCCEEDED`, `FAILED`, `ABORTED` or `TIMED-OUT`). Completes with `ActorRun`. |
 | `charge(RunChargeOptions)` | Charge a pay-per-event run for a named event. Completes with no value (`CompletableFuture<Void>`). |
 | `waitForFinish(Long waitSecs)` | Poll until the run finishes (`null` waits indefinitely). Completes with `ActorRun`. |
 | `dataset()` / `keyValueStore()` / `requestQueue()` | Clients for the run's default storages. |

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.actor.ActorStandby;
+import com.apify.client.build.ActorDefinition;
 import com.apify.client.build.Build;
 import com.apify.client.build.BuildStats;
 import com.apify.client.internal.Json;
@@ -14,6 +15,7 @@ import com.apify.client.run.ActorRunMeta;
 import com.apify.client.run.ActorRunStats;
 import com.apify.client.schedule.ScheduleNotifications;
 import com.apify.client.store.PricingInfo;
+import com.apify.client.task.Task;
 import com.apify.client.task.TaskStats;
 import com.apify.client.user.UserProfile;
 import com.apify.client.webhook.Webhook;
@@ -102,6 +104,67 @@ class NestedDtoForwardCompatTest {
     assertEquals("TEXT", untagged.getActVersion().getSourceFiles().get(0).getFormat());
     assertEquals("x", untagged.getActVersion().getSourceFiles().get(0).getContent());
     assertEquals("SOURCE_FILES", untagged.getActVersion().getSourceType());
+  }
+
+  @Test
+  void buildActorDefinitionModelsAllFieldsAndAcceptsNull() {
+    Build build =
+        parse(
+            "{\"id\":\"b1\",\"actorDefinition\":{\"actorSpecification\":1,\"name\":\"my-actor\","
+                + "\"title\":\"My Actor\",\"description\":\"Does things\",\"version\":\"0.1\","
+                + "\"buildTag\":\"latest\",\"meta\":{\"templateId\":\"js-start\","
+                + "\"generatedBy\":\"Claude\"},\"environmentVariables\":{\"A\":\"b\"},"
+                + "\"dockerfile\":\"./Dockerfile\",\"dockerContextDir\":\"..\","
+                + "\"readme\":\"./README.md\",\"input\":{\"type\":\"object\"},"
+                + "\"output\":{\"actorOutputSchemaVersion\":1},\"changelog\":null,"
+                + "\"storages\":{\"dataset\":{\"views\":{}},\"datasets\":{\"extra\":{\"views\":{}}},"
+                + "\"keyValueStore\":{\"actorKeyValueStoreSchemaVersion\":1}},"
+                + "\"defaultMemoryMbytes\":\"get(input, 'n', 1) * 1024\",\"minMemoryMbytes\":128,"
+                + "\"maxMemoryMbytes\":4096,\"usesStandbyMode\":true,"
+                + "\"webServerSchema\":{\"openapi\":\"3.0.0\"},\"webServerMcpPath\":\"/mcp\","
+                + "\"someFutureField\":1}}",
+            Build.class);
+
+    ActorDefinition def = build.getActorDefinition();
+    assertEquals(1, def.getActorSpecification().intValue());
+    assertEquals("my-actor", def.getName());
+    assertEquals("My Actor", def.getTitle());
+    assertEquals("Does things", def.getDescription());
+    assertEquals("0.1", def.getVersion());
+    assertEquals("latest", def.getBuildTag());
+    assertEquals("js-start", def.getMeta().getTemplateId());
+    assertEquals("Claude", def.getMeta().getGeneratedBy());
+    assertEquals("b", def.getEnvironmentVariables().get("A"));
+    assertEquals("./Dockerfile", def.getDockerfile());
+    assertEquals("..", def.getDockerContextDir());
+    assertEquals("./README.md", def.getReadme());
+    assertEquals("object", def.getInput().get("type").asString());
+    assertEquals(1, def.getOutput().get("actorOutputSchemaVersion").asInt());
+    assertNull(def.getChangelog());
+    assertTrue(def.getStorages().getDataset().has("views"));
+    assertTrue(def.getStorages().getDatasets().get("extra").has("views"));
+    assertEquals(
+        1, def.getStorages().getKeyValueStore().get("actorKeyValueStoreSchemaVersion").asInt());
+    assertEquals("get(input, 'n', 1) * 1024", def.getDefaultMemoryMbytes().asString());
+    assertEquals(128L, def.getMinMemoryMbytes().longValue());
+    assertEquals(4096L, def.getMaxMemoryMbytes().longValue());
+    assertEquals(true, def.getUsesStandbyMode());
+    assertEquals("3.0.0", def.getWebServerSchema().get("openapi").asString());
+    assertEquals("/mcp", def.getWebServerMcpPath());
+    assertEquals(1, def.getExtra().get("someFutureField"));
+
+    ActorDefinition empty =
+        parse("{\"id\":\"b2\",\"actorDefinition\":{}}", Build.class).getActorDefinition();
+    assertTrue(empty.getEnvironmentVariables().isEmpty());
+    assertNull(empty.getStorages());
+    ActorDefinition nulls =
+        parse("{\"id\":\"b5\",\"actorDefinition\":{\"input\":null,\"output\":null}}", Build.class)
+            .getActorDefinition();
+    assertNull(nulls.getInput());
+    assertNull(nulls.getOutput());
+    assertNull(parse("{\"id\":\"t1\",\"input\":null}", Task.class).getInput());
+    assertNull(parse("{\"id\":\"b3\",\"actorDefinition\":null}", Build.class).getActorDefinition());
+    assertNull(parse("{\"id\":\"b4\"}", Build.class).getActorDefinition());
   }
 
   @Test
