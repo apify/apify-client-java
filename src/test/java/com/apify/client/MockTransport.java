@@ -2,6 +2,7 @@ package com.apify.client;
 
 import com.apify.client.http.HttpTimeoutException;
 import com.apify.client.http.HttpTransport;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,13 +13,18 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Flow;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import javax.net.ssl.SSLSession;
 
 /**
@@ -57,6 +63,31 @@ final class MockTransport implements HttpTransport {
   final List<String> bodies = new ArrayList<>();
   final List<String> urls = new ArrayList<>();
 
+  /** The per-attempt timeout of the last request, empty when the request had none. */
+  Optional<Duration> lastTimeout = Optional.empty();
+
+  /** The per-attempt timeout of every request, in order. */
+  final List<Optional<Duration>> timeouts = new ArrayList<>();
+
+  /**
+   * Requests this predicate accepts are never answered; their futures are kept in {@link #hung}.
+   */
+  private Predicate<HttpRequest> hangWhen = request -> false;
+
+  /** The futures of the requests that were left unanswered. */
+  final List<CompletableFuture<HttpResponse<byte[]>>> hung = new CopyOnWriteArrayList<>();
+
+  /** When set, streaming responses are delivered only once this gate completes. */
+  private volatile CompletableFuture<Void> streamGate;
+
+  /** Holds back every streaming response until {@code gate} completes. */
+  void gateStreams(CompletableFuture<Void> gate) {
+    this.streamGate = gate;
+  }
+
+  /** When set, answers each request itself instead of serving the scripted queue. */
+  private Function<HttpRequest, Scripted> router;
+
   /** One scripted response for {@link #sendStreamingAsync}: a status + ready-made body stream. */
   private static final class StreamEntry {
     final int status;
@@ -80,6 +111,25 @@ final class MockTransport implements HttpTransport {
 
   MockTransport(List<Scripted> responses) {
     this.responses = responses;
+  }
+
+  /** A transport that answers every request with {@code router}'s response for it. */
+  static MockTransport ofRouter(Function<HttpRequest, Scripted> router) {
+    MockTransport transport = new MockTransport(List.of(new Scripted(500, "no route", null)));
+    transport.router = router;
+    return transport;
+  }
+
+  /** A transport that never answers the requests {@code hangWhen} accepts. */
+  static MockTransport ofHanging(Predicate<HttpRequest> hangWhen) {
+    MockTransport transport = ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
+    transport.hangWhen = hangWhen;
+    return transport;
+  }
+
+  /** Whether every request left unanswered has been cancelled by the client. */
+  boolean allHungCancelled() {
+    return !hung.isEmpty() && hung.stream().allMatch(CompletableFuture::isCancelled);
   }
 
   static MockTransport ofConstant(int status, String body) {
@@ -114,15 +164,22 @@ final class MockTransport implements HttpTransport {
     lastUrl = request.uri().toString();
     urls.add(lastUrl);
     lastMethod = request.method();
+    lastTimeout = request.timeout();
+    timeouts.add(lastTimeout);
     lastBodyBytes = readBody(request);
     lastBody = lastBodyBytes == null ? null : new String(lastBodyBytes, StandardCharsets.UTF_8);
     if (lastBody != null) {
       bodies.add(lastBody);
     }
+    if (hangWhen.test(request)) {
+      CompletableFuture<HttpResponse<byte[]>> never = new CompletableFuture<>();
+      hung.add(never);
+      return never;
+    }
     if (idx >= responses.size()) {
       idx = responses.size() - 1; // repeat the last entry
     }
-    Scripted r = responses.get(idx);
+    Scripted r = router != null ? router.apply(request) : responses.get(idx);
     if (r.error != null) {
       CompletableFuture<HttpResponse<byte[]>> failed = new CompletableFuture<>();
       failed.completeExceptionally(r.error);
@@ -139,8 +196,7 @@ final class MockTransport implements HttpTransport {
    */
   synchronized void scriptStream(int status, String body) {
     streamQueue.add(
-        new StreamEntry(
-            status, new java.io.ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8))));
+        new StreamEntry(status, new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8))));
   }
 
   /**
@@ -158,16 +214,19 @@ final class MockTransport implements HttpTransport {
     calls++;
     lastUrl = request.uri().toString();
     lastMethod = request.method();
+    HttpResponse<InputStream> response;
     if (streamQueue.isEmpty()) {
       Scripted r = responses.get(0);
-      return CompletableFuture.completedFuture(
-          new FakeStreamResponse(
-              request.uri(), r.status, new java.io.ByteArrayInputStream(r.body)));
+      response = new FakeStreamResponse(request.uri(), r.status, new ByteArrayInputStream(r.body));
+    } else {
+      int idx = Math.min(streamCallIndex++, streamQueue.size() - 1);
+      StreamEntry entry = streamQueue.get(idx);
+      response = new FakeStreamResponse(request.uri(), entry.status, entry.body);
     }
-    int idx = Math.min(streamCallIndex++, streamQueue.size() - 1);
-    StreamEntry entry = streamQueue.get(idx);
-    return CompletableFuture.completedFuture(
-        new FakeStreamResponse(request.uri(), entry.status, entry.body));
+    CompletableFuture<Void> gate = streamGate;
+    return gate == null
+        ? CompletableFuture.completedFuture(response)
+        : gate.thenApply(unused -> response);
   }
 
   private static byte[] readBody(HttpRequest request) {
@@ -246,7 +305,7 @@ final class MockTransport implements HttpTransport {
 
     @Override
     public HttpHeaders headers() {
-      Map<String, List<String>> multi = new java.util.LinkedHashMap<>();
+      Map<String, List<String>> multi = new LinkedHashMap<>();
       headers.forEach((k, v) -> multi.put(k, List.of(v)));
       return HttpHeaders.of(multi, (a, b) -> true);
     }

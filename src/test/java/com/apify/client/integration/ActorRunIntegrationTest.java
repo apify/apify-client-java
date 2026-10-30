@@ -10,6 +10,7 @@ import com.apify.client.actor.ActorCallOptions;
 import com.apify.client.actor.ActorClient;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.http.Timeout;
 import com.apify.client.keyvalue.ListKeysOptions;
 import com.apify.client.log.StreamedLog;
 import com.apify.client.log.StreamedLogOptions;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
 
 class ActorRunIntegrationTest extends IntegrationBase {
 
@@ -43,6 +45,54 @@ class ActorRunIntegrationTest extends IntegrationBase {
   void listRuns() {
     ApifyClient client = requireClient();
     var page = client.runs().list(new ListOptions().limit(5L), new RunListOptions()).join();
+    assertTrue(page.getTotal() >= 0);
+  }
+
+  @Test
+  void listRunsFilteredByStandbyDeployment() {
+    ApifyClient client = requireClient();
+    // The deployment filter needs a status filter with only non-terminal statuses; whether any run
+    // matches depends on the account, so the API accepting the combination is what is asserted.
+    var filter =
+        new RunListOptions()
+            .status(List.of("READY", "RUNNING"))
+            .deployment(List.of("SINGLE_TENANT", "MULTI_TENANT_FREE_USERS"));
+    var page = client.runs().list(new ListOptions().limit(5L), filter).join();
+    assertTrue(page.getTotal() >= 0);
+    var actorPage =
+        client.actor("apify/hello-world").runs().list(new ListOptions().limit(5L), filter).join();
+    assertTrue(actorPage.getTotal() >= 0);
+  }
+
+  @Test
+  void iterateRunDatasetItemsOfAFinishedRun() {
+    ApifyClient client = requireClient();
+    ActorRun run =
+        client
+            .actor("apify/hello-world")
+            .call(null, new ActorStartOptions(), TEST_ACTOR_WAIT_SECS)
+            .join();
+    assertEquals("SUCCEEDED", run.getStatus());
+    List<JsonNode> viaRun =
+        Publishers.collect(client.run(run.getId()).iterateDatasetItems(null)).join();
+    List<JsonNode> viaDataset =
+        Publishers.collect(
+                client
+                    .dataset(run.getDefaultDatasetId())
+                    .iterateItems(new DatasetListItemsOptions()))
+            .join();
+    assertEquals(viaDataset, viaRun, "the run iterator yields the run's dataset items");
+  }
+
+  @Test
+  void clientWithATimeoutOverrideStillWorks() {
+    ApifyClient client = requireClient();
+    var page =
+        client
+            .withTimeout(Timeout.ofSeconds(60))
+            .runs()
+            .list(new ListOptions().limit(1L), new RunListOptions())
+            .join();
     assertTrue(page.getTotal() >= 0);
   }
 
@@ -200,6 +250,8 @@ class ActorRunIntegrationTest extends IntegrationBase {
     // Clean up the resurrected run so it doesn't linger on the shared test account.
     RunClient resurrectedClient = client.run(resurrected.getId());
     resurrectedClient.abort(false).join();
+    // An aborting run cannot be deleted yet (cannot-remove-running-run), so let it finish first.
+    resurrectedClient.waitForFinish(60L).join();
     resurrectedClient.delete().join();
   }
 

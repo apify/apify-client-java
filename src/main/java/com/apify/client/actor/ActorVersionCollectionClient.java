@@ -2,6 +2,7 @@ package com.apify.client.actor;
 
 import com.apify.client.ListOptions;
 import com.apify.client.PaginationList;
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.ListPublisher;
 import com.apify.client.internal.QueryParams;
@@ -27,7 +28,7 @@ public final class ActorVersionCollectionClient {
    * case; use {@link #iterate(ListOptions)}'s {@code limit} to cap the number returned client-side.
    */
   public CompletableFuture<PaginationList<ActorVersion>> list(ListOptions options) {
-    return ctx.listResource("", new QueryParams(), ActorVersion.class);
+    return ctx.listResource("", new QueryParams(), ActorVersion.class, Timeout.SHORT);
   }
 
   /**

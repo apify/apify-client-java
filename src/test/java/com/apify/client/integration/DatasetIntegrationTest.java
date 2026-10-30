@@ -40,6 +40,26 @@ class DatasetIntegrationTest extends IntegrationBase {
   }
 
   @Test
+  void pushPreSerializedItemsAndReadNormalizedUrls() {
+    ApifyClient client = requireClient();
+    Dataset ds = client.datasets().getOrCreate(uniqueName("ds-json")).join();
+    try {
+      DatasetClient dataset = client.dataset(ds.getId());
+      // A String is the JSON serialization of the items, sent as it is.
+      dataset.pushItems("[{\"n\": 1}, {\"n\": 2}]").join();
+      var items = dataset.listItems(new DatasetListItemsOptions()).join();
+      assertEquals(2, items.getItems().size());
+
+      var fetched = dataset.get().join().orElseThrow();
+      assertTrue(
+          fetched.getConsoleUrl() != null && fetched.getConsoleUrl().startsWith("https://"),
+          "consoleUrl is typed and a normalized absolute URL: " + fetched.getConsoleUrl());
+    } finally {
+      client.dataset(ds.getId()).delete().join();
+    }
+  }
+
+  @Test
   void datasetCrudFlow() throws java.io.IOException {
     ApifyClient client = requireClient();
     Dataset ds = client.datasets().getOrCreate(uniqueName("ds-crud")).join();

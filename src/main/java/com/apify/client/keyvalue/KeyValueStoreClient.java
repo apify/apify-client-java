@@ -1,5 +1,6 @@
 package com.apify.client.keyvalue;
 
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.Extras;
 import com.apify.client.internal.HttpClientCore;
@@ -8,7 +9,6 @@ import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import com.apify.client.internal.Signatures;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -65,7 +65,7 @@ public final class KeyValueStoreClient {
 
   /** Updates the store metadata (e.g. name) and returns the updated object. */
   public CompletableFuture<KeyValueStore> update(Object newFields) {
-    return ctx.updateResource("", newFields, KeyValueStore.class);
+    return ctx.updateResource("", newFields, KeyValueStore.class, Timeout.LONG);
   }
 
   /**
@@ -80,7 +80,7 @@ public final class KeyValueStoreClient {
   public CompletableFuture<KeyValueStoreKeysPage> listKeys(ListKeysOptions options) {
     QueryParams params = new QueryParams();
     options.apply(params);
-    return ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class);
+    return ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class, Timeout.MEDIUM);
   }
 
   /**
@@ -150,6 +150,7 @@ public final class KeyValueStoreClient {
       private final AtomicLong requested = new AtomicLong();
       private final AtomicBoolean draining = new AtomicBoolean();
       private final AtomicBoolean cancelled = new AtomicBoolean();
+      private volatile CompletableFuture<?> inFlight;
       private final AtomicBoolean terminated = new AtomicBoolean();
 
       // Only touched from within the draining-guarded section; see AsyncPaginatedPublisher.Session.
@@ -182,6 +183,10 @@ public final class KeyValueStoreClient {
       @Override
       public void cancel() {
         cancelled.set(true);
+        CompletableFuture<?> fetch = inFlight;
+        if (fetch != null) {
+          fetch.cancel(true);
+        }
       }
 
       private void drain() {
@@ -228,23 +233,25 @@ public final class KeyValueStoreClient {
         params.addLong("limit", pageLimit);
         params.addString("exclusiveStartKey", cursor);
         params.extend(filters);
-        ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class)
-            .whenComplete(
-                (page, error) -> {
-                  if (cancelled.get()) {
-                    draining.set(false);
-                    return;
-                  }
-                  if (error != null) {
-                    if (terminated.compareAndSet(false, true)) {
-                      subscriber.onError(HttpClientCore.unwrapCompletion(error));
-                    }
-                    draining.set(false);
-                    return;
-                  }
-                  applyPage(page);
-                  drainLoop();
-                });
+        CompletableFuture<KeyValueStoreKeysPage> fetch =
+            ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class, Timeout.MEDIUM);
+        inFlight = fetch;
+        fetch.whenComplete(
+            (page, error) -> {
+              if (cancelled.get()) {
+                draining.set(false);
+                return;
+              }
+              if (error != null) {
+                if (terminated.compareAndSet(false, true)) {
+                  subscriber.onError(HttpClientCore.unwrapCompletion(error));
+                }
+                draining.set(false);
+                return;
+              }
+              applyPage(page);
+              drainLoop();
+            });
       }
 
       private void applyPage(KeyValueStoreKeysPage page) {
@@ -275,7 +282,8 @@ public final class KeyValueStoreClient {
 
   /** Reports whether a record with the given key exists. */
   public CompletableFuture<Boolean> recordExists(String key) {
-    return ctx.headExists("records/" + ResourceContext.encodePathSegment(key), new QueryParams());
+    return ctx.headExists(
+        "records/" + ResourceContext.encodePathSegment(key), new QueryParams(), Timeout.LONG);
   }
 
   /**
@@ -291,7 +299,7 @@ public final class KeyValueStoreClient {
       String key, GetRecordOptions options) {
     QueryParams params = new QueryParams();
     options.apply(params);
-    return ctx.getRaw("records/" + ResourceContext.encodePathSegment(key), params)
+    return ctx.getRaw("records/" + ResourceContext.encodePathSegment(key), params, Timeout.LONG)
         .thenApply(
             resp -> {
               if (resp == null) {
@@ -326,10 +334,7 @@ public final class KeyValueStoreClient {
     }
     Map<String, String> extraHeaders =
         contentEncoding == null ? null : Map.of(HttpHeaders.CONTENT_ENCODING, contentEncoding);
-    Duration timeout =
-        options.timeoutSecsValue() != null
-            ? Duration.ofSeconds(options.timeoutSecsValue())
-            : ctx.http.baseRequestTimeout();
+    Timeout timeout = options.timeoutValue() != null ? options.timeoutValue() : Timeout.LONG;
     return ctx.putRaw(
         "records/" + ResourceContext.encodePathSegment(key),
         new QueryParams(),

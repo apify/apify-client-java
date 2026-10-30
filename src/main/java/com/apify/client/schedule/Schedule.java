@@ -23,6 +23,8 @@ public final class Schedule extends ApifyResource {
   private Instant lastRunAt;
   private List<JsonNode> actions = List.of();
   private ScheduleNotifications notifications;
+  private JsonNode uiState;
+  private JsonNode integrationTracking;
 
   /** The unique schedule ID. */
   public String getId() {
@@ -106,5 +108,18 @@ public final class Schedule extends ApifyResource {
   /** Notification settings for this schedule. */
   public ScheduleNotifications getNotifications() {
     return notifications;
+  }
+
+  /**
+   * The state of the Console schedule editor; {@code null} once an API update of the cron
+   * expression or timezone has dropped it.
+   */
+  public JsonNode getUiState() {
+    return uiState;
+  }
+
+  /** Tracking of the third-party integration that created the schedule, if any. */
+  public JsonNode getIntegrationTracking() {
+    return integrationTracking;
   }
 }

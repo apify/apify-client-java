@@ -46,7 +46,7 @@ Actor created = client.actors().create(Map.of(
 | `get()` | Fetch the Actor. Completes with `Optional<Actor>`. |
 | `update(Object)` | Update the Actor with the given fields. Completes with `Actor`. |
 | `delete()` | Delete the Actor. |
-| `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Completes with `ActorRun`. |
+| `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Completes with `ActorRun`. The `input` is any JSON-serializable value, or a `byte[]`/`String` that is sent as it is (set the matching `ActorStartOptions.contentType(...)`), or `null`. |
 | `call(Object input, ActorStartOptions, Long waitSecs)` | Start a run and poll until it finishes (`null` waits indefinitely); does **not** stream the run's log. Completes with `ActorRun`. |
 | `call(Object input, ActorCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default (matching the reference client's `call` defaulting `options.log` to `'default'`). Use `ActorCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
 | `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Completes with `boolean`. `ValidateInputOptions` fields (optional): `build` (`String`), `contentType` (`String`). |

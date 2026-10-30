@@ -8,6 +8,8 @@ public final class TaskOptions extends ApifyResource {
   private Long timeoutSecs;
   private Long memoryMbytes;
   private Boolean restartOnError;
+  private Double maxTotalChargeUsd;
+  private Boolean isMaxTotalChargeUsdSetByUser;
 
   /** The tag or number of the build the task runs by default. */
   public String getBuild() {
@@ -27,5 +29,15 @@ public final class TaskOptions extends ApifyResource {
   /** Whether the run is restarted by default if it fails. */
   public Boolean getRestartOnError() {
     return restartOnError;
+  }
+
+  /** The maximum total charge in USD for a pay-per-event run of the task. */
+  public Double getMaxTotalChargeUsd() {
+    return maxTotalChargeUsd;
+  }
+
+  /** Whether {@link #getMaxTotalChargeUsd()} was set by the user rather than defaulted. */
+  public Boolean getIsMaxTotalChargeUsdSetByUser() {
+    return isMaxTotalChargeUsdSetByUser;
   }
 }

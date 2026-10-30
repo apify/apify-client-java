@@ -2,6 +2,10 @@ package com.apify.client.run;
 
 import com.apify.client.ApifyClient;
 import com.apify.client.dataset.DatasetClient;
+import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.http.Timeout;
+import com.apify.client.internal.AsyncPaginatedPublisher;
+import com.apify.client.internal.CancellableFuture;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
@@ -15,10 +19,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.JsonNode;
 
 /**
  * A client for a specific Actor run.
@@ -81,15 +87,15 @@ public final class RunClient {
 
   /**
    * Fetches the run, optionally asking the API to wait up to {@code waitForFinishSecs} seconds for
-   * the run to reach a terminal state before responding. The value is clamped so the server always
-   * responds before the client's per-request timeout; the API itself caps server-side waiting at 60
-   * seconds. Pass {@code null} for an immediate fetch.
+   * the run to reach a terminal state before responding; the API itself caps server-side waiting at
+   * 60 seconds, and the request timeout is extended by that hold. Pass {@code null} for an
+   * immediate fetch.
    */
   public CompletableFuture<Optional<ActorRun>> getWithWait(Long waitForFinishSecs) {
     QueryParams params = new QueryParams();
-    // Clamp to the client's per-request timeout so a short custom timeout doesn't abort the call.
-    params.addLong("waitForFinish", ctx.clampServerWait(waitForFinishSecs));
-    return ctx.getResource("", params, ActorRun.class);
+    HttpClientCore.WaitHold hold = ctx.http.waitHold(Timeout.SHORT, waitForFinishSecs);
+    params.addLong("waitForFinish", hold.waitForFinishSecs());
+    return ctx.getResource("", params, ActorRun.class, hold.timeout());
   }
 
   /** Updates the run with the given fields and returns the updated object. */
@@ -110,14 +116,15 @@ public final class RunClient {
   public CompletableFuture<ActorRun> abort(Boolean gracefully) {
     QueryParams params = new QueryParams();
     params.addBool("gracefully", gracefully);
-    return ctx.postWithBody("abort", params, null, "", ActorRun.class);
+    return ctx.postWithBody("abort", params, null, "", ActorRun.class, Timeout.MEDIUM);
   }
 
   /**
    * Transforms the run into a run of another Actor with a new input. {@code targetActorId} is the
    * Actor to metamorph into ({@code username/actor-name} or the plain Actor id; normalized to the
    * URL-safe {@code username~actor-name} form before sending, matching the reference client's
-   * {@code _toSafeId}); {@code input} is the new input ({@code null} for none).
+   * {@code _toSafeId}); {@code input} is the new input: a JSON-serializable value, a {@code byte[]}
+   * or {@link String} that is sent as it is, or {@code null} for none.
    */
   public CompletableFuture<ActorRun> metamorph(
       String targetActorId, Object input, MetamorphOptions options) {
@@ -132,14 +139,14 @@ public final class RunClient {
     if (options.buildValue() != null && !options.buildValue().isEmpty()) {
       params.addString("build", options.buildValue());
     }
-    byte[] body = input == null ? null : Json.toBytes(input);
+    byte[] body = Json.toRequestBody(input);
     return ctx.postWithBody(
-        "metamorph", params, body, options.contentTypeOrDefault(), ActorRun.class);
+        "metamorph", params, body, options.contentTypeOrDefault(), ActorRun.class, Timeout.MEDIUM);
   }
 
   /** Reboots the run (restarts its container while keeping the same run). */
   public CompletableFuture<ActorRun> reboot() {
-    return ctx.postWithBody("reboot", new QueryParams(), null, "", ActorRun.class);
+    return ctx.postWithBody("reboot", new QueryParams(), null, "", ActorRun.class, Timeout.MEDIUM);
   }
 
   /**
@@ -152,7 +159,7 @@ public final class RunClient {
     }
     QueryParams params = new QueryParams();
     options.apply(params);
-    return ctx.postWithBody("resurrect", params, null, "", ActorRun.class);
+    return ctx.postWithBody("resurrect", params, null, "", ActorRun.class, Timeout.MEDIUM);
   }
 
   /**
@@ -190,7 +197,7 @@ public final class RunClient {
             Json.toBytes(body),
             ResourceContext.CONTENT_TYPE_JSON,
             headers,
-            ctx.http.baseRequestTimeout())
+            Timeout.SHORT)
         .thenApply(resp -> null);
   }
 
@@ -223,6 +230,60 @@ public final class RunClient {
   /** A client for this run's default dataset. */
   public DatasetClient dataset() {
     return DatasetClient.nested(ctx.http, ctx.subUrl(""), "dataset", ctx.baseParams);
+  }
+
+  /** Default number of dataset rows requested per API call by {@link #iterateDatasetItems}. */
+  private static final long DEFAULT_ITERATE_CHUNK_SIZE = 1000;
+
+  /** Default number of seconds {@link #iterateDatasetItems} waits for the run between polls. */
+  private static final long DEFAULT_ITERATE_POLL_INTERVAL_SECS = 5;
+
+  /**
+   * Iterates over the items of the run's default dataset while the run is still producing them,
+   * decoding each into a generic {@link JsonNode}. See {@link #iterateDatasetItems(
+   * DatasetListItemsOptions, Long, Long, Class)}.
+   */
+  public Flow.Publisher<JsonNode> iterateDatasetItems(DatasetListItemsOptions options) {
+    return iterateDatasetItems(options, null, null, JsonNode.class);
+  }
+
+  /**
+   * Iterates over the items of the run's default dataset while the run is still producing them,
+   * decoding each item into {@code itemClass}: a lazy, backpressure-aware publisher that ends once
+   * the run has finished and every item has been read.
+   *
+   * <p>While the run has not finished, each poll yields the rows below the dataset's {@code
+   * itemCount} and then waits up to {@code pollIntervalSecs} for the run to finish, so the last
+   * rows are read as soon as it does. Once the run is terminal, the rows past the (lagging) {@code
+   * itemCount} are read a page at a time until none are left. On a client from {@code lastRun()},
+   * the iteration sticks to the run that its first request resolves to.
+   *
+   * @param options the items options: {@code offset} (rows to skip) and {@code limit} (the maximum
+   *     number of dataset <em>rows</em> to scan: fewer items are yielded when filters drop some,
+   *     more when {@code unwind} splits a row into several), and the item filters ({@code clean},
+   *     {@code fields}, {@code omit}, {@code unwind}, {@code skipEmpty}, {@code skipHidden}, ...).
+   *     {@code desc} is ignored, since rows are read in the order they were pushed. May be {@code
+   *     null}.
+   * @param chunkSize the maximum number of dataset rows requested per API call; {@code null} means
+   *     1000
+   * @param pollIntervalSecs how long to wait for the run to finish between polls, in seconds;
+   *     {@code null} means 5
+   * @param itemClass the type each item is decoded into
+   */
+  public <T> Flow.Publisher<T> iterateDatasetItems(
+      DatasetListItemsOptions options, Long chunkSize, Long pollIntervalSecs, Class<T> itemClass) {
+    long pageSize = chunkSize != null && chunkSize > 0 ? chunkSize : DEFAULT_ITERATE_CHUNK_SIZE;
+    long poll =
+        pollIntervalSecs != null && pollIntervalSecs >= 0
+            ? pollIntervalSecs
+            : DEFAULT_ITERATE_POLL_INTERVAL_SECS;
+    RunDatasetItems<T> items = new RunDatasetItems<>(this, options, pageSize, poll, itemClass);
+    return new AsyncPaginatedPublisher<>(null, null, null, (offset, limit) -> items.next());
+  }
+
+  /** The client for {@code run}: this one, or a direct client for its id if this is a last-run. */
+  RunClient pinned(ActorRun run) {
+    return run.getId() == null || run.getId().equals(id) ? this : root.run(run.getId());
   }
 
   /** A client for this run's default key-value store. */
@@ -273,11 +334,11 @@ public final class RunClient {
   public CompletableFuture<StreamedLog> getStreamedLog(StreamedLogOptions options) {
     Consumer<String> destination = options.destination();
     if (destination != null) {
-      return CompletableFuture.completedFuture(
+      return CancellableFuture.completed(
           new StreamedLog(log(), destination, options.fromStartValue()));
     }
     if (options.prefixValue() != null) {
-      return CompletableFuture.completedFuture(
+      return CancellableFuture.completed(
           new StreamedLog(
               log(), defaultLogDestination(options.prefixValue()), options.fromStartValue()));
     }

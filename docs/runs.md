@@ -11,6 +11,9 @@ Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 | `iterate(ListOptions, RunListOptions, Long chunkSize)` | Lazy `Flow.Publisher<ActorRun>` over all matching runs; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the per-request page size (`null` = server default). |
 
 `RunListOptions` adds `status(List<String>)` (e.g. `SUCCEEDED`, `RUNNING`; sent comma-separated),
+`deployment(List<String>)` (filter Actor Standby runs by serving pool: `SINGLE_TENANT`,
+`MULTI_TENANT_FREE_USERS`, `MULTI_TENANT_PAYING_USERS`, `MULTI_TENANT_OWNER_PAID`; needs a `status`
+filter with only non-terminal statuses, declared by `client.runs()` and `client.actor(id).runs()`),
 declared by every scope's endpoint (`client.runs()`, `client.actor(id).runs()`,
 `client.task(id).runs()`), and `startedAfter(String)` / `startedBefore(String)` (ISO-8601), declared
 only by the account-wide `client.runs()` and the Actor-scoped `client.actor(id).runs()` endpoints —
@@ -29,7 +32,7 @@ PaginationList<ActorRun> runs = client.runs().list(
 | Method | Description |
 |---|---|
 | `get()` | Fetch the run. Completes with `Optional<ActorRun>`. |
-| `getWithWait(Long waitForFinishSecs)` | Fetch, optionally waiting server-side for the run to finish (clamped to the request timeout; the API caps server-side waiting at 60s). Completes with `Optional<ActorRun>`. |
+| `getWithWait(Long waitForFinishSecs)` | Fetch, optionally waiting server-side for the run to finish (the API caps server-side waiting at 60s; the request timeout is extended by that hold). Completes with `Optional<ActorRun>`. |
 | `update(Object)` | Update the run. Completes with `ActorRun`. |
 | `delete()` | Delete the run. |
 | `abort(Boolean gracefully)` | Abort the run (`null` = server default). Completes with `ActorRun`. |
@@ -39,6 +42,7 @@ PaginationList<ActorRun> runs = client.runs().list(
 | `charge(RunChargeOptions)` | Charge a pay-per-event run for a named event. Completes with no value (`CompletableFuture<Void>`). |
 | `waitForFinish(Long waitSecs)` | Poll until the run finishes (`null` waits indefinitely). Completes with `ActorRun`. |
 | `dataset()` / `keyValueStore()` / `requestQueue()` | Clients for the run's default storages. |
+| `iterateDatasetItems(DatasetListItemsOptions)` / `iterateDatasetItems(DatasetListItemsOptions, Long chunkSize, Long pollIntervalSecs, Class<T>)` | A lazy `Flow.Publisher` over the items of the run's default dataset **while the run is still producing them**; it ends once the run has finished and every item has been read. While the run is active, each poll yields the rows below the dataset's `itemCount` and then waits up to `pollIntervalSecs` (default 5) for the run to finish; afterwards the rows past the lagging `itemCount` are read a page at a time. The options' `offset`/`limit` bound the dataset *rows* scanned (`desc` is ignored), `chunkSize` is the rows per request (default 1000). On a `lastRun()` client it sticks to the run its first request resolves to. |
 | `log()` | A `LogClient` for the run's log (see [Store, users & logs](misc.md#logs--clientlogid)). |
 | `getStreamedLog()` | Completes with a `StreamedLog` that redirects the live log to a default per-run logger. |
 | `getStreamedLog(StreamedLogOptions)` | As above, with a custom destination / options. |
@@ -114,6 +118,15 @@ client.run("RUN_ID").update(Map.of("statusMessage", "half way there", "isStatusM
 The status is one of `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`,
 `ABORTING`, `ABORTED`; `isTerminal()` is true for the finished states (`SUCCEEDED`, `FAILED`,
 `TIMED-OUT`, `ABORTED`).
+
+`ActorRun` also exposes the Server Actor deployment that served the run, `getStandby()`
+(`ActorRunStandby`; `getDeployment()` is `SINGLE_TENANT` or one of the `MULTI_TENANT_*` pools, `null`
+for a run not started by a Server Actor request; charges in a multi-tenant pool need
+`RunChargeOptions.requestId(...)`), and `getConsoleUrl()`, `getOutput()` (`Map<String, String>`),
+`getEventUsage()` (`Map<String, JsonNode>`), `getAccountedChargedEventCounts()`,
+`getExternalChargedTotalUsd()`, `getIntegrationTracking()` and
+`getCreatedByOrganizationMemberUserId()`; `getMeta()` adds `getActorRunId()`,
+`getWebhookDispatchId()`, `getScheduledAct2Id()` and `getScheduledActorTaskId()`.
 
 `ActorRun` additionally exposes: `getGeneralAccess()` (`String`; who can access the run without
 owning it, e.g. `"ANYONE_WITH_ID_CAN_READ"`, `"RESTRICTED"`, or `null` to follow the account/Actor

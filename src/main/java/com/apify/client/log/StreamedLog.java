@@ -2,6 +2,7 @@ package com.apify.client.log;
 
 import com.apify.client.http.ApifyApiException;
 import com.apify.client.internal.Async;
+import com.apify.client.internal.CancellableFuture;
 import com.apify.client.internal.HttpClientCore;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -103,6 +104,12 @@ public final class StreamedLog implements AutoCloseable {
    */
   private boolean starting;
 
+  /**
+   * Set by {@link #close()} while a {@link #start()} is still opening its stream: the stream is
+   * then closed as soon as it opens, and no reader thread is launched.
+   */
+  private boolean closeRequested;
+
   public StreamedLog(LogClient logClient, Consumer<String> destination, boolean fromStart) {
     this.logClient = logClient;
     this.destination = destination;
@@ -119,6 +126,10 @@ public final class StreamedLog implements AutoCloseable {
    * leaving the reader blocked on a live read that never returns and {@code join()} hanging
    * forever.
    *
+   * <p>Cancelling the returned future cancels the stream-open request. {@link #close()} while the
+   * stream is still opening closes the stream once it opens, launches no reader and cancels the
+   * returned future.
+   *
    * @throws IllegalStateException if redirection is already running (or a previous {@link #start()}
    *     call's stream-open is still in flight)
    * @implNote the returned future completes exceptionally with an {@link ApifyApiException} if the
@@ -132,26 +143,47 @@ public final class StreamedLog implements AutoCloseable {
     starting = true;
     stopLogging = false;
     forwardingFailed = false;
-    return logClient.stream(new LogOptions().raw(true))
-        .handle(
-            (stream, error) -> {
-              synchronized (StreamedLog.this) {
-                starting = false;
-                if (error != null) {
-                  Throwable cause = HttpClientCore.unwrapCompletion(error);
-                  if (cause instanceof RuntimeException runtimeException) {
-                    throw runtimeException;
-                  }
-                  throw new IllegalStateException("failed to open log stream", cause);
-                }
-                activeStream = stream;
-                Thread thread = new Thread(this::streamLog, "apify-streamed-log");
-                thread.setDaemon(true);
-                streamingThread = thread;
-                thread.start();
-              }
-              return null;
-            });
+    CancellableFuture<Void> started = new CancellableFuture<>();
+    CompletableFuture<InputStream> opening = logClient.stream(new LogOptions().raw(true));
+    // Cancelling the returned future cancels the stream-open request. The callback below hangs off
+    // the open request itself, so it runs however that ends and always resets the opening state.
+    started.link(opening);
+    opening.whenComplete(
+        (stream, error) -> {
+          // The outcome is decided under the lock but delivered after it is released: the stages
+          // chained on the returned future run on this thread, and one of them may wait for a
+          // destination consumer that itself calls close() (which takes the lock).
+          Runnable outcome;
+          synchronized (StreamedLog.this) {
+            starting = false;
+            if (error != null) {
+              closeRequested = false;
+              Throwable cause = HttpClientCore.unwrapCompletion(error);
+              Throwable failure =
+                  cause instanceof RuntimeException
+                      ? cause
+                      : new IllegalStateException("failed to open log stream", cause);
+              outcome = () -> started.completeExceptionally(failure);
+            } else if (closeRequested || started.isCancelled()) {
+              // Closed (or cancelled) while the stream was opening: do not launch a reader for it.
+              closeRequested = false;
+              outcome =
+                  () -> {
+                    closeQuietly(stream);
+                    started.cancel(true);
+                  };
+            } else {
+              activeStream = stream;
+              Thread thread = new Thread(this::streamLog, "apify-streamed-log");
+              thread.setDaemon(true);
+              streamingThread = thread;
+              thread.start();
+              outcome = () -> started.complete(null);
+            }
+          }
+          outcome.run();
+        });
+    return started;
   }
 
   /**
@@ -176,12 +208,17 @@ public final class StreamedLog implements AutoCloseable {
   }
 
   /**
-   * Stops redirection if it is still running; a no-op otherwise. Fully idempotent and safe under a
-   * concurrent {@link #stop()} or a double {@code close()}: the running-check and the stop happen
-   * atomically under the monitor, so unlike {@link #stop()} this never throws.
+   * Stops redirection if it is still running; a no-op otherwise. If {@link #start()} is still
+   * opening the log stream, the stream is closed as soon as it opens, no reader is launched and the
+   * future {@code start()} returned is cancelled. Fully idempotent and safe under a concurrent
+   * {@link #stop()} or a double {@code close()}: the running-check and the stop happen atomically
+   * under the monitor, so unlike {@link #stop()} this never throws.
    */
   @Override
   public synchronized void close() {
+    if (starting) {
+      closeRequested = true;
+    }
     if (streamingThread != null) {
       stopStreaming();
     }

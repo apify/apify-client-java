@@ -15,6 +15,7 @@ public final class StoreListOptions implements ListOptionsLike {
   private Boolean includeUnrunnableActors;
   private Boolean allowsAgenticUsers;
   private String responseFormat;
+  private Boolean includeInputSchema;
 
   /** Number of Actors to skip. */
   public StoreListOptions offset(Long offset) {
@@ -83,6 +84,16 @@ public final class StoreListOptions implements ListOptionsLike {
     return this;
   }
 
+  /**
+   * Include a compact {@code inputSchema} (property types and required properties only) of each
+   * Actor's default build in the results, available through {@code ActorStoreListItem#getExtra()}.
+   * With this flag the API defaults {@code limit} to, and caps it at, {@code 10}.
+   */
+  public StoreListOptions includeInputSchema(Boolean includeInputSchema) {
+    this.includeInputSchema = includeInputSchema;
+    return this;
+  }
+
   @Override
   public Long limitValue() {
     return limit;
@@ -111,6 +122,7 @@ public final class StoreListOptions implements ListOptionsLike {
         .addString("pricingModel", pricingModel)
         .addBool("includeUnrunnableActors", includeUnrunnableActors)
         .addBool("allowsAgenticUsers", allowsAgenticUsers)
-        .addString("responseFormat", responseFormat);
+        .addString("responseFormat", responseFormat)
+        .addBool("includeInputSchema", includeInputSchema);
   }
 }

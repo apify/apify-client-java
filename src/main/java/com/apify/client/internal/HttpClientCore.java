@@ -1,20 +1,21 @@
 package com.apify.client.internal;
 
-import com.aayushatharva.brotli4j.Brotli4jLoader;
-import com.aayushatharva.brotli4j.encoder.Encoder;
 import com.apify.client.http.ApiResponse;
 import com.apify.client.http.ApifyApiException;
 import com.apify.client.http.ApifyTransportException;
+import com.apify.client.http.BrotliHttpCompressor;
 import com.apify.client.http.ConflictError;
 import com.apify.client.http.ForbiddenError;
+import com.apify.client.http.GzipHttpCompressor;
+import com.apify.client.http.HttpCompressor;
 import com.apify.client.http.HttpTransport;
 import com.apify.client.http.InvalidRequestError;
 import com.apify.client.http.NotFoundError;
 import com.apify.client.http.RateLimitError;
 import com.apify.client.http.RetryConfig;
 import com.apify.client.http.ServerError;
+import com.apify.client.http.Timeout;
 import com.apify.client.http.UnauthorizedError;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -27,11 +28,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.zip.GZIPOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The orchestrating HTTP client shared by every resource client. It owns the transport, the
@@ -64,84 +68,207 @@ public final class HttpClientCore {
    */
   private static final int MIN_COMPRESS_BYTES = 1024;
 
-  /** {@code Content-Encoding} value for brotli-compressed bodies (matches the reference client). */
-  private static final String ENCODING_BROTLI = "br";
-
-  /** {@code Content-Encoding} value for gzip-compressed bodies (the fallback coding). */
-  private static final String ENCODING_GZIP = "gzip";
-
   /** Prefix required before the token value in the {@code Authorization} header. */
   private static final String AUTH_BEARER_PREFIX = "Bearer ";
 
-  /**
-   * Whether a brotli native codec loaded for the running platform. Resolved once at class load:
-   * brotli4j needs a platform-specific native library, so on platforms without one (or if loading
-   * fails) the client falls back to gzip. Mirrors the reference JS client, which prefers brotli and
-   * falls back to gzip.
-   */
-  private static final boolean BROTLI_AVAILABLE = detectBrotli();
-
-  private static boolean detectBrotli() {
-    try {
-      Brotli4jLoader.ensureAvailability();
-      return true;
-    } catch (Throwable t) {
-      // Native codec unavailable (no bundled binary for this OS/arch, or a link error). Catch
-      // Throwable because native loading can raise UnsatisfiedLinkError/NoClassDefFoundError, not
-      // just Exception. The client stays fully functional using gzip.
-      return false;
-    }
-  }
+  /** The API holds a {@code waitForFinish} request for at most this many seconds. */
+  private static final long MAX_HOLD_SECS = 60;
 
   /**
-   * Reports whether the brotli path is active on this platform. Public so tests outside this
-   * package (which lives in the non-exported {@code com.apify.client.internal} package) can assert
-   * on it.
+   * Seconds of a caller-chosen request timeout kept free of a {@code waitForFinish} hold, so the
+   * API answers before the client's own timeout fires.
    */
-  public static boolean brotliAvailable() {
-    return BROTLI_AVAILABLE;
-  }
+  private static final long HOLD_MARGIN_SECS = 5;
+
+  private static final double MILLIS_PER_SECOND = 1000.0;
+
+  private static final Logger LOG = LoggerFactory.getLogger(HttpClientCore.class);
 
   private final HttpTransport transport;
   private final String token;
   private final String userAgent;
   private final RetryConfig retry;
+  private final HttpCompressor compressor;
+  private final Map<String, String> defaultHeaders;
 
+  /** When set, replaces the timeout every request would otherwise get. */
+  private final Timeout timeoutOverride;
+
+  /** Requested timeouts already warned about, shared by every copy made by {@link #withTimeout}. */
+  private final Set<Duration> warnedCappedTimeouts;
+
+  /**
+   * @param compressor compresses large request bodies; {@code null} picks brotli where its native
+   *     library is available and gzip elsewhere
+   * @param defaultHeaders headers sent with every request; they replace the built-in {@code
+   *     User-Agent} and {@code Authorization} headers of the same name and are replaced by a header
+   *     the request sets itself
+   */
   public HttpClientCore(
-      HttpTransport transport, String token, String userAgent, RetryConfig retry) {
+      HttpTransport transport,
+      String token,
+      String userAgent,
+      RetryConfig retry,
+      HttpCompressor compressor,
+      Map<String, String> defaultHeaders) {
+    this(
+        transport,
+        token,
+        userAgent,
+        retry,
+        compressor != null ? compressor : defaultCompressor(),
+        defaultHeaders == null ? Map.of() : Map.copyOf(defaultHeaders),
+        null,
+        ConcurrentHashMap.newKeySet());
+  }
+
+  private static HttpCompressor defaultCompressor() {
+    return BrotliHttpCompressor.isAvailable()
+        ? new BrotliHttpCompressor()
+        : new GzipHttpCompressor();
+  }
+
+  private HttpClientCore(
+      HttpTransport transport,
+      String token,
+      String userAgent,
+      RetryConfig retry,
+      HttpCompressor compressor,
+      Map<String, String> defaultHeaders,
+      Timeout timeoutOverride,
+      Set<Duration> warnedCappedTimeouts) {
     this.transport = transport;
     this.token = token;
     this.userAgent = userAgent;
     this.retry = retry;
+    this.compressor = compressor;
+    this.defaultHeaders = defaultHeaders;
+    this.timeoutOverride = timeoutOverride;
+    this.warnedCappedTimeouts = warnedCappedTimeouts;
   }
 
   public String userAgent() {
     return userAgent;
   }
 
-  /** The configured maximum per-attempt request timeout, in whole seconds. */
-  public long requestTimeoutSeconds() {
-    return retry.timeout.getSeconds();
+  /**
+   * A copy of this client that sends every request with {@code timeout} instead of the tier the
+   * calling method would pick. The transport, token and retry policy are shared.
+   */
+  public HttpClientCore withTimeout(Timeout timeout) {
+    if (timeout == null) {
+      throw new IllegalArgumentException("timeout must not be null");
+    }
+    return new HttpClientCore(
+        transport,
+        token,
+        userAgent,
+        retry,
+        compressor,
+        defaultHeaders,
+        timeout,
+        warnedCappedTimeouts);
   }
 
   /**
-   * The default per-attempt request timeout used as the base for standard API calls. It is the
-   * client's configured timeout (single source of truth), so a caller-configured timeout applies to
-   * the first attempt too. Individual calls may pass a smaller base (e.g. key-value-store uploads),
-   * which then grows back up toward this value on retries.
+   * This client without the override set by {@link #withTimeout}: every request gets the timeout of
+   * its own method again.
    */
-  public Duration baseRequestTimeout() {
-    return retry.timeout;
+  public HttpClientCore withoutTimeoutOverride() {
+    if (timeoutOverride == null) {
+      return this;
+    }
+    return new HttpClientCore(
+        transport, token, userAgent, retry, compressor, defaultHeaders, null, warnedCappedTimeouts);
   }
+
+  /**
+   * Resolves a timeout to the duration of its first attempt: a tier to its configured duration, an
+   * exact timeout to itself, and {@link Timeout#NO_TIMEOUT} to {@code null} (no timeout). A value
+   * above the configured maximum is capped at it, which logs a warning once per value, since the
+   * request does not get the whole time it asked for. The override set by {@link #withTimeout}
+   * takes precedence over {@code requested}.
+   */
+  public Duration resolveTimeout(Timeout requested) {
+    Timeout effective = timeoutOverride != null ? timeoutOverride : requested;
+    if (effective.isNoTimeout()) {
+      return null;
+    }
+    Duration duration =
+        effective
+            .duration()
+            .orElseGet(
+                () ->
+                    switch (effective.tier().orElseThrow()) {
+                      case SHORT -> retry.timeoutShort;
+                      case MEDIUM -> retry.timeoutMedium;
+                      case LONG -> retry.timeoutLong;
+                    });
+    if (duration.compareTo(retry.timeout) > 0) {
+      if (warnedCappedTimeouts.add(duration)) {
+        LOG.warn(
+            "The requested timeout of {}s exceeds timeoutMax ({}s) and is capped at it. Raise"
+                + " timeoutMax on the client builder to allow longer request timeouts.",
+            duration.toMillis() / MILLIS_PER_SECOND,
+            retry.timeout.toMillis() / MILLIS_PER_SECOND);
+      }
+      return retry.timeout;
+    }
+    return duration;
+  }
+
+  /**
+   * The {@code waitForFinish} value to send and the timeout to send it with, for a request that
+   * asks the API to hold its response for up to {@code requestedHold} seconds.
+   *
+   * <p>The hold is at most {@link #MAX_HOLD_SECS} and is cut down to what the request timeout can
+   * cover, so the client never aborts a request the API is still holding (which, for a start or a
+   * build, would retry a call that creates a resource). Without an override, when the tier plus the
+   * hold fits under {@code timeoutMax} the timeout is the tier's plus the hold; otherwise the
+   * timeout is {@code timeoutMax} and the hold is at most {@code timeoutMax} less a safety margin
+   * (0 if that is not positive). An override set by {@link #withTimeout} is kept as given, and the
+   * hold is limited to it less a safety margin.
+   */
+  public WaitHold waitHold(Timeout tier, Long requestedHold) {
+    if (requestedHold == null) {
+      return new WaitHold(null, tier);
+    }
+    long hold = Math.min(Math.max(requestedHold, 0), MAX_HOLD_SECS);
+    Duration base = resolveTimeout(tier);
+    if (base == null) {
+      return new WaitHold(hold, tier);
+    }
+    if (timeoutOverride != null) {
+      long coverable = Math.max(0, base.toSeconds() - HOLD_MARGIN_SECS);
+      return new WaitHold(Math.min(hold, coverable), tier);
+    }
+    long room = retry.timeout.toSeconds() - base.toSeconds();
+    if (room < hold) {
+      // timeoutMax leaves less above the tier than the hold: keep the hold the caller asked for as
+      // far as the cap allows, the same way an explicit timeout override does.
+      long coverable = Math.max(0, retry.timeout.toSeconds() - HOLD_MARGIN_SECS);
+      return new WaitHold(Math.min(hold, coverable), Timeout.of(retry.timeout));
+    }
+    return new WaitHold(hold, hold > 0 ? Timeout.of(base.plusSeconds(hold)) : tier);
+  }
+
+  /**
+   * The outcome of {@link #waitHold}.
+   *
+   * @param waitForFinishSecs the {@code waitForFinish} query value to send, or {@code null} for
+   *     none
+   * @param timeout the timeout to send the request with
+   */
+  public record WaitHold(Long waitForFinishSecs, Timeout timeout) {}
 
   /** Sends a request with auth, User-Agent and the retry policy applied. */
   public CompletableFuture<ApiResponse> call(
-      String method, String url, byte[] body, String contentType, Duration baseTimeout) {
-    return call(method, url, body, contentType, null, baseTimeout, false);
+      String method, String url, byte[] body, String contentType, Timeout timeout) {
+    return call(method, url, body, contentType, null, timeout, false);
   }
 
   /**
-   * Like {@link #call(String, String, byte[], String, Duration)} but, when {@code
+   * Like {@link #call(String, String, byte[], String, Timeout)} but, when {@code
    * doNotRetryTimeouts} is {@code true}, a transport timeout is treated as a terminal failure
    * rather than being retried (other transport/network errors and retryable statuses are still
    * retried).
@@ -151,13 +278,13 @@ public final class HttpClientCore {
       String url,
       byte[] body,
       String contentType,
-      Duration baseTimeout,
+      Timeout timeout,
       boolean doNotRetryTimeouts) {
-    return call(method, url, body, contentType, null, baseTimeout, doNotRetryTimeouts);
+    return call(method, url, body, contentType, null, timeout, doNotRetryTimeouts);
   }
 
   /**
-   * Like {@link #call(String, String, byte[], String, Duration)} but additionally sets the given
+   * Like {@link #call(String, String, byte[], String, Timeout)} but additionally sets the given
    * extra headers on every attempt.
    */
   public CompletableFuture<ApiResponse> call(
@@ -166,8 +293,8 @@ public final class HttpClientCore {
       byte[] body,
       String contentType,
       Map<String, String> extraHeaders,
-      Duration baseTimeout) {
-    return call(method, url, body, contentType, extraHeaders, baseTimeout, false);
+      Timeout timeout) {
+    return call(method, url, body, contentType, extraHeaders, timeout, false);
   }
 
   /** The canonical overload every other {@code call} convenience overload delegates to. */
@@ -177,17 +304,24 @@ public final class HttpClientCore {
       byte[] body,
       String contentType,
       Map<String, String> extraHeaders,
-      Duration baseTimeout,
+      Timeout timeout,
       boolean doNotRetryTimeouts) {
+
+    Duration baseTimeout = resolveTimeout(timeout);
 
     // Compress the body once, up front, so every retry reuses the same encoded payload.
     byte[] requestBody = body;
     Map<String, String> headers = extraHeaders;
     if (shouldCompress(requestBody, contentType, extraHeaders)) {
-      Compressed compressed = compress(requestBody, BROTLI_AVAILABLE);
-      requestBody = compressed.body();
+      try {
+        requestBody = compressor.compress(requestBody);
+      } catch (Exception | LinkageError e) {
+        // No fallback to another coding: the configured compressor is the only one that runs. A
+        // LinkageError is what a native codec that fails to load raises.
+        return failedFuture(new ApifyTransportException(e));
+      }
       headers = new LinkedHashMap<>(extraHeaders == null ? Map.of() : extraHeaders);
-      headers.put(HttpHeaders.CONTENT_ENCODING, compressed.encoding());
+      headers.put(HttpHeaders.CONTENT_ENCODING, compressor.contentEncoding());
     }
 
     String path = extractPath(url);
@@ -284,6 +418,10 @@ public final class HttpClientCore {
                     null, false, isStatusRetryable(resp.statusCode()), apiError);
               }
               Throwable cause = unwrapCompletion(err);
+              if (cause instanceof CancellationException cancellation) {
+                // The caller cancelled the call: end it, never retry.
+                return new AttemptOutcome(null, false, false, cancellation);
+              }
               ApifyTransportException transportError =
                   cause instanceof ApifyTransportException apifyTransportException
                       ? apifyTransportException
@@ -309,8 +447,10 @@ public final class HttpClientCore {
         body != null
             ? HttpRequest.BodyPublishers.ofByteArray(body)
             : HttpRequest.BodyPublishers.noBody();
-    HttpRequest.Builder b =
-        HttpRequest.newBuilder(URI.create(url)).method(method, publisher).timeout(timeout);
+    HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url)).method(method, publisher);
+    if (timeout != null) {
+      b.timeout(timeout);
+    }
     b.header(HttpHeaders.USER_AGENT, userAgent);
     if (token != null && !token.isEmpty()) {
       b.header(HttpHeaders.AUTHORIZATION, AUTH_BEARER_PREFIX + token);
@@ -318,8 +458,11 @@ public final class HttpClientCore {
     if (contentType != null && !contentType.isEmpty()) {
       b.header(HttpHeaders.CONTENT_TYPE, contentType);
     }
+    // setHeader replaces what is already set, so a default header wins over the built-in ones and
+    // a header of the request itself wins over both.
+    defaultHeaders.forEach(b::setHeader);
     if (extraHeaders != null) {
-      extraHeaders.forEach(b::header);
+      extraHeaders.forEach(b::setHeader);
     }
     return b.build();
   }
@@ -332,8 +475,7 @@ public final class HttpClientCore {
       Map<String, String> extraHeaders,
       Duration timeout) {
     HttpRequest request = buildRequest(method, url, body, contentType, extraHeaders, timeout);
-    return transport
-        .sendAsync(request)
+    return CancellableFuture.wrap(transport.sendAsync(request))
         .thenApply(resp -> new ApiResponse(resp.statusCode(), resp.headers(), resp.body()));
   }
 
@@ -346,6 +488,9 @@ public final class HttpClientCore {
    * across all retries.
    */
   private Duration attemptTimeout(Duration base, int attempt) {
+    if (base == null) {
+      return null; // Timeout.NO_TIMEOUT
+    }
     Duration scaled = base;
     for (int i = 1; i < attempt; i++) {
       scaled = scaled.multipliedBy(2);
@@ -436,8 +581,8 @@ public final class HttpClientCore {
    * ending in {@code +json}/{@code +xml} (e.g. {@code image/svg+xml}). A missing content type is
    * assumed compressible. Matches the reference JS client's {@code isCompressibleContentType}.
    *
-   * <p>Public (like {@link #compress} and {@link #brotliAvailable}) so {@code CompressionTest},
-   * outside this non-exported package, can exercise the classification directly.
+   * <p>Public so {@code CompressionTest}, outside this non-exported package, can exercise the
+   * classification directly.
    */
   public static boolean isCompressibleContentType(String contentType) {
     if (contentType == null || contentType.isEmpty()) {
@@ -466,70 +611,6 @@ public final class HttpClientCore {
       }
     }
     return true;
-  }
-
-  /**
-   * A compressed request body together with the {@code Content-Encoding} token that describes it.
-   *
-   * @param body the compressed request body
-   * @param encoding the {@code Content-Encoding} token describing {@code body}
-   */
-  public record Compressed(byte[] body, String encoding) {}
-
-  /**
-   * Compresses a request body, preferring brotli and falling back to gzip, matching the reference
-   * JS client. When {@code preferBrotli} is {@code true} the body is brotli-encoded ({@code
-   * Content-Encoding: br}); otherwise it is gzip-encoded ({@code Content-Encoding: gzip}). Callers
-   * pass {@link #BROTLI_AVAILABLE}; making the coding an explicit parameter keeps this a pure
-   * function of its inputs rather than of hidden static state. Public so {@code CompressionTest}
-   * (outside this non-exported package) can exercise it directly.
-   *
-   * <p>If the brotli path itself fails despite the native codec having loaded, this falls back to
-   * gzip rather than failing the whole request - matching the reference JS client, which since <a
-   * href="https://github.com/apify/apify-client-js/pull/990">apify-client-js#990</a> keys the
-   * fallback on compression actually failing rather than only on an upfront availability check.
-   * Catches {@code Throwable}, not just {@code RuntimeException}: a native codec that loaded
-   * successfully at startup can still fail a specific call with an {@code Error} (e.g. a partial or
-   * mismatched native library surfacing {@link UnsatisfiedLinkError} only once a method is actually
-   * invoked), the same reason {@link #detectBrotli()} itself catches {@code Throwable} rather than
-   * {@code Exception}.
-   */
-  public static Compressed compress(byte[] data, boolean preferBrotli) {
-    if (preferBrotli) {
-      try {
-        return new Compressed(brotli(data), ENCODING_BROTLI);
-      } catch (Throwable t) {
-        return new Compressed(gzip(data), ENCODING_GZIP);
-      }
-    }
-    return new Compressed(gzip(data), ENCODING_GZIP);
-  }
-
-  /** Brotli-compresses a request body using the loaded native codec. */
-  private static byte[] brotli(byte[] data) {
-    try {
-      return Encoder.compress(data);
-    } catch (IOException e) {
-      // Encoding an in-memory byte[] performs no real I/O, so this is unreachable in practice.
-      throw new ApifyTransportException(e);
-    }
-  }
-
-  /**
-   * Gzip-compresses a request body. Used as the fallback coding when no brotli native codec is
-   * available for the running platform; the JDK always ships a gzip codec ({@link
-   * GZIPOutputStream}).
-   */
-  private static byte[] gzip(byte[] data) {
-    ByteArrayOutputStream out = new ByteArrayOutputStream(data.length);
-    try (GZIPOutputStream gz = new GZIPOutputStream(out)) {
-      gz.write(data);
-    } catch (IOException e) {
-      // Compressing an in-memory byte[] cannot perform real I/O, so this is unreachable in
-      // practice.
-      throw new ApifyTransportException(e);
-    }
-    return out.toByteArray();
   }
 
   private static boolean isStatusRetryable(int status) {
@@ -655,18 +736,24 @@ public final class HttpClientCore {
    * matching {@link HttpTransport}'s contract.
    */
   public CompletableFuture<HttpResponse<InputStream>> streamAsync(String url) {
-    HttpRequest request = buildRequest("GET", url, null, null, null, retry.timeout);
-    CompletableFuture<HttpResponse<InputStream>> result = new CompletableFuture<>();
-    transport
-        .sendStreamingAsync(request)
-        .whenComplete(
-            (resp, err) -> {
-              if (err == null) {
-                result.complete(resp);
-              } else {
-                result.completeExceptionally(new ApifyTransportException(unwrapCompletion(err)));
-              }
-            });
+    HttpRequest request = buildRequest("GET", url, null, null, null, resolveTimeout(Timeout.LONG));
+    CancellableFuture<HttpResponse<InputStream>> result = new CancellableFuture<>();
+    CompletableFuture<HttpResponse<InputStream>> exchange = transport.sendStreamingAsync(request);
+    // Cancelling the returned future aborts the exchange.
+    result.link(exchange);
+    exchange.whenComplete(
+        (resp, err) -> {
+          Throwable cause = err == null ? null : unwrapCompletion(err);
+          if (cause == null) {
+            if (!result.complete(resp)) {
+              closeQuietly(resp.body());
+            }
+          } else if (cause instanceof CancellationException) {
+            result.cancel(true);
+          } else {
+            result.completeExceptionally(new ApifyTransportException(cause));
+          }
+        });
     return result;
   }
 
@@ -678,15 +765,37 @@ public final class HttpClientCore {
    * dataset export streaming) so the drain-and-throw logic lives in one place.
    */
   public CompletableFuture<InputStream> streamOrThrow(String url) {
-    return streamAsync(url)
-        .thenApply(
-            resp -> {
-              if (resp.statusCode() >= MAX_SUCCESS_STATUS) {
-                byte[] body = drainQuietly(resp.body());
-                throw buildApiError(resp.statusCode(), body, 1, "GET", extractPath(url));
-              }
-              return resp.body();
-            });
+    CancellableFuture<InputStream> result = new CancellableFuture<>();
+    CompletableFuture<HttpResponse<InputStream>> stream = streamAsync(url);
+    result.link(stream);
+    stream.whenComplete(
+        (resp, err) -> {
+          if (err != null) {
+            Throwable cause = unwrapCompletion(err);
+            if (cause instanceof CancellationException) {
+              result.cancel(true);
+            } else {
+              result.completeExceptionally(cause);
+            }
+            return;
+          }
+          if (resp.statusCode() >= MAX_SUCCESS_STATUS) {
+            byte[] body = drainQuietly(resp.body());
+            result.completeExceptionally(
+                buildApiError(resp.statusCode(), body, 1, "GET", extractPath(url)));
+          } else if (!result.complete(resp.body())) {
+            closeQuietly(resp.body());
+          }
+        });
+    return result;
+  }
+
+  private static void closeQuietly(InputStream in) {
+    try {
+      in.close();
+    } catch (IOException e) {
+      // Nothing is reading the stream any more; a failed close has nobody to report to.
+    }
   }
 
   /**

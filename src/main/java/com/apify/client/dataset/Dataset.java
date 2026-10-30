@@ -1,7 +1,9 @@
 package com.apify.client.dataset;
 
 import com.apify.client.ApifyResource;
+import com.apify.client.internal.NormalizedUrlDeserializer;
 import java.time.Instant;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /** A dataset stores structured results from Actor runs. */
 public final class Dataset extends ApifyResource {
@@ -11,6 +13,13 @@ public final class Dataset extends ApifyResource {
   private Instant createdAt;
   private Instant modifiedAt;
   private long itemCount;
+  private String title;
+
+  @JsonDeserialize(using = NormalizedUrlDeserializer.class)
+  private String consoleUrl;
+
+  @JsonDeserialize(using = NormalizedUrlDeserializer.class)
+  private String itemsPublicUrl;
 
   /** The unique dataset ID. */
   public String getId() {
@@ -40,5 +49,23 @@ public final class Dataset extends ApifyResource {
   /** The number of items currently stored. */
   public long getItemCount() {
     return itemCount;
+  }
+
+  /** The human-readable title of the dataset. */
+  public String getTitle() {
+    return title;
+  }
+
+  /** The URL of the dataset in the Apify Console (normalized). */
+  public String getConsoleUrl() {
+    return consoleUrl;
+  }
+
+  /**
+   * A public URL of the dataset items (signed when the dataset is not publicly accessible;
+   * normalized).
+   */
+  public String getItemsPublicUrl() {
+    return itemsPublicUrl;
   }
 }
