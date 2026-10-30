@@ -63,12 +63,13 @@ public final class UrlNormalizer {
     String host = authority;
     String port = "";
     int colon = authority.lastIndexOf(':');
-    if (colon >= 0 && authority.indexOf(']') < colon) {
+    boolean hasPortSeparator = colon >= 0 && authority.indexOf(']') < colon;
+    if (hasPortSeparator) {
       host = authority.substring(0, colon);
       port = authority.substring(colon + 1);
     }
-    // An empty host is valid only for a non-special scheme without credentials or a port.
-    if (host.isEmpty() && (special || at >= 0 || !port.isEmpty())) {
+    // An empty host is valid only for a non-special scheme without credentials or a port separator.
+    if (host.isEmpty() && (special || at >= 0 || hasPortSeparator)) {
       return value;
     }
     host = normalizeHost(host);

@@ -286,7 +286,7 @@ class CancellationTest {
   }
 
   @Test
-  void aCancelWhileTheLogStreamIsOpeningLeavesNoReaderThread() throws InterruptedException {
+  void aCancelBeforeTheLogStreamOpensLeavesNoReaderThread() throws InterruptedException {
     MockTransport backend =
         MockTransport.ofHanging(
             request ->
@@ -303,7 +303,7 @@ class CancellationTest {
     await(() -> backend.calls >= 3); // start, run fetch for the prefix, and the stream open request
 
     future.cancel(true);
-    gate.complete(null); // the stream opens after the call has been cancelled
+    gate.complete(null); // the held-back response arrives for an exchange that was cancelled
     Thread.sleep(300);
 
     assertEquals(readersBefore, readerThreads(), "no log reader thread is left behind");
@@ -331,6 +331,39 @@ class CancellationTest {
     assertTrue(started.isCancelled(), "the start that was closed is cancelled");
     log.start().join(); // a closed-while-opening log can be started again
     log.close();
+  }
+
+  @Test
+  void aDestinationThatClosesTheLogCannotDeadlockTheStageChainedOnStart() throws Exception {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\"}}");
+    backend.scriptStream(200, "2999-01-01T00:00:00.000Z hello\n");
+    CompletableFuture<Void> gate = new CompletableFuture<>();
+    backend.gateStreams(gate);
+    CompletableFuture<Void> sawLine = new CompletableFuture<>();
+    var holder =
+        new java.util.concurrent.atomic.AtomicReference<com.apify.client.log.StreamedLog>();
+    holder.set(
+        client(backend, 0)
+            .run("r1")
+            .getStreamedLog(
+                new com.apify.client.log.StreamedLogOptions()
+                    .toLog(
+                        line -> {
+                          holder.get().close(); // allowed from the destination: takes the lock
+                          sawLine.complete(null);
+                        }))
+            .join());
+
+    // A stage chained on start() waits for the destination, which needs the StreamedLog lock: the
+    // future must therefore be completed after the lock is released.
+    CompletableFuture<Void> chained =
+        holder
+            .get()
+            .start()
+            .thenRun(() -> sawLine.orTimeout(5, java.util.concurrent.TimeUnit.SECONDS).join());
+    gate.complete(null);
+
+    chained.get(10, java.util.concurrent.TimeUnit.SECONDS);
   }
 
   private static long readerThreads() {

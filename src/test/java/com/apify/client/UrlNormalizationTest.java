@@ -90,6 +90,7 @@ class UrlNormalizationTest {
     assertEquals("foo://@/", UrlNormalizer.normalize("foo://@/"));
     assertEquals("foo://user@/", UrlNormalizer.normalize("foo://user@/"));
     assertEquals("foo://:80/", UrlNormalizer.normalize("foo://:80/"));
+    assertEquals("foo://:/", UrlNormalizer.normalize("foo://:/"));
     assertEquals("foo:///path", UrlNormalizer.normalize("foo:///path"));
   }
 

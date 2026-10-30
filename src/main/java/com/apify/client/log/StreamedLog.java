@@ -126,6 +126,9 @@ public final class StreamedLog implements AutoCloseable {
    * leaving the reader blocked on a live read that never returns and {@code join()} hanging
    * forever.
    *
+   * <p>Cancelling the returned future cancels the stream-open request; {@link #close()} while the
+   * stream is still opening cancels it too.
+   *
    * @throws IllegalStateException if redirection is already running (or a previous {@link #start()}
    *     call's stream-open is still in flight)
    * @implNote the returned future completes exceptionally with an {@link ApifyApiException} if the
@@ -146,31 +149,38 @@ public final class StreamedLog implements AutoCloseable {
     started.link(opening);
     opening.whenComplete(
         (stream, error) -> {
+          // The outcome is decided under the lock but delivered after it is released: the stages
+          // chained on the returned future run on this thread, and one of them may wait for a
+          // destination consumer that itself calls close() (which takes the lock).
+          Runnable outcome;
           synchronized (StreamedLog.this) {
             starting = false;
             if (error != null) {
               closeRequested = false;
               Throwable cause = HttpClientCore.unwrapCompletion(error);
-              started.completeExceptionally(
+              Throwable failure =
                   cause instanceof RuntimeException
                       ? cause
-                      : new IllegalStateException("failed to open log stream", cause));
-              return;
-            }
-            if (closeRequested || started.isCancelled()) {
+                      : new IllegalStateException("failed to open log stream", cause);
+              outcome = () -> started.completeExceptionally(failure);
+            } else if (closeRequested || started.isCancelled()) {
               // Closed (or cancelled) while the stream was opening: do not launch a reader for it.
               closeRequested = false;
-              closeQuietly(stream);
-              started.cancel(true);
-              return;
+              outcome =
+                  () -> {
+                    closeQuietly(stream);
+                    started.cancel(true);
+                  };
+            } else {
+              activeStream = stream;
+              Thread thread = new Thread(this::streamLog, "apify-streamed-log");
+              thread.setDaemon(true);
+              streamingThread = thread;
+              thread.start();
+              outcome = () -> started.complete(null);
             }
-            activeStream = stream;
-            Thread thread = new Thread(this::streamLog, "apify-streamed-log");
-            thread.setDaemon(true);
-            streamingThread = thread;
-            thread.start();
-            started.complete(null);
           }
+          outcome.run();
         });
     return started;
   }
@@ -197,9 +207,11 @@ public final class StreamedLog implements AutoCloseable {
   }
 
   /**
-   * Stops redirection if it is still running; a no-op otherwise. Fully idempotent and safe under a
-   * concurrent {@link #stop()} or a double {@code close()}: the running-check and the stop happen
-   * atomically under the monitor, so unlike {@link #stop()} this never throws.
+   * Stops redirection if it is still running; a no-op otherwise. If {@link #start()} is still
+   * opening the log stream, the stream is closed as soon as it opens, no reader is launched and the
+   * future {@code start()} returned is cancelled. Fully idempotent and safe under a concurrent
+   * {@link #stop()} or a double {@code close()}: the running-check and the stop happen atomically
+   * under the monitor, so unlike {@link #stop()} this never throws.
    */
   @Override
   public synchronized void close() {
