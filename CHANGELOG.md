@@ -44,14 +44,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   only one that runs, and its failure fails the request. Brotli stays the default (quality 6) where
   its native library loads, gzip elsewhere.
 - `batchAddRequests` serializes each request once instead of twice.
-- A `waitForFinish` hold is no longer clamped below the request timeout; the timeout of the request
-  is extended by the hold instead.
+- A `waitForFinish` hold extends the timeout of its request (the tier's plus the hold) instead of
+  being clamped below it; a hold is cut down only to what `timeoutMax` (or a `withTimeout` override)
+  leaves, so the API still answers before the client gives up.
+- `Build.getChangelog()` is deprecated, as the specification deprecates `Build.changelog`.
 - The integration tests wait up to 90 s for a just-created resource to appear in a listing.
 
 ### Fixed
 
-- A timed-out Actor or task start, build trigger or `pushItems` request is no longer retried, so it
-  cannot start a second billed run or store items twice.
+- A `pushItems` request that times out is no longer retried, so the items cannot be stored twice.
+- Cancelling a future the client returned (`CompletableFuture.cancel`) now aborts the request in
+  flight and stops the retries, `waitForFinish`/`call` polling and iteration pages that would follow;
+  cancelling a derived stage (`thenApply`, `thenCompose`, ...) cancels the call it comes from.
 - `pushItems` rejects what the API rejects (anything but an object or an array of objects) before a
   request is sent, and sends a pre-serialized `String` as it is.
 - An Actor or task input given as `byte[]` or `String` is sent as it is instead of being wrapped in

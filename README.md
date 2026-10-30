@@ -206,8 +206,11 @@ List<JsonNode> items =
 An override is used as given, so for a `waitForFinish` request it has to cover the hold too.
 `KeyValueStoreClient.setRecord(...)` additionally takes the timeout in its `SetRecordOptions`.
 
-A request that creates a billed resource (an Actor or task run, a build) or pushes dataset items is
-not retried when it times out, since the API may already have processed it.
+A `pushItems` request that times out is not retried, since the API may already have stored the items.
+
+A hold is cut down to what the request timeout can cover: with a small `timeoutMax` (or an override
+from `withTimeout`), `waitForFinish` is sent as a smaller value so the API answers before the client
+gives up on the request.
 
 ### Request compression and default headers
 
@@ -381,7 +384,7 @@ constants:
 - `Version.CLIENT_VERSION` — the semantic version of this client (`0.12.0`).
 - `Version.API_SPEC_VERSION` — the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters and models were last generated
-  and checked against (`v2-2026-10-26T112451Z`). It is a snapshot, not a live compatibility
+  and checked against (`v2-2026-10-29T100357Z`). It is a snapshot, not a live compatibility
   guarantee: the client keeps working against newer, backward-compatible spec revisions, but a
   feature added to the API after this snapshot has no corresponding method here yet.
 

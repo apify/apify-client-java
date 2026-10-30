@@ -22,7 +22,12 @@ public final class UrlNormalizer {
    */
   private static final Pattern URL =
       Pattern.compile(
-          "^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)([^?#]*)(\\?[^#]*)?(#.*)?$", Pattern.DOTALL);
+          "^(?<scheme>[A-Za-z][A-Za-z0-9+.-]*)://(?<authority>[^/?#]*)(?<path>[^?#]*)"
+              + "(?<query>\\?[^#]*)?(?<fragment>#.*)?$",
+          Pattern.DOTALL);
+
+  /** The highest TCP port; a larger one makes the URL invalid. */
+  private static final int MAX_PORT = 65535;
 
   /** Schemes with a default port and a mandatory (possibly empty) path. */
   private static final Map<String, Integer> SPECIAL_SCHEMES =
@@ -43,15 +48,15 @@ public final class UrlNormalizer {
     if (!m.matches()) {
       return value;
     }
-    String scheme = m.group(1).toLowerCase(Locale.ROOT);
+    String scheme = m.group("scheme").toLowerCase(Locale.ROOT);
     Integer defaultPort = SPECIAL_SCHEMES.get(scheme);
     boolean special = defaultPort != null;
 
-    String authority = m.group(2);
+    String authority = m.group("authority");
     String userInfo = "";
     int at = authority.lastIndexOf('@');
     if (at >= 0) {
-      userInfo = encode(authority.substring(0, at), USERINFO_UNSAFE) + "@";
+      userInfo = encodeUserInfo(authority.substring(0, at)) + "@";
       authority = authority.substring(at + 1);
     }
     String host = authority;
@@ -65,26 +70,47 @@ public final class UrlNormalizer {
       return value;
     }
     host = normalizeHost(host);
-    if (host == null || !port.matches("\\d*")) {
+    // At most five digits: anything longer is above MAX_PORT, and keeps parseInt from overflowing.
+    if (host == null || !port.matches("\\d{0,5}") || (!port.isEmpty() && toPort(port) > MAX_PORT)) {
       return value;
     }
-    if (!port.isEmpty() && defaultPort != null && Integer.parseInt(port) == defaultPort) {
+    if (!port.isEmpty() && defaultPort != null && toPort(port) == defaultPort) {
       port = "";
     }
     if (!port.isEmpty()) {
-      port = ":" + Integer.parseInt(port);
+      port = ":" + toPort(port);
     }
 
-    String rawPath = special ? m.group(3).replace('\\', '/') : m.group(3);
+    String rawPath = special ? m.group("path").replace('\\', '/') : m.group("path");
     String path =
         special ? resolveDotSegments(encode(rawPath, PATH_UNSAFE)) : encode(rawPath, PATH_UNSAFE);
     if (special && path.isEmpty()) {
       path = "/";
     }
+    String rawQuery = m.group("query");
     String query =
-        m.group(4) == null ? "" : encode(m.group(4), special ? SPECIAL_QUERY_UNSAFE : QUERY_UNSAFE);
-    String fragment = m.group(5) == null ? "" : encode(m.group(5), FRAGMENT_UNSAFE);
+        rawQuery == null ? "" : encode(rawQuery, special ? SPECIAL_QUERY_UNSAFE : QUERY_UNSAFE);
+    String rawFragment = m.group("fragment");
+    String fragment = rawFragment == null ? "" : encode(rawFragment, FRAGMENT_UNSAFE);
     return scheme + "://" + userInfo + host + port + path + query + fragment;
+  }
+
+  private static int toPort(String digits) {
+    return Integer.parseInt(digits);
+  }
+
+  /**
+   * Encodes the {@code username[:password]} part of the authority: each of the two is encoded on
+   * its own, so the separator between them stays a colon.
+   */
+  private static String encodeUserInfo(String userInfo) {
+    int colon = userInfo.indexOf(':');
+    if (colon < 0) {
+      return encode(userInfo, USERINFO_UNSAFE);
+    }
+    return encode(userInfo.substring(0, colon), USERINFO_UNSAFE)
+        + ":"
+        + encode(userInfo.substring(colon + 1), USERINFO_UNSAFE);
   }
 
   /**

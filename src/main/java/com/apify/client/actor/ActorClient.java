@@ -161,15 +161,11 @@ public final class ActorClient {
     QueryParams params = new QueryParams();
     params.addString("version", versionNumber);
     options.apply(params);
+    HttpClientCore.WaitHold hold =
+        ctx.http.waitHold(Timeout.MEDIUM, params.getLong("waitForFinish"));
+    params.setLong("waitForFinish", hold.waitForFinishSecs());
     return ctx.postWithBody(
-        "builds",
-        params,
-        null,
-        ResourceContext.CONTENT_TYPE_JSON,
-        Build.class,
-        ctx.http.timeoutWithHold(Timeout.MEDIUM, params.getLong("waitForFinish")),
-        // A build that timed out may still have been created; retrying would start a second one.
-        true);
+        "builds", params, null, ResourceContext.CONTENT_TYPE_JSON, Build.class, hold.timeout());
   }
 
   /**
@@ -179,12 +175,9 @@ public final class ActorClient {
    */
   public CompletableFuture<BuildClient> defaultBuild(Long waitForFinish) {
     QueryParams params = new QueryParams();
-    params.addLong("waitForFinish", waitForFinish);
-    return ctx.getResourceRequired(
-            "builds/default",
-            params,
-            Build.class,
-            ctx.http.timeoutWithHold(Timeout.SHORT, waitForFinish))
+    HttpClientCore.WaitHold hold = ctx.http.waitHold(Timeout.SHORT, waitForFinish);
+    params.addLong("waitForFinish", hold.waitForFinishSecs());
+    return ctx.getResourceRequired("builds/default", params, Build.class, hold.timeout())
         .thenApply(build -> new BuildClient(http, baseUrl, build.getId()));
   }
 

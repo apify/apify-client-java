@@ -5,6 +5,7 @@ import com.apify.client.http.ApifyTransportException;
 import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.Async;
+import com.apify.client.internal.CancellableFuture;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
@@ -280,7 +281,7 @@ public final class RequestQueueClient {
     for (int w = 0; w < workerCount; w++) {
       workers.add(runBatchAddWorker(chunks, nextChunkIndex, resultsByChunk, forefront, options));
     }
-    return CompletableFuture.allOf(workers.toArray(CompletableFuture[]::new))
+    return CancellableFuture.allOf(workers)
         .thenApply(
             unused -> {
               BatchAddResult merged = new BatchAddResult();
@@ -660,6 +661,7 @@ public final class RequestQueueClient {
       private final AtomicLong requested = new AtomicLong();
       private final AtomicBoolean draining = new AtomicBoolean();
       private final AtomicBoolean cancelled = new AtomicBoolean();
+      private volatile CompletableFuture<?> inFlight;
       private final AtomicBoolean terminated = new AtomicBoolean();
 
       // Only touched from within the draining-guarded section; see AsyncPaginatedPublisher.Session.
@@ -691,6 +693,10 @@ public final class RequestQueueClient {
       @Override
       public void cancel() {
         cancelled.set(true);
+        CompletableFuture<?> fetch = inFlight;
+        if (fetch != null) {
+          fetch.cancel(true);
+        }
       }
 
       private void drain() {
@@ -746,23 +752,25 @@ public final class RequestQueueClient {
         }
         params.addCsv("filter", filter);
         withClientKey(params);
-        ctx.getResourceRequired("requests", params, RequestsList.class, Timeout.MEDIUM)
-            .whenComplete(
-                (page, error) -> {
-                  if (cancelled.get()) {
-                    draining.set(false);
-                    return;
-                  }
-                  if (error != null) {
-                    if (terminated.compareAndSet(false, true)) {
-                      subscriber.onError(HttpClientCore.unwrapCompletion(error));
-                    }
-                    draining.set(false);
-                    return;
-                  }
-                  applyPage(page, capRemaining);
-                  drainLoop();
-                });
+        CompletableFuture<RequestsList> fetch =
+            ctx.getResourceRequired("requests", params, RequestsList.class, Timeout.MEDIUM);
+        inFlight = fetch;
+        fetch.whenComplete(
+            (page, error) -> {
+              if (cancelled.get()) {
+                draining.set(false);
+                return;
+              }
+              if (error != null) {
+                if (terminated.compareAndSet(false, true)) {
+                  subscriber.onError(HttpClientCore.unwrapCompletion(error));
+                }
+                draining.set(false);
+                return;
+              }
+              applyPage(page, capRemaining);
+              drainLoop();
+            });
       }
 
       private void applyPage(RequestsList page, Long capRemaining) {

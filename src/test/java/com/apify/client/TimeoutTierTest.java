@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.apify.client.actor.ActorBuildOptions;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.http.ApifyTransportException;
 import com.apify.client.http.Timeout;
@@ -170,10 +169,36 @@ class TimeoutTierTest {
   }
 
   @Test
-  void withTimeoutIsUsedAsGivenForAWaitForFinishHold() {
+  void withTimeoutIsKeptAndTheHoldIsCutToWhatItCovers() {
     MockTransport backend = MockTransport.ofConstant(200, RUN_JSON);
     client(backend).withTimeout(Timeout.ofSeconds(10)).run("r1").getWithWait(30L).join();
-    assertEquals(secs(10), backend.lastTimeout);
+    assertEquals(secs(10), backend.lastTimeout, "the override is used as given");
+    assertTrue(
+        backend.lastUrl.contains("waitForFinish=5"), "10s less the 5s margin: " + backend.lastUrl);
+  }
+
+  @Test
+  void aHoldIsCutToWhatTimeoutMaxLeavesAboveTheTier() {
+    MockTransport backend = MockTransport.ofConstant(200, RUN_JSON);
+    ApifyClient client = builder(backend).timeoutMax(Duration.ofSeconds(12)).build();
+
+    client.run("r1").getWithWait(30L).join();
+    assertTrue(backend.lastUrl.contains("waitForFinish=7"), "5s tier, 12s cap: " + backend.lastUrl);
+    assertEquals(secs(12), backend.lastTimeout, "the request is not given up before the hold ends");
+
+    client.actor("a1").start(null, new ActorStartOptions().waitForFinish(60L)).join();
+    assertTrue(
+        backend.lastUrl.contains("waitForFinish=0"),
+        "the 30s medium tier is capped at 12s, so no hold fits: " + backend.lastUrl);
+  }
+
+  @Test
+  void aTimedOutStartIsRetriedLikeAnyOtherRequest() {
+    MockTransport backend =
+        new MockTransport(List.of(MockTransport.timeoutError(), MockTransport.ok(201, RUN_JSON)));
+    ApifyClient client = builder(backend).maxRetries(3).build();
+    client.actor("a1").start(null, new ActorStartOptions()).join();
+    assertEquals(2, backend.calls);
   }
 
   @Test
@@ -191,26 +216,15 @@ class TimeoutTierTest {
   }
 
   @Test
-  void aTimedOutStartIsNotRetriedSoNoSecondRunIsStarted() {
+  void aTimedOutPushIsNotRetriedSoItemsAreNotStoredTwice() {
     MockTransport backend =
-        new MockTransport(List.of(MockTransport.timeoutError(), MockTransport.ok(201, RUN_JSON)));
+        new MockTransport(List.of(MockTransport.timeoutError(), MockTransport.ok(201, "{}")));
     ApifyClient client = builder(backend).maxRetries(3).build();
 
-    var future = client.actor("a1").start(null, new ActorStartOptions());
+    var future = client.dataset("d1").pushItems(java.util.Map.of("a", 1));
     var error = assertThrows(CompletionException.class, future::join);
     assertTrue(error.getCause() instanceof ApifyTransportException);
-    assertEquals(1, backend.calls, "a start that timed out must not be sent again");
-  }
-
-  @Test
-  void aTimedOutBuildTriggerIsNotRetried() {
-    MockTransport backend =
-        new MockTransport(List.of(MockTransport.timeoutError(), MockTransport.ok(201, RUN_JSON)));
-    ApifyClient client = builder(backend).maxRetries(3).build();
-
-    var future = client.actor("a1").build("0.1", new ActorBuildOptions());
-    assertThrows(CompletionException.class, future::join);
-    assertEquals(1, backend.calls);
+    assertEquals(1, backend.calls, "a push that timed out must not be sent again");
   }
 
   @Test

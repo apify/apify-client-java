@@ -34,9 +34,9 @@ public final class BuildClient {
    */
   public CompletableFuture<Optional<Build>> getWithWait(Long waitForFinishSecs) {
     QueryParams params = new QueryParams();
-    params.addLong("waitForFinish", waitForFinishSecs);
-    return ctx.getResource(
-        "", params, Build.class, ctx.http.timeoutWithHold(Timeout.SHORT, waitForFinishSecs));
+    HttpClientCore.WaitHold hold = ctx.http.waitHold(Timeout.SHORT, waitForFinishSecs);
+    params.addLong("waitForFinish", hold.waitForFinishSecs());
+    return ctx.getResource("", params, Build.class, hold.timeout());
   }
 
   /** Aborts the build and returns its updated state. */

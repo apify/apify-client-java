@@ -92,9 +92,9 @@ public final class RunClient {
    */
   public CompletableFuture<Optional<ActorRun>> getWithWait(Long waitForFinishSecs) {
     QueryParams params = new QueryParams();
-    params.addLong("waitForFinish", waitForFinishSecs);
-    return ctx.getResource(
-        "", params, ActorRun.class, ctx.http.timeoutWithHold(Timeout.SHORT, waitForFinishSecs));
+    HttpClientCore.WaitHold hold = ctx.http.waitHold(Timeout.SHORT, waitForFinishSecs);
+    params.addLong("waitForFinish", hold.waitForFinishSecs());
+    return ctx.getResource("", params, ActorRun.class, hold.timeout());
   }
 
   /** Updates the run with the given fields and returns the updated object. */
@@ -271,13 +271,12 @@ public final class RunClient {
    */
   public <T> Flow.Publisher<T> iterateDatasetItems(
       DatasetListItemsOptions options, Long chunkSize, Long pollIntervalSecs, Class<T> itemClass) {
-    DatasetListItemsOptions opts = options != null ? options.copy() : new DatasetListItemsOptions();
     long pageSize = chunkSize != null && chunkSize > 0 ? chunkSize : DEFAULT_ITERATE_CHUNK_SIZE;
     long poll =
         pollIntervalSecs != null && pollIntervalSecs >= 0
             ? pollIntervalSecs
             : DEFAULT_ITERATE_POLL_INTERVAL_SECS;
-    RunDatasetItems<T> items = new RunDatasetItems<>(this, opts, pageSize, poll, itemClass);
+    RunDatasetItems<T> items = new RunDatasetItems<>(this, options, pageSize, poll, itemClass);
     return new AsyncPaginatedPublisher<>(null, null, null, (offset, limit) -> items.next());
   }
 
