@@ -5,6 +5,7 @@ import com.apify.client.dataset.DatasetClient;
 import com.apify.client.dataset.DatasetListItemsOptions;
 import com.apify.client.http.Timeout;
 import com.apify.client.internal.AsyncPaginatedPublisher;
+import com.apify.client.internal.CancellableFuture;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
@@ -333,11 +334,11 @@ public final class RunClient {
   public CompletableFuture<StreamedLog> getStreamedLog(StreamedLogOptions options) {
     Consumer<String> destination = options.destination();
     if (destination != null) {
-      return CompletableFuture.completedFuture(
+      return CancellableFuture.completed(
           new StreamedLog(log(), destination, options.fromStartValue()));
     }
     if (options.prefixValue() != null) {
-      return CompletableFuture.completedFuture(
+      return CancellableFuture.completed(
           new StreamedLog(
               log(), defaultLogDestination(options.prefixValue()), options.fromStartValue()));
     }

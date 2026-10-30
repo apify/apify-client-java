@@ -207,18 +207,11 @@ public final class RunStartSupport {
             .thenCompose(
                 run -> {
                   RunClient runClient = root.run(run.getId());
-                  CompletableFuture<StreamedLog> streamedLogFuture =
+                  CompletableFuture<?> logStarted =
                       logStreamingEnabled
-                          ? startStreamedLogQuietly(runClient, logOptions)
+                          ? startStreamedLogQuietly(runClient, logOptions, opened, finished)
                           : CancellableFuture.completed(null);
-                  return streamedLogFuture.thenCompose(
-                      streamedLog -> {
-                        opened.set(streamedLog);
-                        if (finished.get() && streamedLog != null) {
-                          streamedLog.close(); // the call ended while the log was being opened
-                        }
-                        return runClient.waitForFinish(waitSecs);
-                      });
+                  return logStarted.thenCompose(unused -> runClient.waitForFinish(waitSecs));
                 });
     // Closed from a callback of the returned future itself, which runs whether the call finishes,
     // fails or is cancelled (a stage that is cancelled never runs its own callbacks).
@@ -235,17 +228,29 @@ public final class RunStartSupport {
 
   /**
    * Starts {@code call}'s default log streaming, swallowing (rather than propagating) any failure
-   * to open the live log stream, so a transient log-endpoint issue cannot abort the run itself.
-   * Completes with the started {@link StreamedLog}, or {@code null} if it could not be started.
+   * to open the live log stream, so a transient log-endpoint issue cannot abort the run itself. The
+   * {@link StreamedLog} is handed to {@code opened} as soon as it exists, before it is started, so
+   * a call that ends while the stream is still opening can close it; one that has already ended
+   * ({@code finished}) closes it right away.
    */
-  private static CompletableFuture<StreamedLog> startStreamedLogQuietly(
-      RunClient runClient, StreamedLogOptions logOptions) {
+  private static CompletableFuture<Void> startStreamedLogQuietly(
+      RunClient runClient,
+      StreamedLogOptions logOptions,
+      AtomicReference<StreamedLog> opened,
+      AtomicBoolean finished) {
     CompletableFuture<StreamedLog> created =
-        logOptions != null ? runClient.getStreamedLog(logOptions) : runClient.getStreamedLog();
+        CancellableFuture.wrap(
+            logOptions != null ? runClient.getStreamedLog(logOptions) : runClient.getStreamedLog());
     return created
         .thenCompose(
-            streamedLog ->
-                streamedLog.start().handle((unused, error) -> error == null ? streamedLog : null))
-        .exceptionally(error -> null);
+            streamedLog -> {
+              opened.set(streamedLog);
+              if (finished.get()) {
+                streamedLog.close();
+                return CancellableFuture.<Void>completed(null);
+              }
+              return streamedLog.start();
+            })
+        .handle((unused, error) -> (Void) null);
   }
 }

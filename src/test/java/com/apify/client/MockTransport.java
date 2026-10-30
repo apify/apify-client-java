@@ -72,6 +72,14 @@ final class MockTransport implements HttpTransport {
   final List<CompletableFuture<HttpResponse<byte[]>>> hung =
       new java.util.concurrent.CopyOnWriteArrayList<>();
 
+  /** When set, streaming responses are delivered only once this gate completes. */
+  private volatile CompletableFuture<Void> streamGate;
+
+  /** Holds back every streaming response until {@code gate} completes. */
+  void gateStreams(CompletableFuture<Void> gate) {
+    this.streamGate = gate;
+  }
+
   /** When set, answers each request itself instead of serving the scripted queue. */
   private java.util.function.Function<HttpRequest, Scripted> router;
 
@@ -202,16 +210,20 @@ final class MockTransport implements HttpTransport {
     calls++;
     lastUrl = request.uri().toString();
     lastMethod = request.method();
+    HttpResponse<InputStream> response;
     if (streamQueue.isEmpty()) {
       Scripted r = responses.get(0);
-      return CompletableFuture.completedFuture(
-          new FakeStreamResponse(
-              request.uri(), r.status, new java.io.ByteArrayInputStream(r.body)));
+      response =
+          new FakeStreamResponse(request.uri(), r.status, new java.io.ByteArrayInputStream(r.body));
+    } else {
+      int idx = Math.min(streamCallIndex++, streamQueue.size() - 1);
+      StreamEntry entry = streamQueue.get(idx);
+      response = new FakeStreamResponse(request.uri(), entry.status, entry.body);
     }
-    int idx = Math.min(streamCallIndex++, streamQueue.size() - 1);
-    StreamEntry entry = streamQueue.get(idx);
-    return CompletableFuture.completedFuture(
-        new FakeStreamResponse(request.uri(), entry.status, entry.body));
+    CompletableFuture<Void> gate = streamGate;
+    return gate == null
+        ? CompletableFuture.completedFuture(response)
+        : gate.thenApply(unused -> response);
   }
 
   private static byte[] readBody(HttpRequest request) {

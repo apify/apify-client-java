@@ -595,7 +595,13 @@ public final class ResourceContext {
             : MAX_WAIT_FOR_FINISH_SECS;
     long budgetMillis = effectiveWaitSecs * 1000L;
     long start = System.currentTimeMillis();
-    return pollOnce(dataType, isTerminal, resourceName, start, budgetMillis, null, null);
+    // The polls have no timeout, and a withTimeout override does not apply to them: it would cut
+    // every hold short (a 5 s override would poll four times a second), and cancelling the returned
+    // future is the way out of a poll that never answers.
+    ResourceContext polling =
+        new ResourceContext(
+            http.withoutTimeoutOverride(), url, baseParams, apiOrigin, publicOrigin, ownId);
+    return polling.pollOnce(dataType, isTerminal, resourceName, start, budgetMillis, null, null);
   }
 
   /**
@@ -636,13 +642,10 @@ public final class ResourceContext {
     long remainingSecs = (budgetMillis - elapsed) / 1000L;
     long requestSecs = Math.min(Math.max(remainingSecs, 0), WAIT_REQUEST_SECS);
 
-    // The polls have no timeout of their own; under a withTimeout override the hold is cut to what
-    // the override covers, so the API answers before the client gives up on a poll.
-    HttpClientCore.WaitHold hold = http.waitHold(Timeout.NO_TIMEOUT, requestSecs);
     QueryParams params = new QueryParams();
-    params.addLong("waitForFinish", hold.waitForFinishSecs());
+    params.addLong("waitForFinish", requestSecs);
 
-    return this.<T>getResourceRequired("", params, dataType, hold.timeout())
+    return this.<T>getResourceRequired("", params, dataType, Timeout.NO_TIMEOUT)
         .handle(
             (value, error) -> {
               if (error == null) {
