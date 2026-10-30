@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.11.0</version>
+  <version>0.12.0</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.11.0'
+  implementation 'com.apify:apify-client:0.12.0'
 }
 ```
 
@@ -133,7 +133,12 @@ ApifyClient configured =
         .baseUrl("https://api.apify.com") // /v2 is appended automatically
         .maxRetries(8)
         .minDelayBetweenRetries(Duration.ofMillis(500))
-        .timeout(Duration.ofSeconds(360))
+        .timeoutShort(Duration.ofSeconds(5))
+        .timeoutMedium(Duration.ofSeconds(30))
+        .timeoutLong(Duration.ofSeconds(360))
+        .timeoutMax(Duration.ofSeconds(360))
+        .compression(new GzipHttpCompressor(6))
+        .header("X-Integration", "my-platform")
         .userAgentSuffix("MyTool/1.0")
         .build();
 ```
@@ -152,15 +157,70 @@ validated at call time (see below), not deferred to `build()`.
 | `publicBaseUrl(String)` | `String` | same as `baseUrl` | non-null, non-blank |
 | `maxRetries(int)` | `int` | `8` | `>= 0` |
 | `minDelayBetweenRetries(Duration)` | `Duration` | `500ms` | non-null, `>= 0` |
-| `maxDelayBetweenRetries(Duration)` | `Duration` | same as `timeout` (`360s`) | non-null, `>= 0` |
-| `timeout(Duration)` | `Duration` | `360s` | non-null, strictly `> 0` |
+| `maxDelayBetweenRetries(Duration)` | `Duration` | same as `timeoutMax` (`360s`) | non-null, `>= 0` |
+| `timeoutShort(Duration)` | `Duration` | `5s` | non-null, strictly `> 0` |
+| `timeoutMedium(Duration)` | `Duration` | `30s` | non-null, strictly `> 0` |
+| `timeoutLong(Duration)` | `Duration` | `360s` | non-null, strictly `> 0` |
+| `timeoutMax(Duration)` | `Duration` | `360s` | non-null, strictly `> 0` |
+| `compression(HttpCompressor)` | `HttpCompressor` | `BrotliHttpCompressor` (quality 6), or `GzipHttpCompressor` where the brotli native library is unavailable | non-null |
+| `header(String, String)` | `String`, `String` | none | non-blank name, non-null value |
 | `userAgentSuffix(String)` | `String` | none (no suffix appended) | any string |
 | `httpTransport(HttpTransport)` | `HttpTransport` | `new DefaultHttpTransport()` | non-null |
 
-A violated range throws `IllegalArgumentException` from the setter itself. `timeout` is the ceiling
-each retry attempt's per-request (socket) timeout grows toward — not a wall-clock bound on the
-cumulative time across all retries; the connection-establishment timeout is a separate,
-transport-level setting (see `DefaultHttpTransport`'s constructors below).
+A violated range throws `IllegalArgumentException` from the setter itself. The deprecated
+`timeout(Duration)` is an alias of `timeoutMax(Duration)`.
+
+### Timeouts
+
+Every method picks the timeout tier that fits the expected duration of its request: `short` (5s) for
+simple metadata reads and writes, `medium` (30s) for listing, batch and trigger operations, `long`
+(360s) for downloads, uploads and streaming. The three durations are set with `timeoutShort`,
+`timeoutMedium` and `timeoutLong`. A method that asks the API to hold the response with
+`waitForFinish` (`getWithWait`, `start`, building an Actor, ...) gets its tier plus that hold (at
+most 60s), so the client does not abort a request the API is still holding. The polling of
+`waitForFinish(...)`/`call(...)` and the start inside `call(...)` have no timeout.
+
+`timeoutMax` caps the timeout of a single request attempt. The first attempt gets the timeout of the
+method's tier, each retry doubles it, and none exceeds `timeoutMax`; a tier or timeout above the cap
+is capped and logged as a warning. It bounds each attempt, not the wall-clock time across all
+retries. The connection-establishment timeout is a separate, transport-level setting (see
+`DefaultHttpTransport`'s constructors below).
+
+A call that legitimately needs a different timeout gets it from `ApifyClient.withTimeout(Timeout)`,
+which returns a client that sends every request with that timeout instead of the method's tier. A
+`Timeout` is a tier (`Timeout.SHORT`, `MEDIUM`, `LONG`), an exact duration (`Timeout.ofSeconds(120)`,
+`Timeout.of(Duration)`) or `Timeout.NO_TIMEOUT` (the request is never aborted, so a stalled connection
+is not retried either):
+
+```java
+ApifyClient client = ApifyClient.create("my-api-token");
+List<JsonNode> items =
+    client
+        .withTimeout(Timeout.ofSeconds(900))
+        .dataset("my-dataset-id")
+        .listItems(new DatasetListItemsOptions())
+        .join()
+        .getItems();
+```
+
+An override is used as given, so for a `waitForFinish` request it has to cover the hold too.
+`KeyValueStoreClient.setRecord(...)` additionally takes the timeout in its `SetRecordOptions`.
+
+A request that creates a billed resource (an Actor or task run, a build) or pushes dataset items is
+not retried when it times out, since the API may already have processed it.
+
+### Request compression and default headers
+
+Request bodies of at least 1 KiB with a compressible content type are compressed with the
+configured `HttpCompressor`: `BrotliHttpCompressor` (quality 0-11, default 6; used by default where
+its native library is available) or `GzipHttpCompressor` (level 1-9, default 9), or your own
+implementation of the interface. A failing compressor fails the request; the client does not fall
+back to another coding. A body that already carries a `Content-Encoding`, and already-compressed
+content types (images, archives, ...), are sent as they are.
+
+`header(name, value)` adds a header to every request, such as an integration platform marker. It
+replaces a built-in header of the same name (`User-Agent`, `Authorization`) and is replaced by a
+header a request sets itself.
 
 `publicBaseUrl` does not affect ordinary API requests (those always use `baseUrl`); it only changes
 the origin embedded in the handful of public, directly-fetchable URLs the client builds without a
@@ -280,10 +340,11 @@ A few methods validate their own preconditions synchronously, before ever buildi
 future, and throw a plain JDK exception directly from the call site instead, not an
 `ApifyClientException` subtype (so no `.join()`/`.get()` unwrapping is involved for these):
 `ApifyClient.setStatusMessage(message, options)` throws `IllegalStateException` if the
-`ACTOR_RUN_ID` environment variable is not set, `ApifyClient.me()`'s limits methods (`limits()`,
-`updateLimits(...)`, `monthlyUsage(...)`) throw the same `IllegalStateException` if called on a
-`UserClient` that is not `me()`, and `ApifyClientBuilder`'s setters throw `IllegalArgumentException`
-on an invalid configuration value (e.g. a negative retry count). These are local, no-request-sent
+`ACTOR_RUN_ID` environment variable is not set, `ApifyClientBuilder`'s setters throw
+`IllegalArgumentException` on an invalid configuration value (e.g. a negative retry count), a
+resource client's id is rejected with `IllegalArgumentException` when it is empty or a bare `.`/`..`
+(any other id is percent-encoded into one path segment), and `DatasetClient.pushItems(...)` throws
+it for items the API would reject (anything but an object or an array of objects). These are local, no-request-sent
 failures, not something the API responded with or the transport failed to deliver, which is why
 they stay outside the request/transport exception hierarchy above — catch
 `IllegalStateException`/`IllegalArgumentException` separately if you call any of them.
@@ -317,7 +378,7 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.11.0`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.12.0`).
 - `Version.API_SPEC_VERSION` — the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters and models were last generated
   and checked against (`v2-2026-10-26T112451Z`). It is a snapshot, not a live compatibility

@@ -16,8 +16,10 @@ ApifyClient client = ApifyClient.create("my-api-token");
 ```
 
 `ApifyClient.create` takes the token as an explicit argument — it does not read `APIFY_TOKEN`
-automatically. Use `ApifyClient.builder()` for non-default settings (base URL, retries, timeout,
-user-agent suffix, custom HTTP transport).
+automatically. Use `ApifyClient.builder()` for non-default settings (base URL, retries, timeout tiers,
+compression, default headers, user-agent suffix, custom HTTP transport). `client.withTimeout(...)`
+returns a client that sends every request with a different timeout (see
+[Timeouts](../README.md#timeouts)).
 
 Get your API token from the
 [Apify Console → Settings → API & Integrations](https://console.apify.com/settings/integrations).
@@ -39,7 +41,7 @@ option types, so import each resource you use from its own package:
 | Package | Contains |
 |---|---|
 | `com.apify.client` (root) | `ApifyClient`, `ApifyClientBuilder`, `Version`, `PaginationList<T>`, `ListOptions`, `StorageListOptions`, `ApifyResource` |
-| `com.apify.client.http` | `ApifyClientException`, `ApifyApiException`, `ApifyTransportException`, `HttpTransport`, `DefaultHttpTransport`, `HttpTimeoutException` |
+| `com.apify.client.http` | `ApifyClientException`, `ApifyApiException`, `ApifyTransportException`, `HttpTransport`, `DefaultHttpTransport`, `HttpTimeoutException`, `Timeout`, `HttpCompressor`, `BrotliHttpCompressor`, `GzipHttpCompressor` |
 | `com.apify.client.actor` | `Actor`, `ActorClient`, `ActorCollectionClient`, `ActorListOptions`, `ActorStartOptions`, `ActorCallOptions`, `ActorBuildOptions`, `ActorStandby`, `ActorVersion`, `SourceCodeFile`, `ActorVersionClient`, `ActorVersionCollectionClient`, `ActorEnvVar`, `ActorEnvVarClient`, `ActorEnvVarCollectionClient`, `ValidateInputOptions`, `ActorStats`, `ActorDefaultRunOptions` |
 | `com.apify.client.build` | `Build`, `BuildClient`, `BuildCollectionClient`, `BuildActVersion`, `ActorDefinition`, `ActorDefinitionMeta`, `ActorDefinitionStorages`, `BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage` |
 | `com.apify.client.run` | `ActorRun`, `ActorRunStats`, `ActorRunOptions`, `ActorRunMeta`, `ActorRunUsage`, `RunClient`, `RunCollectionClient`, `RunListOptions`, `LastRunOptions`, `MetamorphOptions`, `RunChargeOptions`, `RunResurrectOptions`, `SetStatusMessageOptions` |
@@ -77,7 +79,7 @@ A few methods return data whose shape is not modelled by this client and is inst
 Jackson `JsonNode` (or accept an arbitrary `Object` serialized to JSON):
 
 - Read, returning a required `JsonNode` (never absent; a 404 throws rather than returning empty —
-  see [error handling](../README.md#error-handling)): `me().monthlyUsage(...)`, `me().limits()`,
+  see [error handling](../README.md#error-handling)): `me().monthlyUsage(...)`, `me().limits()` (and the same on `user(id)`),
   `dataset(id).getStatistics()`, `task(id).getInput()`.
 - Read, returning `Optional<JsonNode>` (empty when the underlying resource has none):
   `build(id).getOpenApiDefinition()`.

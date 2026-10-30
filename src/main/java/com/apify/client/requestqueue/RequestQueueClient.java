@@ -2,12 +2,14 @@ package com.apify.client.requestqueue;
 
 import com.apify.client.http.ApifyApiException;
 import com.apify.client.http.ApifyTransportException;
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.Async;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
+import java.io.ByteArrayOutputStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -126,7 +128,7 @@ public final class RequestQueueClient {
     QueryParams params = new QueryParams();
     params.addLong("limit", limit);
     withClientKey(params);
-    return ctx.getResourceRequired("head", params, RequestQueueHead.class);
+    return ctx.getResourceRequired("head", params, RequestQueueHead.class, Timeout.SHORT);
   }
 
   /** Adds a request to the queue. If {@code forefront} is true, it is added to the front. */
@@ -140,7 +142,8 @@ public final class RequestQueueClient {
         params,
         Json.toBytes(request),
         ResourceContext.CONTENT_TYPE_JSON,
-        RequestQueueOperationInfo.class);
+        RequestQueueOperationInfo.class,
+        Timeout.SHORT);
   }
 
   /** Fetches a request by ID, or empty if it does not exist. */
@@ -148,7 +151,8 @@ public final class RequestQueueClient {
     return ctx.getResource(
         "requests/" + ResourceContext.encodePathSegment(id),
         new QueryParams(),
-        RequestQueueRequest.class);
+        RequestQueueRequest.class,
+        Timeout.SHORT);
   }
 
   /**
@@ -165,7 +169,8 @@ public final class RequestQueueClient {
         params,
         Json.toBytes(request),
         ResourceContext.CONTENT_TYPE_JSON,
-        RequestQueueOperationInfo.class);
+        RequestQueueOperationInfo.class,
+        Timeout.MEDIUM);
   }
 
   /** Deletes a request by ID. */
@@ -174,7 +179,7 @@ public final class RequestQueueClient {
     String url =
         ctx.mergedParams(params)
             .applyToUrl(ctx.subUrl("requests/" + ResourceContext.encodePathSegment(id)));
-    return http.call("DELETE", url, null, "", http.baseRequestTimeout())
+    return http.call("DELETE", url, null, "", Timeout.SHORT)
         .handle(
             (resp, error) -> {
               if (error == null) {
@@ -199,7 +204,8 @@ public final class RequestQueueClient {
     QueryParams params = new QueryParams();
     params.addLong("lockSecs", lockSecs).addLong("limit", limit);
     withClientKey(params);
-    return ctx.postWithBody("head/lock", params, null, "", LockedRequestQueueHead.class);
+    return ctx.postWithBody(
+        "head/lock", params, null, "", LockedRequestQueueHead.class, Timeout.MEDIUM);
   }
 
   /**
@@ -245,11 +251,18 @@ public final class RequestQueueClient {
         MAX_PAYLOAD_SIZE_BYTES
             - (long) Math.ceil(MAX_PAYLOAD_SIZE_BYTES * PAYLOAD_SAFETY_BUFFER_PERCENT);
 
-    List<List<RequestQueueRequest>> chunks = new ArrayList<>();
-    for (int start = 0; start < requests.size(); ) {
-      int end = Math.min(start + MAX_REQUESTS_PER_BATCH, requests.size());
-      List<RequestQueueRequest> countSlice = requests.subList(start, end);
-      List<RequestQueueRequest> chunk = sliceByByteLength(countSlice, payloadSizeLimitBytes, start);
+    // Serialize every request exactly once: the byte lengths decide the chunk boundaries and the
+    // same bytes are joined into each chunk's request body (and into the body of a retry).
+    List<SerializedRequest> entries = new ArrayList<>(requests.size());
+    for (RequestQueueRequest request : requests) {
+      entries.add(new SerializedRequest(request, Json.toBytes(request)));
+    }
+
+    List<List<SerializedRequest>> chunks = new ArrayList<>();
+    for (int start = 0; start < entries.size(); ) {
+      int end = Math.min(start + MAX_REQUESTS_PER_BATCH, entries.size());
+      List<SerializedRequest> countSlice = entries.subList(start, end);
+      List<SerializedRequest> chunk = sliceByByteLength(countSlice, payloadSizeLimitBytes, start);
       chunks.add(new ArrayList<>(chunk));
       start += chunk.size();
     }
@@ -286,7 +299,7 @@ public final class RequestQueueClient {
    * worker is a chain of async continuations, not a blocked thread.
    */
   private CompletableFuture<Void> runBatchAddWorker(
-      List<List<RequestQueueRequest>> chunks,
+      List<List<SerializedRequest>> chunks,
       AtomicInteger nextChunkIndex,
       BatchAddResult[] resultsByChunk,
       boolean forefront,
@@ -313,17 +326,17 @@ public final class RequestQueueClient {
    * @throws IllegalArgumentException if any individual request's own JSON encoding already exceeds
    *     {@code maxByteLength} (no chunk size could ever fit it)
    */
-  private static List<RequestQueueRequest> sliceByByteLength(
-      List<RequestQueueRequest> requests, long maxByteLength, int startIndex) {
-    if (jsonByteLength(requests) < maxByteLength) {
+  private static List<SerializedRequest> sliceByByteLength(
+      List<SerializedRequest> requests, long maxByteLength, int startIndex) {
+    if (jsonArrayByteLength(requests) < maxByteLength) {
       return requests;
     }
 
-    List<RequestQueueRequest> sliced = new ArrayList<>();
+    List<SerializedRequest> sliced = new ArrayList<>();
     long byteLength = EMPTY_JSON_ARRAY_BYTES;
     for (int i = 0; i < requests.size(); i++) {
-      RequestQueueRequest request = requests.get(i);
-      long itemBytes = jsonByteLength(request);
+      SerializedRequest request = requests.get(i);
+      long itemBytes = request.json().length;
       if (itemBytes > maxByteLength) {
         throw new IllegalArgumentException(
             "RequestQueueClient.batchAddRequests: the request at index "
@@ -334,8 +347,8 @@ public final class RequestQueueClient {
       }
       // Every element but the first is preceded by a comma in the serialized array (`[a,b,c]` has
       // count-1 commas); account for it here so this incremental estimate agrees exactly with
-      // jsonByteLength(requests)'s full-array measurement above, rather than relying on being
-      // slightly under it.
+      // jsonArrayByteLength's full-array measurement above, rather than relying on being slightly
+      // under it.
       long commaBytes = sliced.isEmpty() ? 0 : 1;
       if (byteLength + commaBytes + itemBytes >= maxByteLength) {
         break;
@@ -352,9 +365,30 @@ public final class RequestQueueClient {
     return sliced;
   }
 
-  /** The byte length of {@code value}'s JSON encoding, as sent on the wire. */
-  private static long jsonByteLength(Object value) {
-    return Json.toBytes(value).length;
+  /** A request together with its JSON encoding, so it is serialized only once. */
+  private record SerializedRequest(RequestQueueRequest request, byte[] json) {}
+
+  /** The byte length of the JSON array that joins the given requests' encodings. */
+  private static long jsonArrayByteLength(List<SerializedRequest> requests) {
+    long length = EMPTY_JSON_ARRAY_BYTES;
+    for (SerializedRequest request : requests) {
+      length += request.json().length;
+    }
+    return requests.isEmpty() ? length : length + requests.size() - 1;
+  }
+
+  /** The JSON array of the given requests' encodings, as sent in a batch request body. */
+  private static byte[] jsonArray(List<SerializedRequest> requests) {
+    ByteArrayOutputStream out = new ByteArrayOutputStream((int) jsonArrayByteLength(requests));
+    out.write('[');
+    for (int i = 0; i < requests.size(); i++) {
+      if (i > 0) {
+        out.write(',');
+      }
+      out.writeBytes(requests.get(i).json());
+    }
+    out.write(']');
+    return out.toByteArray();
   }
 
   /**
@@ -368,7 +402,7 @@ public final class RequestQueueClient {
    * ApifyApiException} and {@link com.apify.client.http.ApifyTransportException}.
    */
   private CompletableFuture<BatchAddResult> batchAddChunkWithRetries(
-      List<RequestQueueRequest> chunk, boolean forefront, BatchAddRequestsOptions options) {
+      List<SerializedRequest> chunk, boolean forefront, BatchAddRequestsOptions options) {
     int maxRetries = options.maxUnprocessedRequestsRetriesValue();
     long minDelayMillis = options.minDelayBetweenUnprocessedRequestsRetriesMillisValue();
     return batchAddAttempt(chunk, chunk, List.of(), forefront, 0, maxRetries, minDelayMillis);
@@ -376,8 +410,8 @@ public final class RequestQueueClient {
 
   /** One attempt of the retry loop backing {@link #batchAddChunkWithRetries}. */
   private CompletableFuture<BatchAddResult> batchAddAttempt(
-      List<RequestQueueRequest> chunk,
-      List<RequestQueueRequest> toSend,
+      List<SerializedRequest> chunk,
+      List<SerializedRequest> toSend,
       List<RequestQueueOperationInfo> processedSoFar,
       boolean forefront,
       int attempt,
@@ -404,7 +438,7 @@ public final class RequestQueueClient {
               if (response != null) {
                 processed.addAll(response.getProcessedRequests());
               }
-              List<RequestQueueRequest> stillRemaining = requestsNotYetProcessed(chunk, processed);
+              List<SerializedRequest> stillRemaining = requestsNotYetProcessed(chunk, processed);
               // Any client-level failure (response == null, i.e. the batchAddChunk call above
               // failed) stops retrying this chunk immediately; whatever has not been confirmed
               // processed is reported as unprocessed below, never thrown - matching the reference
@@ -429,27 +463,30 @@ public final class RequestQueueClient {
   }
 
   private static BatchAddResult finish(
-      List<RequestQueueRequest> chunk, List<RequestQueueOperationInfo> processed) {
+      List<SerializedRequest> chunk, List<RequestQueueOperationInfo> processed) {
     BatchAddResult result = new BatchAddResult();
     result.setProcessedRequests(processed);
     // Unprocessed = everything sent minus everything acknowledged processed. Computing it here
     // (instead of trusting the last response) stays correct even if the API returns fewer entries.
-    result.setUnprocessedRequests(requestsNotYetProcessed(chunk, processed));
+    result.setUnprocessedRequests(
+        requestsNotYetProcessed(chunk, processed).stream()
+            .map(SerializedRequest::request)
+            .toList());
     return result;
   }
 
-  private static List<RequestQueueRequest> requestsNotYetProcessed(
-      List<RequestQueueRequest> chunk, List<RequestQueueOperationInfo> processed) {
+  private static List<SerializedRequest> requestsNotYetProcessed(
+      List<SerializedRequest> chunk, List<RequestQueueOperationInfo> processed) {
     Set<String> processedKeys = new HashSet<>();
     for (RequestQueueOperationInfo info : processed) {
       if (info.getUniqueKey() != null) {
         processedKeys.add(info.getUniqueKey());
       }
     }
-    List<RequestQueueRequest> remaining = new ArrayList<>();
-    for (RequestQueueRequest request : chunk) {
-      if (!processedKeys.contains(request.getUniqueKey())) {
-        remaining.add(request);
+    List<SerializedRequest> remaining = new ArrayList<>();
+    for (SerializedRequest entry : chunk) {
+      if (!processedKeys.contains(entry.request().getUniqueKey())) {
+        remaining.add(entry);
       }
     }
     return remaining;
@@ -470,16 +507,17 @@ public final class RequestQueueClient {
   }
 
   private CompletableFuture<BatchAddResult> batchAddChunk(
-      List<RequestQueueRequest> requests, boolean forefront) {
+      List<SerializedRequest> requests, boolean forefront) {
     QueryParams params = new QueryParams();
     params.addBool("forefront", forefront);
     withClientKey(params);
     return ctx.postWithBody(
         "requests/batch",
         params,
-        Json.toBytes(requests),
+        jsonArray(requests),
         ResourceContext.CONTENT_TYPE_JSON,
-        Json.type(BatchAddResult.class));
+        Json.type(BatchAddResult.class),
+        Timeout.MEDIUM);
   }
 
   /**
@@ -488,7 +526,8 @@ public final class RequestQueueClient {
    */
   public CompletableFuture<BatchDeleteResult> batchDeleteRequests(Object requests) {
     QueryParams params = withClientKey(new QueryParams());
-    return ctx.deleteWithBody("requests/batch", params, requests, BatchDeleteResult.class);
+    return ctx.deleteWithBody(
+        "requests/batch", params, requests, BatchDeleteResult.class, Timeout.SHORT);
   }
 
   /** Lists the queue's requests with pagination. */
@@ -497,7 +536,7 @@ public final class RequestQueueClient {
     QueryParams params = new QueryParams();
     options.apply(params);
     withClientKey(params);
-    return ctx.getResourceRequired("requests", params, RequestsList.class);
+    return ctx.getResourceRequired("requests", params, RequestsList.class, Timeout.MEDIUM);
   }
 
   /**
@@ -514,7 +553,8 @@ public final class RequestQueueClient {
         params,
         null,
         "",
-        RequestLockInfo.class);
+        RequestLockInfo.class,
+        Timeout.MEDIUM);
   }
 
   /**
@@ -528,7 +568,7 @@ public final class RequestQueueClient {
     String url =
         ctx.mergedParams(params)
             .applyToUrl(ctx.subUrl("requests/" + ResourceContext.encodePathSegment(id) + "/lock"));
-    return http.call("DELETE", url, null, "", http.baseRequestTimeout())
+    return http.call("DELETE", url, null, "", Timeout.SHORT)
         .handle(
             (resp, error) -> {
               if (error == null) {
@@ -546,7 +586,8 @@ public final class RequestQueueClient {
   /** Releases all locks the client holds on this queue's requests. */
   public CompletableFuture<UnlockRequestsResult> unlockRequests() {
     QueryParams params = withClientKey(new QueryParams());
-    return ctx.postWithBody("requests/unlock", params, null, "", UnlockRequestsResult.class);
+    return ctx.postWithBody(
+        "requests/unlock", params, null, "", UnlockRequestsResult.class, Timeout.LONG);
   }
 
   /**
@@ -705,7 +746,7 @@ public final class RequestQueueClient {
         }
         params.addCsv("filter", filter);
         withClientKey(params);
-        ctx.getResourceRequired("requests", params, RequestsList.class)
+        ctx.getResourceRequired("requests", params, RequestsList.class, Timeout.MEDIUM)
             .whenComplete(
                 (page, error) -> {
                   if (cancelled.get()) {

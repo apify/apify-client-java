@@ -8,6 +8,8 @@ public final class ActorDefaultRunOptions extends ApifyResource {
   private Long timeoutSecs;
   private Long memoryMbytes;
   private Boolean restartOnError;
+  private Double maxTotalChargeUsd;
+  private Boolean isMaxTotalChargeUsdSetByUser;
 
   /** The tag or number of the build run by default. */
   public String getBuild() {
@@ -27,5 +29,15 @@ public final class ActorDefaultRunOptions extends ApifyResource {
   /** Whether a run is restarted by default if it fails. */
   public Boolean getRestartOnError() {
     return restartOnError;
+  }
+
+  /** The default maximum total charge in USD for a pay-per-event run. */
+  public Double getMaxTotalChargeUsd() {
+    return maxTotalChargeUsd;
+  }
+
+  /** Whether {@link #getMaxTotalChargeUsd()} was set by the user rather than defaulted. */
+  public Boolean getIsMaxTotalChargeUsdSetByUser() {
+    return isMaxTotalChargeUsdSetByUser;
   }
 }

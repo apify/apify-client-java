@@ -1,6 +1,7 @@
 package com.apify.client.actor;
 
 import com.apify.client.PaginationList;
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.ListPublisher;
 import com.apify.client.internal.QueryParams;
@@ -21,7 +22,7 @@ public final class ActorEnvVarCollectionClient {
 
   /** Lists the version's environment variables. */
   public CompletableFuture<PaginationList<ActorEnvVar>> list() {
-    return ctx.listResource("", new QueryParams(), ActorEnvVar.class);
+    return ctx.listResource("", new QueryParams(), ActorEnvVar.class, Timeout.SHORT);
   }
 
   /**

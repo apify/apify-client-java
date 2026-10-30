@@ -1,11 +1,13 @@
 package com.apify.client.run;
 
 import com.apify.client.ApifyResource;
+import com.apify.client.internal.NormalizedUrlDeserializer;
 import com.apify.client.internal.Statuses;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Map;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /** A single execution of an Actor. */
 public final class ActorRun extends ApifyResource {
@@ -21,7 +23,10 @@ public final class ActorRun extends ApifyResource {
   private String defaultDatasetId;
   private String defaultKeyValueStoreId;
   private String defaultRequestQueueId;
+
+  @JsonDeserialize(using = NormalizedUrlDeserializer.class)
   private String containerUrl;
+
   private String generalAccess;
   private Map<String, Long> chargedEventCounts;
   private JsonNode pricingInfo;
@@ -36,6 +41,18 @@ public final class ActorRun extends ApifyResource {
   private Boolean isContainerServerReady;
   private String gitBranchName;
   private JsonNode storageIds;
+  private ActorRunStandby standby;
+  private Map<String, Long> accountedChargedEventCounts;
+  private Map<String, JsonNode> eventUsage;
+  private Double externalChargedTotalUsd;
+  private JsonNode integrationTracking;
+  private String createdByOrganizationMemberUserId;
+
+  @JsonDeserialize(using = NormalizedUrlDeserializer.class)
+  private String consoleUrl;
+
+  @JsonDeserialize(contentUsing = NormalizedUrlDeserializer.class)
+  private Map<String, String> output;
 
   /** The unique run ID. */
   public String getId() {
@@ -198,5 +215,50 @@ public final class ActorRun extends ApifyResource {
   /** Whether the run has reached a terminal (finished) status. */
   public boolean isTerminal() {
     return Statuses.isTerminal(status);
+  }
+
+  /**
+   * The Server Actor deployment that served this run; {@code null} for runs not started by a Server
+   * Actor request.
+   */
+  public ActorRunStandby getStandby() {
+    return standby;
+  }
+
+  /** The charged event counts already accounted for in billing. */
+  public Map<String, Long> getAccountedChargedEventCounts() {
+    return accountedChargedEventCounts == null
+        ? null
+        : Collections.unmodifiableMap(accountedChargedEventCounts);
+  }
+
+  /** Usage of each pay-per-event event, keyed by event name. */
+  public Map<String, JsonNode> getEventUsage() {
+    return eventUsage == null ? null : Collections.unmodifiableMap(eventUsage);
+  }
+
+  /** The total USD charged for the run outside the platform billing. */
+  public Double getExternalChargedTotalUsd() {
+    return externalChargedTotalUsd;
+  }
+
+  /** Tracking of the third-party integration that started the run, if any. */
+  public JsonNode getIntegrationTracking() {
+    return integrationTracking;
+  }
+
+  /** The organization member who started the run, when started on behalf of an organization. */
+  public String getCreatedByOrganizationMemberUserId() {
+    return createdByOrganizationMemberUserId;
+  }
+
+  /** The URL of the run in the Apify Console. */
+  public String getConsoleUrl() {
+    return consoleUrl;
+  }
+
+  /** URLs of the run output, keyed by output name. */
+  public Map<String, String> getOutput() {
+    return output == null ? null : Collections.unmodifiableMap(output);
   }
 }

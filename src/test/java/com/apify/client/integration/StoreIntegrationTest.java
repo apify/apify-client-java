@@ -20,6 +20,18 @@ class StoreIntegrationTest extends IntegrationBase {
   }
 
   @Test
+  void listStoreWithInputSchema() {
+    ApifyClient client = requireClient();
+    // With includeInputSchema the API defaults limit to (and caps it at) 10.
+    var page =
+        client.store().list(new StoreListOptions().includeInputSchema(true).limit(3L)).join();
+    assertTrue(page.getItems().size() <= 3);
+    assertTrue(
+        page.getItems().stream().allMatch(item -> item.getExtra().containsKey("inputSchema")),
+        "every listed Actor carries its compact inputSchema");
+  }
+
+  @Test
   void iterateStore() {
     ApifyClient client = requireClient();
     // Requests items one at a time (real backpressure) and stops once at least 12 have been seen,

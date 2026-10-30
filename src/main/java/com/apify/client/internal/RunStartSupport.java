@@ -3,6 +3,7 @@ package com.apify.client.internal;
 import com.apify.client.ApifyClient;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.http.ApifyApiException;
+import com.apify.client.http.Timeout;
 import com.apify.client.log.StreamedLog;
 import com.apify.client.log.StreamedLogOptions;
 import com.apify.client.run.ActorRun;
@@ -57,10 +58,10 @@ public final class RunStartSupport {
 
   /**
    * Starts a run on {@code ctx}'s {@code runs} sub-resource and completes with the created run as
-   * soon as it exists (no waiting). {@code input} is any JSON-serializable value, or {@code null}
-   * for no input. {@code applyParams} applies every start-option query parameter (build, memory,
-   * timeout, ...) the caller's options type configures; {@code contentType} is the input body's
-   * content type.
+   * soon as it exists (no waiting). {@code input} is any JSON-serializable value, a {@code byte[]}
+   * or {@link String} sent as it is, or {@code null} for no input. {@code applyParams} applies
+   * every start-option query parameter (build, memory, timeout, ...) the caller's options type
+   * configures; {@code contentType} is the input body's content type.
    *
    * @param waitForResourcesSecs mirrors {@link ActorStartOptions#waitForResources(Long)}: {@code
    *     null} does not retry a start rejected for lack of resources (the default); {@link
@@ -73,18 +74,38 @@ public final class RunStartSupport {
       Consumer<QueryParams> applyParams,
       String contentType,
       Long waitForResourcesSecs) {
+    return start(ctx, input, applyParams, contentType, waitForResourcesSecs, null);
+  }
+
+  /**
+   * As {@link #start(ResourceContext, Object, Consumer, String, Long)}, with an explicit request
+   * timeout; {@code null} picks the {@link Timeout#MEDIUM} tier extended by the start's {@code
+   * waitForFinish} hold, so the client does not abort a request the API is still holding.
+   */
+  private static CompletableFuture<ActorRun> start(
+      ResourceContext ctx,
+      Object input,
+      Consumer<QueryParams> applyParams,
+      String contentType,
+      Long waitForResourcesSecs,
+      Timeout timeout) {
     QueryParams params = new QueryParams();
     applyParams.accept(params);
-    byte[] body = input == null ? null : Json.toBytes(input);
+    byte[] body = Json.toRequestBody(input);
+    Timeout requestTimeout =
+        timeout != null
+            ? timeout
+            : ctx.http.timeoutWithHold(Timeout.MEDIUM, params.getLong("waitForFinish"));
     if (waitForResourcesSecs == null) {
-      return ctx.postWithBody("runs", params, body, contentType, ActorRun.class);
+      return postRun(ctx, params, body, contentType, requestTimeout);
     }
     long deadlineMillis =
         waitForResourcesSecs == ActorStartOptions.WAIT_FOR_RESOURCES_INDEFINITELY
             ? Long.MAX_VALUE
             : System.currentTimeMillis()
                 + Math.min(Math.max(0, waitForResourcesSecs), MAX_WAIT_FOR_RESOURCES_SECS) * 1000L;
-    return startRetryingForResources(ctx, params, body, contentType, deadlineMillis);
+    return startRetryingForResources(
+        ctx, params, body, contentType, requestTimeout, deadlineMillis);
   }
 
   /**
@@ -98,8 +119,9 @@ public final class RunStartSupport {
       QueryParams params,
       byte[] body,
       String contentType,
+      Timeout timeout,
       long deadlineMillis) {
-    return ctx.postWithBody("runs", params, body, contentType, ActorRun.class)
+    return postRun(ctx, params, body, contentType, timeout)
         .handle(
             (run, error) -> {
               if (error == null) {
@@ -125,9 +147,18 @@ public final class RunStartSupport {
                   .thenCompose(
                       unused ->
                           startRetryingForResources(
-                              ctx, params, body, contentType, deadlineMillis));
+                              ctx, params, body, contentType, timeout, deadlineMillis));
             })
         .thenCompose(future -> future);
+  }
+
+  /**
+   * Posts the run-start request. A start that timed out is not retried: the API may already have
+   * created the run, and a retry would start a second, billed one.
+   */
+  private static CompletableFuture<ActorRun> postRun(
+      ResourceContext ctx, QueryParams params, byte[] body, String contentType, Timeout timeout) {
+    return ctx.postWithBody("runs", params, body, contentType, ActorRun.class, timeout, true);
   }
 
   /**
@@ -144,7 +175,7 @@ public final class RunStartSupport {
       String contentType,
       Long waitSecs,
       Long waitForResourcesSecs) {
-    return start(ctx, input, applyParams, contentType, waitForResourcesSecs)
+    return start(ctx, input, applyParams, contentType, waitForResourcesSecs, Timeout.NO_TIMEOUT)
         .thenCompose(run -> root.run(run.getId()).waitForFinish(waitSecs));
   }
 
@@ -173,7 +204,7 @@ public final class RunStartSupport {
       StreamedLogOptions logOptions,
       Long waitSecs,
       Long waitForResourcesSecs) {
-    return start(ctx, input, applyParams, contentType, waitForResourcesSecs)
+    return start(ctx, input, applyParams, contentType, waitForResourcesSecs, Timeout.NO_TIMEOUT)
         .thenCompose(
             run -> {
               RunClient runClient = root.run(run.getId());

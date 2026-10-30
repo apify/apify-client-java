@@ -2,6 +2,7 @@ package com.apify.client.dataset;
 
 import com.apify.client.PaginationList;
 import com.apify.client.http.ApiResponse;
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.AsyncPaginatedPublisher;
 import com.apify.client.internal.Extras;
@@ -11,6 +12,7 @@ import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import com.apify.client.internal.Signatures;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -175,7 +177,7 @@ public final class DatasetClient {
   private <T> CompletableFuture<PaginationList<T>> fetchItemsPage(
       QueryParams params, Boolean desc, Class<T> itemClass) {
     String url = ctx.mergedParams(params).applyToUrl(ctx.subUrl("items"));
-    return http.call("GET", url, null, "", http.baseRequestTimeout())
+    return http.call("GET", url, null, "", Timeout.LONG)
         .thenApply(
             resp -> {
               JavaType listType = Json.parametric(List.class, Json.type(itemClass));
@@ -204,7 +206,7 @@ public final class DatasetClient {
   public CompletableFuture<byte[]> downloadItems(
       DownloadItemsFormat format, DatasetDownloadOptions options) {
     String url = itemsUrl(format, options);
-    return http.call("GET", url, null, "", http.baseRequestTimeout()).thenApply(ApiResponse::body);
+    return http.call("GET", url, null, "", Timeout.LONG).thenApply(ApiResponse::body);
   }
 
   /**
@@ -232,20 +234,69 @@ public final class DatasetClient {
   }
 
   /**
-   * Pushes one or more items to the dataset. {@code items} must serialize to a JSON object or an
-   * array of objects.
+   * Pushes one or more items to the dataset. The API accepts only a JSON object or an array of
+   * objects, so {@code items} must be one of:
+   *
+   * <ul>
+   *   <li>a single item that serializes to a JSON object (a {@link java.util.Map}, a POJO, a {@link
+   *       JsonNode} object, ...);
+   *   <li>an array or {@link java.util.Collection} of such items;
+   *   <li>a {@link String} that already is the JSON serialization of either; it is sent as it is.
+   * </ul>
+   *
+   * Anything else (a plain string, a number, an array of strings, ...) is rejected with an {@link
+   * IllegalArgumentException} before a request is sent, since the API would reject it anyway. A
+   * push that times out is not retried, so the items cannot be stored twice.
    */
   public CompletableFuture<Void> pushItems(Object items) {
+    byte[] body = items instanceof String json ? serializedItems(json) : serializedItems(items);
     // Route through mergedParams like every sibling method, so a context seeded with pinned filters
     // (e.g. actor(id).lastRun(...).dataset()) targets the same run's dataset on write as on read.
     String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("items"));
     return http.call(
-            "POST",
-            url,
-            Json.toBytes(items),
-            ResourceContext.CONTENT_TYPE_JSON_CHARSET,
-            http.baseRequestTimeout())
+            "POST", url, body, ResourceContext.CONTENT_TYPE_JSON_CHARSET, Timeout.MEDIUM, true)
         .thenApply(resp -> null);
+  }
+
+  /** Validates a pre-serialized {@code pushItems} payload and returns its bytes unchanged. */
+  private static byte[] serializedItems(String json) {
+    byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+    JsonNode tree;
+    try {
+      tree = Json.parse(bytes, JsonNode.class);
+    } catch (RuntimeException e) {
+      throw new IllegalArgumentException(
+          "pushItems: a String must be the JSON serialization of an item or an array of items", e);
+    }
+    requireItemShape(tree);
+    return bytes;
+  }
+
+  /** Serializes a {@code pushItems} payload after checking that it has an accepted shape. */
+  private static byte[] serializedItems(Object items) {
+    JsonNode tree = items == null ? null : Json.toTree(items);
+    requireItemShape(tree);
+    return Json.toBytes(tree);
+  }
+
+  private static void requireItemShape(JsonNode tree) {
+    boolean valid = tree != null && (tree.isObject() || isArrayOfObjects(tree));
+    if (!valid) {
+      throw new IllegalArgumentException(
+          "pushItems: items must be a JSON object or an array of JSON objects");
+    }
+  }
+
+  private static boolean isArrayOfObjects(JsonNode tree) {
+    if (!tree.isArray()) {
+      return false;
+    }
+    for (JsonNode element : tree) {
+      if (!element.isObject()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -256,7 +307,7 @@ public final class DatasetClient {
    * dataset is gone", so a missing dataset is reported as a failure here too.
    */
   public CompletableFuture<JsonNode> getStatistics() {
-    return ctx.getResourceRequired("statistics", new QueryParams(), JsonNode.class);
+    return ctx.getResourceRequired("statistics", new QueryParams(), JsonNode.class, Timeout.SHORT);
   }
 
   /**

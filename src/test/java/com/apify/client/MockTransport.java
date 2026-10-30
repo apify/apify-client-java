@@ -57,6 +57,15 @@ final class MockTransport implements HttpTransport {
   final List<String> bodies = new ArrayList<>();
   final List<String> urls = new ArrayList<>();
 
+  /** The per-attempt timeout of the last request, empty when the request had none. */
+  Optional<java.time.Duration> lastTimeout = Optional.empty();
+
+  /** The per-attempt timeout of every request, in order. */
+  final List<Optional<java.time.Duration>> timeouts = new ArrayList<>();
+
+  /** When set, answers each request itself instead of serving the scripted queue. */
+  private java.util.function.Function<HttpRequest, Scripted> router;
+
   /** One scripted response for {@link #sendStreamingAsync}: a status + ready-made body stream. */
   private static final class StreamEntry {
     final int status;
@@ -80,6 +89,13 @@ final class MockTransport implements HttpTransport {
 
   MockTransport(List<Scripted> responses) {
     this.responses = responses;
+  }
+
+  /** A transport that answers every request with {@code router}'s response for it. */
+  static MockTransport ofRouter(java.util.function.Function<HttpRequest, Scripted> router) {
+    MockTransport transport = new MockTransport(List.of(new Scripted(500, "no route", null)));
+    transport.router = router;
+    return transport;
   }
 
   static MockTransport ofConstant(int status, String body) {
@@ -114,6 +130,8 @@ final class MockTransport implements HttpTransport {
     lastUrl = request.uri().toString();
     urls.add(lastUrl);
     lastMethod = request.method();
+    lastTimeout = request.timeout();
+    timeouts.add(lastTimeout);
     lastBodyBytes = readBody(request);
     lastBody = lastBodyBytes == null ? null : new String(lastBodyBytes, StandardCharsets.UTF_8);
     if (lastBody != null) {
@@ -122,7 +140,7 @@ final class MockTransport implements HttpTransport {
     if (idx >= responses.size()) {
       idx = responses.size() - 1; // repeat the last entry
     }
-    Scripted r = responses.get(idx);
+    Scripted r = router != null ? router.apply(request) : responses.get(idx);
     if (r.error != null) {
       CompletableFuture<HttpResponse<byte[]>> failed = new CompletableFuture<>();
       failed.completeExceptionally(r.error);

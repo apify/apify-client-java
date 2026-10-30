@@ -64,6 +64,16 @@ public final class QueryParams {
     return this;
   }
 
+  /** The value of the first {@code key} parameter parsed as an integer, or {@code null}. */
+  public Long getLong(String key) {
+    for (Pair p : pairs) {
+      if (p.key().equals(key)) {
+        return Long.valueOf(p.value());
+      }
+    }
+    return null;
+  }
+
   boolean isEmpty() {
     return pairs.isEmpty();
   }

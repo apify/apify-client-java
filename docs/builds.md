@@ -15,7 +15,7 @@ builds) and a single build with `client.build(id)`.
 | Method | Description |
 |---|---|
 | `get()` | Fetch the build. Completes with `Optional<Build>`. |
-| `getWithWait(Long waitForFinishSecs)` | Fetch, optionally waiting server-side for the build to finish (clamped to the request timeout; the API caps server-side waiting at 60s). Completes with `Optional<Build>`. |
+| `getWithWait(Long waitForFinishSecs)` | Fetch, optionally waiting server-side for the build to finish (the API caps server-side waiting at 60s; the request timeout is extended by that hold). Completes with `Optional<Build>`. |
 | `abort()` | Abort the build. Completes with `Build`. |
 | `delete()` | Delete the build. |
 | `waitForFinish(Long waitSecs)` | Poll until the build finishes (`null` waits indefinitely); see [the run equivalent](runs.md#runclient) for its 404 handling. Completes with `Build`. |

@@ -421,41 +421,7 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
-  void getWithWaitClampsServerWaitToConfiguredTimeout() {
-    // With a 10s per-request timeout, a caller asking for waitForFinish=60 must be clamped below
-    // the timeout (10 - 5s margin = 5) so the get can't abort itself on the socket timeout.
-    MockTransport backend =
-        MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
-    ApifyClient client =
-        ApifyClient.builder()
-            .token("t")
-            .httpTransport(backend)
-            .maxRetries(0)
-            .timeout(Duration.ofSeconds(10))
-            .build();
-    client.run("r1").getWithWait(60L).join();
-    assertTrue(backend.lastUrl.contains("waitForFinish=5"), backend.lastUrl);
-    assertFalse(backend.lastUrl.contains("waitForFinish=60"), backend.lastUrl);
-  }
-
-  @Test
-  void waitForFinishClampsServerWaitToConfiguredTimeout() {
-    MockTransport backend =
-        MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}");
-    ApifyClient client =
-        ApifyClient.builder()
-            .token("t")
-            .httpTransport(backend)
-            .maxRetries(0)
-            .minDelayBetweenRetries(Duration.ofMillis(1))
-            .timeout(Duration.ofSeconds(20))
-            .build();
-    client.run("r1").waitForFinish(120L).join();
-    // 20s timeout - 5s margin = 15s server wait cap (below the 60s API cap and the 120s budget).
-    assertTrue(backend.lastUrl.contains("waitForFinish=15"), backend.lastUrl);
-  }
-
-  @Test
+  @SuppressWarnings("deprecation") // the deprecated timeout(Duration) alias is what is under test
   void builderRejectsZeroOrNegativeTimeout() {
     // Unlike the delay params (where zero legitimately means "no delay"), a zero/negative timeout
     // must be rejected at build time: it would otherwise build a client whose first request fails

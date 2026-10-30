@@ -1,10 +1,12 @@
 package com.apify.client.webhook;
 
 import com.apify.client.ApifyResource;
+import com.apify.client.internal.NormalizedUrlDeserializer;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /** A webhook notifies an external service when specific events occur. */
 public final class Webhook extends ApifyResource {
@@ -18,12 +20,23 @@ public final class Webhook extends ApifyResource {
   private JsonNode condition;
   private boolean ignoreSslErrors;
   private boolean doNotRetry;
+
+  @JsonDeserialize(using = NormalizedUrlDeserializer.class)
   private String requestUrl;
+
   private String payloadTemplate;
   private String headersTemplate;
   private String description;
   private WebhookLastDispatch lastDispatch;
   private WebhookStats stats;
+  private Boolean isApifyIntegration;
+  private Boolean isEnabled;
+  private String actionType;
+  private String title;
+  private JsonNode slackMessage;
+  private JsonNode googleMail;
+  private JsonNode googleDrive;
+  private JsonNode githubIssue;
 
   /** The unique webhook ID. */
   public String getId() {
@@ -119,5 +132,47 @@ public final class Webhook extends ApifyResource {
   /** Usage statistics for this webhook. */
   public WebhookStats getStats() {
     return stats;
+  }
+
+  /** Whether the webhook was created by an Apify integration (e.g. Slack or Google Drive). */
+  public Boolean getIsApifyIntegration() {
+    return isApifyIntegration;
+  }
+
+  /** Whether the webhook is enabled. */
+  public Boolean getIsEnabled() {
+    return isEnabled;
+  }
+
+  /**
+   * The kind of action the webhook performs (e.g. {@code "HTTP_REQUEST"} or an integration action).
+   */
+  public String getActionType() {
+    return actionType;
+  }
+
+  /** The human-readable title of the webhook. */
+  public String getTitle() {
+    return title;
+  }
+
+  /** Slack message configuration, present for Slack integration webhooks. */
+  public JsonNode getSlackMessage() {
+    return slackMessage;
+  }
+
+  /** Google Mail configuration, present for Google Mail integration webhooks. */
+  public JsonNode getGoogleMail() {
+    return googleMail;
+  }
+
+  /** Google Drive configuration, present for Google Drive integration webhooks. */
+  public JsonNode getGoogleDrive() {
+    return googleDrive;
+  }
+
+  /** GitHub issue configuration, present for GitHub integration webhooks. */
+  public JsonNode getGithubIssue() {
+    return githubIssue;
   }
 }

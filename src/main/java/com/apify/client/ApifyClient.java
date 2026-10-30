@@ -8,6 +8,7 @@ import com.apify.client.dataset.DatasetClient;
 import com.apify.client.dataset.DatasetCollectionClient;
 import com.apify.client.http.DefaultHttpTransport;
 import com.apify.client.http.HttpTransport;
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.keyvalue.KeyValueStoreClient;
@@ -97,6 +98,24 @@ public final class ApifyClient {
   /** Returns a new {@link ApifyClientBuilder} for configuring a client. */
   public static ApifyClientBuilder builder() {
     return new ApifyClientBuilder();
+  }
+
+  /**
+   * Returns a client that sends every request with the given {@link Timeout} instead of the tier
+   * each method would pick, for a call that legitimately needs more (or less) time than its
+   * default. The returned client shares this client's transport, token and retry policy, and so do
+   * all the resource clients obtained from it:
+   *
+   * <pre>{@code
+   * client.withTimeout(Timeout.ofSeconds(120)).dataset(id).listItems(options);
+   * }</pre>
+   *
+   * A timeout above the builder's {@code timeoutMax} is capped at it. For a method that asks the
+   * API to hold the response with {@code waitForFinish}, the given timeout is used as it is, so it
+   * has to cover the hold too.
+   */
+  public ApifyClient withTimeout(Timeout timeout) {
+    return new ApifyClient(http.withTimeout(timeout), baseUrl, publicBaseUrl);
   }
 
   /**

@@ -1,13 +1,17 @@
 package com.apify.client;
 
 import com.apify.client.http.DefaultHttpTransport;
+import com.apify.client.http.HttpCompressor;
 import com.apify.client.http.HttpTransport;
 import com.apify.client.http.RetryConfig;
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.HttpClientCore;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -21,7 +25,7 @@ public final class ApifyClientBuilder {
 
   static final int DEFAULT_MAX_RETRIES = 8;
   static final Duration DEFAULT_MIN_DELAY = Duration.ofMillis(500);
-  static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(360);
+  static final Duration DEFAULT_TIMEOUT = RetryConfig.DEFAULT_TIMEOUT_LONG;
 
   /** Environment variable that signals the client is running on the Apify platform. */
   static final String ENV_IS_AT_HOME = "APIFY_IS_AT_HOME";
@@ -32,9 +36,14 @@ public final class ApifyClientBuilder {
   private int maxRetries = DEFAULT_MAX_RETRIES;
   private Duration minDelayBetweenRetries = DEFAULT_MIN_DELAY;
   private Duration maxDelayBetweenRetries = DEFAULT_TIMEOUT;
-  private Duration timeout = DEFAULT_TIMEOUT;
+  private Duration timeoutShort = RetryConfig.DEFAULT_TIMEOUT_SHORT;
+  private Duration timeoutMedium = RetryConfig.DEFAULT_TIMEOUT_MEDIUM;
+  private Duration timeoutLong = RetryConfig.DEFAULT_TIMEOUT_LONG;
+  private Duration timeoutMax = DEFAULT_TIMEOUT;
   private String userAgentSuffix;
   private HttpTransport httpTransport;
+  private HttpCompressor compression;
+  private final Map<String, String> defaultHeaders = new LinkedHashMap<>();
   private BooleanSupplier isAtHomeFn = ApifyClientBuilder::defaultIsAtHome;
 
   ApifyClientBuilder() {}
@@ -74,7 +83,10 @@ public final class ApifyClientBuilder {
     return this;
   }
 
-  /** Sets the maximum (exponentially-grown) delay between retries (default equals the timeout). */
+  /**
+   * Sets the maximum (exponentially-grown) delay between retries (default 360s, as {@link
+   * #timeoutMax(Duration)}).
+   */
   public ApifyClientBuilder maxDelayBetweenRetries(Duration maxDelayBetweenRetries) {
     this.maxDelayBetweenRetries =
         requireNonNegative(maxDelayBetweenRetries, "maxDelayBetweenRetries");
@@ -82,13 +94,54 @@ public final class ApifyClientBuilder {
   }
 
   /**
-   * Sets the maximum per-attempt request (socket) timeout (default 360s): the ceiling each retry
-   * attempt's timeout grows toward, not a wall-clock bound on the cumulative time across retries.
-   * The connection-establishment timeout is separate and configured on the {@link HttpTransport}
-   * (see {@link DefaultHttpTransport#DefaultHttpTransport(Duration)}).
+   * Sets the duration of the {@link Timeout#SHORT} tier (default 5s), used by simple metadata reads
+   * and writes.
    */
+  public ApifyClientBuilder timeoutShort(Duration timeoutShort) {
+    this.timeoutShort = requirePositive(timeoutShort, "timeoutShort");
+    return this;
+  }
+
+  /**
+   * Sets the duration of the {@link Timeout#MEDIUM} tier (default 30s), used by listing, batch and
+   * trigger operations.
+   */
+  public ApifyClientBuilder timeoutMedium(Duration timeoutMedium) {
+    this.timeoutMedium = requirePositive(timeoutMedium, "timeoutMedium");
+    return this;
+  }
+
+  /**
+   * Sets the duration of the {@link Timeout#LONG} tier (default 360s), used by downloads, uploads
+   * and streaming.
+   */
+  public ApifyClientBuilder timeoutLong(Duration timeoutLong) {
+    this.timeoutLong = requirePositive(timeoutLong, "timeoutLong");
+    return this;
+  }
+
+  /**
+   * Sets the cap on the timeout of a single request attempt (default 360s). The first attempt gets
+   * the timeout of its tier (or the one given with {@link ApifyClient#withTimeout(Timeout)}), each
+   * retry doubles it, and none exceeds this cap; a tier or timeout above it is capped, with a
+   * logged warning. It bounds each attempt, not the cumulative time across retries. The
+   * connection-establishment timeout is separate and configured on the {@link HttpTransport} (see
+   * {@link DefaultHttpTransport#DefaultHttpTransport(Duration)}).
+   */
+  public ApifyClientBuilder timeoutMax(Duration timeoutMax) {
+    this.timeoutMax = requirePositive(timeoutMax, "timeoutMax");
+    return this;
+  }
+
+  /**
+   * Sets the cap on the timeout of a single request attempt.
+   *
+   * @deprecated the same as {@link #timeoutMax(Duration)}, which names what it does now that the
+   *     timeout of a request comes from a tier; use that instead.
+   */
+  @Deprecated
   public ApifyClientBuilder timeout(Duration timeout) {
-    this.timeout = requirePositive(timeout, "timeout");
+    this.timeoutMax = requirePositive(timeout, "timeout");
     return this;
   }
 
@@ -104,6 +157,36 @@ public final class ApifyClientBuilder {
       throw new IllegalArgumentException("httpTransport must not be null");
     }
     this.httpTransport = httpTransport;
+    return this;
+  }
+
+  /**
+   * Sets how request bodies of at least 1 KiB are compressed (default {@link
+   * com.apify.client.http.BrotliHttpCompressor} where its native library is available, {@link
+   * com.apify.client.http.GzipHttpCompressor} elsewhere). Pass a configured {@code
+   * BrotliHttpCompressor}/{@code GzipHttpCompressor} to tune the quality, or your own {@link
+   * HttpCompressor}.
+   */
+  public ApifyClientBuilder compression(HttpCompressor compression) {
+    if (compression == null) {
+      throw new IllegalArgumentException("compression must not be null");
+    }
+    this.compression = compression;
+    return this;
+  }
+
+  /**
+   * Adds a header sent with every request, such as an integration platform marker. It replaces a
+   * built-in header of the same name ({@code User-Agent}, {@code Authorization}) and is replaced by
+   * a header a request sets itself. Header names are compared case-insensitively.
+   */
+  public ApifyClientBuilder header(String name, String value) {
+    requireNonBlank(name, "header name");
+    if (value == null) {
+      throw new IllegalArgumentException("header value must not be null");
+    }
+    defaultHeaders.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
+    defaultHeaders.put(name, value);
     return this;
   }
 
@@ -160,8 +243,16 @@ public final class ApifyClientBuilder {
     HttpTransport transport = httpTransport != null ? httpTransport : new DefaultHttpTransport();
     String userAgent = buildUserAgent(userAgentSuffix, isAtHomeFn);
     RetryConfig retry =
-        new RetryConfig(maxRetries, minDelayBetweenRetries, maxDelayBetweenRetries, timeout);
-    HttpClientCore http = new HttpClientCore(transport, token, userAgent, retry);
+        new RetryConfig(
+            maxRetries,
+            minDelayBetweenRetries,
+            maxDelayBetweenRetries,
+            timeoutShort,
+            timeoutMedium,
+            timeoutLong,
+            timeoutMax);
+    HttpClientCore http =
+        new HttpClientCore(transport, token, userAgent, retry, compression, defaultHeaders);
 
     String apiBase = normalizeApiUrl(baseUrl);
     String publicBase = normalizeApiUrl(publicBaseUrl != null ? publicBaseUrl : baseUrl);
