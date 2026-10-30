@@ -5,20 +5,34 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.apify.client.actor.ActorCallOptions;
 import com.apify.client.actor.ActorListOptions;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.http.HttpTransport;
+import com.apify.client.http.Timeout;
+import com.apify.client.internal.CancellableFuture;
+import com.apify.client.log.StreamedLog;
+import com.apify.client.log.StreamedLogOptions;
 import com.apify.client.requestqueue.RequestQueueRequest;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Test;
 
@@ -168,14 +182,13 @@ class CancellationTest {
         200,
         new InputStream() {
           private final byte[] data =
-              "2999-01-01T00:00:00.000Z hello\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-          private final java.util.concurrent.CountDownLatch closed =
-              new java.util.concurrent.CountDownLatch(1);
+              "2999-01-01T00:00:00.000Z hello\n".getBytes(StandardCharsets.UTF_8);
+          private final CountDownLatch closed = new CountDownLatch(1);
           private int pos;
 
           // Serves one log line, then blocks like a live log with nothing more to say.
           @Override
-          public synchronized int read(byte[] b, int off, int len) throws java.io.IOException {
+          public synchronized int read(byte[] b, int off, int len) throws IOException {
             if (pos < data.length) {
               int n = Math.min(len, data.length - pos);
               System.arraycopy(data, pos, b, off, n);
@@ -187,11 +200,11 @@ class CancellationTest {
             } catch (InterruptedException e) {
               Thread.currentThread().interrupt();
             }
-            throw new java.io.IOException("stream closed");
+            throw new IOException("stream closed");
           }
 
           @Override
-          public int read() throws java.io.IOException {
+          public int read() throws IOException {
             byte[] one = new byte[1];
             int n = read(one, 0, 1);
             return n == -1 ? -1 : one[0] & 0xff;
@@ -204,9 +217,7 @@ class CancellationTest {
           }
         });
     CompletableFuture<?> future =
-        client(backend, 0)
-            .actor("a1")
-            .call(null, new com.apify.client.actor.ActorCallOptions(), null);
+        client(backend, 0).actor("a1").call(null, new ActorCallOptions(), null);
     // The start, the run fetch for the log prefix, the poll (hung) and the log stream itself.
     await(() -> backend.hung.size() == 1 && backend.calls >= 4);
 
@@ -219,13 +230,9 @@ class CancellationTest {
   void pollsIgnoreAWithTimeoutOverrideAndKeepHoldingTheFullMinute() {
     MockTransport backend =
         MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}");
-    client(backend, 0)
-        .withTimeout(com.apify.client.http.Timeout.ofSeconds(5))
-        .run("r1")
-        .waitForFinish(120L)
-        .join();
+    client(backend, 0).withTimeout(Timeout.ofSeconds(5)).run("r1").waitForFinish(120L).join();
     assertTrue(backend.lastUrl.contains("waitForFinish=60"), backend.lastUrl);
-    assertEquals(java.util.Optional.empty(), backend.lastTimeout, "a poll has no timeout");
+    assertEquals(Optional.empty(), backend.lastTimeout, "a poll has no timeout");
   }
 
   @Test
@@ -234,12 +241,11 @@ class CancellationTest {
     // future the caller holds must not keep the earlier polls' responses (or parsed runs) alive.
     // The test needs the JVM to honour System.gc(); skip it where it does not
     // (-XX:+DisableExplicitGC).
-    java.lang.ref.WeakReference<Object> control = new java.lang.ref.WeakReference<>(new Object());
+    WeakReference<Object> control = new WeakReference<>(new Object());
     System.gc();
     org.junit.jupiter.api.Assumptions.assumeTrue(control.get() == null, "System.gc() is a no-op");
 
-    java.util.List<java.lang.ref.WeakReference<byte[]>> bodies =
-        new java.util.concurrent.CopyOnWriteArrayList<>();
+    List<WeakReference<byte[]>> bodies = new CopyOnWriteArrayList<>();
     String padding = "x".repeat(1 << 20);
     MockTransport backend =
         MockTransport.ofRouter(
@@ -250,7 +256,7 @@ class CancellationTest {
                       "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\",\"statusMessage\":\""
                           + padding
                           + "\"}}");
-              bodies.add(new java.lang.ref.WeakReference<>(response.body));
+              bodies.add(new WeakReference<>(response.body));
               return response;
             });
     CompletableFuture<?> pending = client(backend, 0).run("r1").waitForFinish(600L);
@@ -280,9 +286,7 @@ class CancellationTest {
                 request.uri().getQuery() != null
                     && request.uri().getQuery().contains("waitForFinish"));
     backend.scriptStream(200, "2999-01-01T00:00:00.000Z hello\n");
-    var options =
-        new com.apify.client.actor.ActorCallOptions()
-            .logOptions(new com.apify.client.log.StreamedLogOptions().toLog(line -> {}));
+    var options = new ActorCallOptions().logOptions(new StreamedLogOptions().toLog(line -> {}));
     CompletableFuture<?> future = client(backend, 0).actor("a1").call(null, options, null);
     await(() -> backend.hung.size() == 1);
 
@@ -303,9 +307,7 @@ class CancellationTest {
     backend.gateStreams(gate); // the log stream does not open until the gate is released
     long readersBefore = readerThreads();
     CompletableFuture<?> future =
-        client(backend, 0)
-            .actor("a1")
-            .call(null, new com.apify.client.actor.ActorCallOptions(), null);
+        client(backend, 0).actor("a1").call(null, new ActorCallOptions(), null);
     await(() -> backend.calls >= 3); // start, run fetch for the prefix, and the stream open request
 
     future.cancel(true);
@@ -325,7 +327,7 @@ class CancellationTest {
     var log =
         client(backend, 0)
             .run("r1")
-            .getStreamedLog(new com.apify.client.log.StreamedLogOptions().toLog(line -> {}))
+            .getStreamedLog(new StreamedLogOptions().toLog(line -> {}))
             .join();
 
     CompletableFuture<Void> started = log.start();
@@ -346,13 +348,12 @@ class CancellationTest {
     CompletableFuture<Void> gate = new CompletableFuture<>();
     backend.gateStreams(gate);
     CompletableFuture<Void> sawLine = new CompletableFuture<>();
-    var holder =
-        new java.util.concurrent.atomic.AtomicReference<com.apify.client.log.StreamedLog>();
+    var holder = new AtomicReference<StreamedLog>();
     holder.set(
         client(backend, 0)
             .run("r1")
             .getStreamedLog(
-                new com.apify.client.log.StreamedLogOptions()
+                new StreamedLogOptions()
                     .toLog(
                         line -> {
                           holder.get().close(); // allowed from the destination: takes the lock
@@ -363,13 +364,10 @@ class CancellationTest {
     // A stage chained on start() waits for the destination, which needs the StreamedLog lock: the
     // future must therefore be completed after the lock is released.
     CompletableFuture<Void> chained =
-        holder
-            .get()
-            .start()
-            .thenRun(() -> sawLine.orTimeout(5, java.util.concurrent.TimeUnit.SECONDS).join());
+        holder.get().start().thenRun(() -> sawLine.orTimeout(5, TimeUnit.SECONDS).join());
     gate.complete(null);
 
-    chained.get(10, java.util.concurrent.TimeUnit.SECONDS);
+    chained.get(10, TimeUnit.SECONDS);
   }
 
   private static long readerThreads() {
@@ -435,8 +433,7 @@ class CancellationTest {
 
   @Test
   void aCopyOfAFailedFutureCompletesWithACompletionException() {
-    com.apify.client.internal.CancellableFuture<String> original =
-        new com.apify.client.internal.CancellableFuture<>();
+    CancellableFuture<String> original = new CancellableFuture<>();
     IllegalStateException failure = new IllegalStateException("boom");
     CompletableFuture<Throwable> seen = new CompletableFuture<>();
     original.copy().whenComplete((value, error) -> seen.complete(error));
@@ -444,7 +441,7 @@ class CancellationTest {
     original.completeExceptionally(failure);
 
     Throwable error = seen.join();
-    assertTrue(error instanceof java.util.concurrent.CompletionException, String.valueOf(error));
+    assertTrue(error instanceof CompletionException, String.valueOf(error));
     assertEquals(failure, error.getCause());
   }
 }

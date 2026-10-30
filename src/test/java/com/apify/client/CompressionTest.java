@@ -10,16 +10,20 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import com.aayushatharva.brotli4j.Brotli4jLoader;
 import com.aayushatharva.brotli4j.decoder.Decoder;
 import com.aayushatharva.brotli4j.decoder.DirectDecompress;
+import com.apify.client.http.ApifyTransportException;
 import com.apify.client.http.BrotliHttpCompressor;
 import com.apify.client.http.GzipHttpCompressor;
 import com.apify.client.http.HttpCompressor;
 import com.apify.client.internal.HttpClientCore;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Random;
+import java.util.concurrent.CompletionException;
 import java.util.zip.GZIPInputStream;
 import org.junit.jupiter.api.Test;
 
@@ -108,7 +112,7 @@ class CompressionTest {
   @Test
   void gzipDefaultsToLevelSix() throws IOException {
     assertEquals(6, GzipHttpCompressor.DEFAULT_LEVEL);
-    java.util.Random random = new java.util.Random(7);
+    Random random = new Random(7);
     String[] words = new String[300];
     for (int i = 0; i < words.length; i++) {
       StringBuilder word = new StringBuilder();
@@ -121,20 +125,20 @@ class CompressionTest {
     while (text.length() < 200_000) {
       text.append(words[random.nextInt(words.length)]).append(' ');
     }
-    byte[] payload = text.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    byte[] payload = text.toString().getBytes(StandardCharsets.UTF_8);
 
     byte[] byDefault = new GzipHttpCompressor().compress(payload);
 
     assertArrayEquals(new GzipHttpCompressor(6).compress(payload), byDefault);
     assertFalse(
-        java.util.Arrays.equals(new GzipHttpCompressor(9).compress(payload), byDefault),
+        Arrays.equals(new GzipHttpCompressor(9).compress(payload), byDefault),
         "the payload must tell level 6 from level 9");
   }
 
   @Test
   void gzipLevelTradesSizeForSpeed() throws IOException {
     byte[] payload = new byte[64 * 1024];
-    new java.util.Random(7).nextBytes(payload);
+    new Random(7).nextBytes(payload);
     for (int i = 0; i < payload.length; i += 3) {
       payload[i] = 'x'; // partly compressible, so the levels differ
     }
@@ -203,8 +207,8 @@ class CompressionTest {
             .keyValueStore(STORE_ID)
             .setRecord(RECORD_KEY, payload(4096, (byte) 'a'), CONTENT_TYPE);
 
-    var error = assertThrows(java.util.concurrent.CompletionException.class, future::join);
-    assertTrue(error.getCause() instanceof com.apify.client.http.ApifyTransportException);
+    var error = assertThrows(CompletionException.class, future::join);
+    assertTrue(error.getCause() instanceof ApifyTransportException);
     assertEquals(0, backend.calls, "a body that could not be compressed must not be sent");
   }
 
@@ -231,8 +235,8 @@ class CompressionTest {
             .keyValueStore(STORE_ID)
             .setRecord(RECORD_KEY, payload(4096, (byte) 'a'), CONTENT_TYPE);
 
-    var error = assertThrows(java.util.concurrent.CompletionException.class, future::join);
-    assertTrue(error.getCause() instanceof com.apify.client.http.ApifyTransportException);
+    var error = assertThrows(CompletionException.class, future::join);
+    assertTrue(error.getCause() instanceof ApifyTransportException);
     assertEquals(0, backend.calls);
   }
 

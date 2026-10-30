@@ -213,8 +213,9 @@ hold is sent with the tier plus the hold as the timeout. Otherwise the request i
 `timeoutMax` timeout and a hold of the requested hold or `timeoutMax` less 5 seconds, whichever is
 smaller (0 if `timeoutMax` is 5 seconds or less). Under a `withTimeout` override (which is capped at
 `timeoutMax` like any timeout) the hold is at most the override less 5 seconds. The polls of
-`waitForFinish(...)` and `call(...)` are not affected by `withTimeout`: they have no timeout and always hold for up to a minute, so cancel the returned
-future (see below) to stop one that never answers.
+`waitForFinish(...)` and `call(...)` are not affected by `withTimeout`: they have no timeout and
+always hold for up to a minute, so cancel the returned future (see below) to stop one that never
+answers.
 
 ### Cancellation
 
