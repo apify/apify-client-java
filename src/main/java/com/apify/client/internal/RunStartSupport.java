@@ -11,6 +11,8 @@ import com.apify.client.run.RunClient;
 import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -198,25 +200,37 @@ public final class RunStartSupport {
       StreamedLogOptions logOptions,
       Long waitSecs,
       Long waitForResourcesSecs) {
-    return start(ctx, input, applyParams, contentType, waitForResourcesSecs, Timeout.NO_TIMEOUT)
-        .thenCompose(
-            run -> {
-              RunClient runClient = root.run(run.getId());
-              CompletableFuture<StreamedLog> streamedLogFuture =
-                  logStreamingEnabled
-                      ? startStreamedLogQuietly(runClient, logOptions)
-                      : CancellableFuture.completed(null);
-              return streamedLogFuture.thenCompose(
-                  streamedLog ->
-                      runClient
-                          .waitForFinish(waitSecs)
-                          .whenComplete(
-                              (result, error) -> {
-                                if (streamedLog != null) {
-                                  streamedLog.close();
-                                }
-                              }));
-            });
+    AtomicReference<StreamedLog> opened = new AtomicReference<>();
+    AtomicBoolean finished = new AtomicBoolean();
+    CompletableFuture<ActorRun> result =
+        start(ctx, input, applyParams, contentType, waitForResourcesSecs, Timeout.NO_TIMEOUT)
+            .thenCompose(
+                run -> {
+                  RunClient runClient = root.run(run.getId());
+                  CompletableFuture<StreamedLog> streamedLogFuture =
+                      logStreamingEnabled
+                          ? startStreamedLogQuietly(runClient, logOptions)
+                          : CancellableFuture.completed(null);
+                  return streamedLogFuture.thenCompose(
+                      streamedLog -> {
+                        opened.set(streamedLog);
+                        if (finished.get() && streamedLog != null) {
+                          streamedLog.close(); // the call ended while the log was being opened
+                        }
+                        return runClient.waitForFinish(waitSecs);
+                      });
+                });
+    // Closed from a callback of the returned future itself, which runs whether the call finishes,
+    // fails or is cancelled (a stage that is cancelled never runs its own callbacks).
+    result.whenComplete(
+        (run, error) -> {
+          finished.set(true);
+          StreamedLog streamedLog = opened.get();
+          if (streamedLog != null) {
+            streamedLog.close();
+          }
+        });
+    return result;
   }
 
   /**

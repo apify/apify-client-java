@@ -111,8 +111,9 @@ public final class ApifyClient {
    * }</pre>
    *
    * A timeout above the builder's {@code timeoutMax} is capped at it. For a method that asks the
-   * API to hold the response with {@code waitForFinish}, the given timeout is used as it is, so it
-   * has to cover the hold too.
+   * API to hold the response with {@code waitForFinish} (and for the polling of {@code
+   * waitForFinish}/{@code call}), the given timeout is kept and the hold is cut to what it covers,
+   * the timeout less 5 seconds, so the API answers before the client gives up on the request.
    */
   public ApifyClient withTimeout(Timeout timeout) {
     return new ApifyClient(http.withTimeout(timeout), baseUrl, publicBaseUrl);

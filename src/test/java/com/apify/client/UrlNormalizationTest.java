@@ -79,6 +79,21 @@ class UrlNormalizationTest {
   }
 
   @Test
+  void emptyUserInfoAndPasswordAreDropped() {
+    assertEquals("https://user@h.test/", UrlNormalizer.normalize("https://user:@h.test/"));
+    assertEquals("https://h.test/", UrlNormalizer.normalize("https://@h.test/"));
+    assertEquals("https://h.test/", UrlNormalizer.normalize("https://:@h.test"));
+  }
+
+  @Test
+  void leadingZerosOfAPortDoNotCount() {
+    assertEquals("https://h.test/x", UrlNormalizer.normalize("https://h.test:0000443/x"));
+    assertEquals("http://h.test/", UrlNormalizer.normalize("http://h.test:00080/"));
+    assertEquals("https://h.test:8080/", UrlNormalizer.normalize("https://h.test:008080/"));
+    assertEquals("https://h.test:0/", UrlNormalizer.normalize("https://h.test:000/"));
+  }
+
+  @Test
   void anInvalidPortLeavesTheValueAlone() {
     assertEquals(
         "https://example.com:99999999999/",

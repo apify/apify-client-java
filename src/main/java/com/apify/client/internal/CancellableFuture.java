@@ -1,5 +1,6 @@
 package com.apify.client.internal;
 
+import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -18,8 +19,14 @@ import java.util.function.Function;
  */
 public final class CancellableFuture<T> extends CompletableFuture<T> {
 
-  /** The futures this one depends on, cancelled together with it. */
-  private final ConcurrentLinkedQueue<CompletableFuture<?>> upstream =
+  /**
+   * The futures this one depends on, cancelled together with it. Held weakly: a future that is
+   * still pending is kept alive by whatever will complete it (the request in flight, the timer, the
+   * stage it feeds), and holding a completed one strongly would keep its result (a response body,
+   * say) reachable from every later stage for as long as the call lives, which for a long {@code
+   * waitForFinish} poll loop is unbounded.
+   */
+  private final ConcurrentLinkedQueue<WeakReference<CompletableFuture<?>>> upstream =
       new ConcurrentLinkedQueue<>();
 
   public CancellableFuture() {}
@@ -75,7 +82,7 @@ public final class CancellableFuture<T> extends CompletableFuture<T> {
 
   /** Makes {@code other} be cancelled whenever this future is (now, if it already is). */
   public void link(CompletableFuture<?> other) {
-    upstream.add(other);
+    upstream.add(new WeakReference<>(other));
     if (isCancelled()) {
       other.cancel(true);
     }
@@ -85,8 +92,11 @@ public final class CancellableFuture<T> extends CompletableFuture<T> {
   public boolean cancel(boolean mayInterruptIfRunning) {
     boolean cancelled = super.cancel(mayInterruptIfRunning);
     if (cancelled) {
-      for (CompletableFuture<?> source : upstream) {
-        source.cancel(mayInterruptIfRunning);
+      for (WeakReference<CompletableFuture<?>> reference : upstream) {
+        CompletableFuture<?> source = reference.get();
+        if (source != null) {
+          source.cancel(mayInterruptIfRunning);
+        }
       }
     }
     return cancelled;
@@ -96,7 +106,7 @@ public final class CancellableFuture<T> extends CompletableFuture<T> {
   @Override
   public <U> CompletableFuture<U> newIncompleteFuture() {
     CancellableFuture<U> dependent = new CancellableFuture<>();
-    dependent.upstream.add(this);
+    dependent.upstream.add(new WeakReference<>(this));
     return dependent;
   }
 
@@ -134,6 +144,7 @@ public final class CancellableFuture<T> extends CompletableFuture<T> {
     synchronized (composition) {
       composition.dependent = dependent;
       early = composition.inner;
+      composition.inner = null;
     }
     if (early != null) {
       dependent.link(early);

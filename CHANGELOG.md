@@ -56,6 +56,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Cancelling a future the client returned (`CompletableFuture.cancel`) now aborts the request in
   flight and stops the retries, `waitForFinish`/`call` polling and iteration pages that would follow;
   cancelling a derived stage (`thenApply`, `thenCompose`, ...) cancels the call it comes from.
+  Cancelling `call(...)` also stops its log redirection. See the Cancellation section of the README.
 - `pushItems` rejects what the API rejects (anything but an object or an array of objects) before a
   request is sent, and sends a pre-serialized `String` as it is.
 - An Actor or task input given as `byte[]` or `String` is sent as it is instead of being wrapped in
