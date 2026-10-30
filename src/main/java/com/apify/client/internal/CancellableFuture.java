@@ -116,7 +116,7 @@ public final class CancellableFuture<T> extends CompletableFuture<T> {
             copy.complete(value);
           } else {
             copy.completeExceptionally(
-                error instanceof CompletionException ? error.getCause() : error);
+                error instanceof CompletionException ? error : new CompletionException(error));
           }
         });
     return copy;

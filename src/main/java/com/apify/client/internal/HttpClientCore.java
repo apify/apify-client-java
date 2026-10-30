@@ -223,10 +223,11 @@ public final class HttpClientCore {
    *
    * <p>The hold is at most {@link #MAX_HOLD_SECS} and is cut down to what the request timeout can
    * cover, so the client never aborts a request the API is still holding (which, for a start or a
-   * build, would retry a call that creates a resource). Without an override the timeout is the
-   * tier's plus the hold, and the hold is limited by what {@code timeoutMax} leaves above the tier.
-   * An override set by {@link #withTimeout} is kept as given, and the hold is limited to it less a
-   * safety margin.
+   * build, would retry a call that creates a resource). Without an override, when the tier plus the
+   * hold fits under {@code timeoutMax} the timeout is the tier's plus the hold; otherwise the
+   * timeout is {@code timeoutMax} and the hold is at most {@code timeoutMax} less a safety margin
+   * (0 if that is not positive). An override set by {@link #withTimeout} is kept as given, and the
+   * hold is limited to it less a safety margin.
    */
   public WaitHold waitHold(Timeout tier, Long requestedHold) {
     if (requestedHold == null) {

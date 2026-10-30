@@ -108,13 +108,27 @@ class CompressionTest {
   @Test
   void gzipDefaultsToLevelSix() throws IOException {
     assertEquals(6, GzipHttpCompressor.DEFAULT_LEVEL);
-    byte[] payload = new byte[64 * 1024];
-    new java.util.Random(3).nextBytes(payload);
-    for (int i = 0; i < payload.length; i += 3) {
-      payload[i] = 'x';
+    java.util.Random random = new java.util.Random(7);
+    String[] words = new String[300];
+    for (int i = 0; i < words.length; i++) {
+      StringBuilder word = new StringBuilder();
+      for (int j = 3 + random.nextInt(6); j > 0; j--) {
+        word.append((char) ('a' + random.nextInt(26)));
+      }
+      words[i] = word.toString();
     }
-    assertArrayEquals(
-        new GzipHttpCompressor(6).compress(payload), new GzipHttpCompressor().compress(payload));
+    StringBuilder text = new StringBuilder();
+    while (text.length() < 200_000) {
+      text.append(words[random.nextInt(words.length)]).append(' ');
+    }
+    byte[] payload = text.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+    byte[] byDefault = new GzipHttpCompressor().compress(payload);
+
+    assertArrayEquals(new GzipHttpCompressor(6).compress(payload), byDefault);
+    assertFalse(
+        java.util.Arrays.equals(new GzipHttpCompressor(9).compress(payload), byDefault),
+        "the payload must tell level 6 from level 9");
   }
 
   @Test

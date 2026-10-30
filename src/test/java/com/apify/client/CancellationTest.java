@@ -7,11 +7,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.actor.ActorListOptions;
 import com.apify.client.actor.ActorStartOptions;
+import com.apify.client.http.HttpTransport;
 import com.apify.client.requestqueue.RequestQueueRequest;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Test;
 
@@ -23,7 +30,7 @@ class CancellationTest {
 
   private static final String RUN_JSON = "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}";
 
-  private static ApifyClient client(com.apify.client.http.HttpTransport backend, int maxRetries) {
+  private static ApifyClient client(HttpTransport backend, int maxRetries) {
     return ApifyClient.builder()
         .token("t")
         .httpTransport(backend)
@@ -156,11 +163,10 @@ class CancellationTest {
             request ->
                 request.uri().getQuery() != null
                     && request.uri().getQuery().contains("waitForFinish"));
-    java.util.concurrent.atomic.AtomicBoolean streamClosed =
-        new java.util.concurrent.atomic.AtomicBoolean();
+    AtomicBoolean streamClosed = new AtomicBoolean();
     backend.scriptStream(
         200,
-        new java.io.InputStream() {
+        new InputStream() {
           private final byte[] data =
               "2999-01-01T00:00:00.000Z hello\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
           private final java.util.concurrent.CountDownLatch closed =
@@ -374,10 +380,9 @@ class CancellationTest {
 
   @Test
   void aCancelThatRacesAStreamResponseClosesItsBody() throws Exception {
-    java.util.concurrent.atomic.AtomicBoolean closed =
-        new java.util.concurrent.atomic.AtomicBoolean();
-    java.io.InputStream body =
-        new java.io.ByteArrayInputStream(new byte[0]) {
+    AtomicBoolean closed = new AtomicBoolean();
+    InputStream body =
+        new ByteArrayInputStream(new byte[0]) {
           @Override
           public void close() {
             closed.set(true);
@@ -385,34 +390,30 @@ class CancellationTest {
         };
     MockTransport mock = MockTransport.ofConstant(200, "");
     mock.scriptStream(200, body);
-    java.net.http.HttpRequest request =
-        java.net.http.HttpRequest.newBuilder(java.net.URI.create("https://x/y")).build();
-    java.net.http.HttpResponse<java.io.InputStream> response =
-        mock.sendStreamingAsync(request).join();
+    HttpRequest request = HttpRequest.newBuilder(URI.create("https://x/y")).build();
+    HttpResponse<InputStream> response = mock.sendStreamingAsync(request).join();
     // An exchange that has already produced its response: cancelling it is a no-op, as in the JDK
     // client once the headers have arrived but before the callback has run.
-    CompletableFuture<java.net.http.HttpResponse<java.io.InputStream>> exchange =
+    CompletableFuture<HttpResponse<InputStream>> exchange =
         new CompletableFuture<>() {
           @Override
           public boolean cancel(boolean mayInterruptIfRunning) {
             return false;
           }
         };
-    com.apify.client.http.HttpTransport transport =
-        new com.apify.client.http.HttpTransport() {
+    HttpTransport transport =
+        new HttpTransport() {
           @Override
-          public CompletableFuture<java.net.http.HttpResponse<byte[]>> sendAsync(
-              java.net.http.HttpRequest r) {
+          public CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest r) {
             return mock.sendAsync(r);
           }
 
           @Override
-          public CompletableFuture<java.net.http.HttpResponse<java.io.InputStream>>
-              sendStreamingAsync(java.net.http.HttpRequest r) {
+          public CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest r) {
             return exchange;
           }
         };
-    CompletableFuture<java.io.InputStream> stream = client(transport, 0).run("r1").log().stream();
+    CompletableFuture<InputStream> stream = client(transport, 0).run("r1").log().stream();
 
     assertTrue(stream.cancel(true));
     exchange.complete(response);
@@ -430,5 +431,20 @@ class CancellationTest {
 
     assertFalse(shared.isCancelled());
     assertFalse(backend.allHungCancelled(), "the request behind the original keeps running");
+  }
+
+  @Test
+  void aCopyOfAFailedFutureCompletesWithACompletionException() {
+    com.apify.client.internal.CancellableFuture<String> original =
+        new com.apify.client.internal.CancellableFuture<>();
+    IllegalStateException failure = new IllegalStateException("boom");
+    CompletableFuture<Throwable> seen = new CompletableFuture<>();
+    original.copy().whenComplete((value, error) -> seen.complete(error));
+
+    original.completeExceptionally(failure);
+
+    Throwable error = seen.join();
+    assertTrue(error instanceof java.util.concurrent.CompletionException, String.valueOf(error));
+    assertEquals(failure, error.getCause());
   }
 }

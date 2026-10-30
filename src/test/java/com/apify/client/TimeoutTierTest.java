@@ -178,7 +178,7 @@ class TimeoutTierTest {
   }
 
   @Test
-  void aHoldIsCutToWhatTimeoutMaxLeavesAboveTheTier() {
+  void aHoldIsCutToTimeoutMaxLessTheMargin() {
     MockTransport backend = MockTransport.ofConstant(200, RUN_JSON);
     ApifyClient client = builder(backend).timeoutMax(Duration.ofSeconds(12)).build();
 
