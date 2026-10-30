@@ -203,14 +203,34 @@ List<JsonNode> items =
         .getItems();
 ```
 
-An override is used as given, so for a `waitForFinish` request it has to cover the hold too.
 `KeyValueStoreClient.setRecord(...)` additionally takes the timeout in its `SetRecordOptions`.
 
 A `pushItems` request that times out is not retried, since the API may already have stored the items.
 
-A hold is cut down to what the request timeout can cover: with a small `timeoutMax` (or an override
-from `withTimeout`), `waitForFinish` is sent as a smaller value so the API answers before the client
-gives up on the request.
+A `waitForFinish` hold is cut down to what the request timeout can cover, so the API answers before
+the client gives up on the request: with a small `timeoutMax`, the hold is what `timeoutMax` leaves
+above the tier, and under a `withTimeout` override (which is kept as given) it is the override less
+5 seconds. The same applies to every poll of `waitForFinish(...)` and `call(...)`.
+
+### Cancellation
+
+Every method returns a `CompletableFuture` (or a `Flow.Publisher`), and cancelling it cancels the
+work behind it: `future.cancel(true)` aborts the request in flight and stops the retries, the
+`waitForFinish`/`call` polling and the pages of an iteration that would follow; cancelling the
+`Flow.Subscription` of a publisher does the same for the page being fetched. This is the way out of a
+request that has no timeout (the polls of `waitForFinish`/`call` and `Timeout.NO_TIMEOUT`):
+
+```java
+CompletableFuture<ActorRun> call = client.actor("my-actor").call(null, new ActorStartOptions(), null);
+// ... later, when the result is no longer needed:
+call.cancel(true); // stops the polling and the log redirection; the run itself keeps running
+```
+
+A cancelled future completes with a `CancellationException`. Cancelling a stage derived from a
+client future (`future.thenApply(...)`, `.thenCompose(...)`) cancels the call it comes from, and so
+fails the other stages derived from the same future with a `CancellationException` too; derive one
+stage per call, or cancel the future the client returned. Cancelling does not undo what the API
+already did: a started run keeps running (abort it with `RunClient.abort(...)`).
 
 ### Request compression and default headers
 

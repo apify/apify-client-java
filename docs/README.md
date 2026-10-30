@@ -73,6 +73,14 @@ Raw-JSON return values use Jackson's `tools.jackson.databind.JsonNode`. Jackson 
 `tools.jackson.*` package, not the older `com.fasterxml.jackson.databind.*` from Jackson 2) is a
 transitive dependency of this client, so it is already on your classpath.
 
+## Cancellation
+
+Cancelling a future a client method returned (`future.cancel(true)`), or the `Flow.Subscription` of
+an iteration, aborts the request in flight and stops the retries, the `waitForFinish`/`call` polling
+and the pages that would follow; see [Cancellation](../README.md#cancellation) for the details and
+the caveat about derived stages. A cancelled `call(...)` also stops redirecting the run's log, but
+the run itself keeps running.
+
 ## Raw JSON values
 
 A few methods return data whose shape is not modelled by this client and is instead exposed as a

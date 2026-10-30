@@ -56,7 +56,8 @@ public final class UrlNormalizer {
     String userInfo = "";
     int at = authority.lastIndexOf('@');
     if (at >= 0) {
-      userInfo = encodeUserInfo(authority.substring(0, at)) + "@";
+      String encoded = encodeUserInfo(authority.substring(0, at));
+      userInfo = encoded.isEmpty() ? "" : encoded + "@";
       authority = authority.substring(at + 1);
     }
     String host = authority;
@@ -70,15 +71,24 @@ public final class UrlNormalizer {
       return value;
     }
     host = normalizeHost(host);
-    // At most five digits: anything longer is above MAX_PORT, and keeps parseInt from overflowing.
-    if (host == null || !port.matches("\\d{0,5}") || (!port.isEmpty() && toPort(port) > MAX_PORT)) {
+    if (host == null || !port.matches("\\d*")) {
       return value;
     }
-    if (!port.isEmpty() && defaultPort != null && toPort(port) == defaultPort) {
-      port = "";
+    // Leading zeros do not count; a port with more digits than MAX_PORT has is above it, which also
+    // keeps parseInt from overflowing.
+    String digits = port.replaceFirst("^0+(?=\\d)", "");
+    if (digits.length() > String.valueOf(MAX_PORT).length()) {
+      return value;
     }
-    if (!port.isEmpty()) {
-      port = ":" + toPort(port);
+    port = "";
+    if (!digits.isEmpty()) {
+      int number = Integer.parseInt(digits);
+      if (number > MAX_PORT) {
+        return value;
+      }
+      if (defaultPort == null || number != defaultPort) {
+        port = ":" + number;
+      }
     }
 
     String rawPath = special ? m.group("path").replace('\\', '/') : m.group("path");
@@ -95,22 +105,16 @@ public final class UrlNormalizer {
     return scheme + "://" + userInfo + host + port + path + query + fragment;
   }
 
-  private static int toPort(String digits) {
-    return Integer.parseInt(digits);
-  }
-
   /**
    * Encodes the {@code username[:password]} part of the authority: each of the two is encoded on
-   * its own, so the separator between them stays a colon.
+   * its own, so the separator between them stays a colon, and an empty one is dropped.
    */
   private static String encodeUserInfo(String userInfo) {
     int colon = userInfo.indexOf(':');
-    if (colon < 0) {
-      return encode(userInfo, USERINFO_UNSAFE);
-    }
-    return encode(userInfo.substring(0, colon), USERINFO_UNSAFE)
-        + ":"
-        + encode(userInfo.substring(colon + 1), USERINFO_UNSAFE);
+    String username = encode(colon < 0 ? userInfo : userInfo.substring(0, colon), USERINFO_UNSAFE);
+    String password = colon < 0 ? "" : encode(userInfo.substring(colon + 1), USERINFO_UNSAFE);
+    // An empty username or password is dropped, along with the separator when the password is.
+    return password.isEmpty() ? username : username + ":" + password;
   }
 
   /**

@@ -238,7 +238,7 @@ class ClientInputTest {
         MockTransport.ofConstant(
             200, "{\"data\":{\"id\":\"s1\",\"uiState\":{\"mode\":\"advanced\"}}}");
     schedule = client(backend).schedule("s1").get().join().orElseThrow();
-    assertEquals("advanced", schedule.getUiState().get("mode").asText());
+    assertEquals("advanced", schedule.getUiState().get("mode").asString());
   }
 
   @Test
@@ -263,7 +263,7 @@ class ClientInputTest {
     var webhook = client(backend).webhook("w1").get().join().orElseThrow();
     assertTrue(webhook.getIsApifyIntegration());
     assertEquals("SLACK_MESSAGE", webhook.getActionType());
-    assertEquals("C1", webhook.getSlackMessage().get("channelId").asText());
+    assertEquals("C1", webhook.getSlackMessage().get("channelId").asString());
   }
 
   @Test

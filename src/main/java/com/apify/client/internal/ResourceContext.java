@@ -636,10 +636,13 @@ public final class ResourceContext {
     long remainingSecs = (budgetMillis - elapsed) / 1000L;
     long requestSecs = Math.min(Math.max(remainingSecs, 0), WAIT_REQUEST_SECS);
 
+    // The polls have no timeout of their own; under a withTimeout override the hold is cut to what
+    // the override covers, so the API answers before the client gives up on a poll.
+    HttpClientCore.WaitHold hold = http.waitHold(Timeout.NO_TIMEOUT, requestSecs);
     QueryParams params = new QueryParams();
-    params.addLong("waitForFinish", requestSecs);
+    params.addLong("waitForFinish", hold.waitForFinishSecs());
 
-    return this.<T>getResourceRequired("", params, dataType, Timeout.NO_TIMEOUT)
+    return this.<T>getResourceRequired("", params, dataType, hold.timeout())
         .handle(
             (value, error) -> {
               if (error == null) {
