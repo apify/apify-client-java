@@ -4,6 +4,7 @@ import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Function;
@@ -100,6 +101,25 @@ public final class CancellableFuture<T> extends CompletableFuture<T> {
       }
     }
     return cancelled;
+  }
+
+  /**
+   * A defensive copy: completes with this future's outcome, but cancelling the copy does not cancel
+   * this future or its request.
+   */
+  @Override
+  public CompletableFuture<T> copy() {
+    CancellableFuture<T> copy = new CancellableFuture<>();
+    whenComplete(
+        (value, error) -> {
+          if (error == null) {
+            copy.complete(value);
+          } else {
+            copy.completeExceptionally(
+                error instanceof CompletionException ? error.getCause() : error);
+          }
+        });
+    return copy;
   }
 
   /** Every stage derived from this one cancels this one when it is cancelled. */

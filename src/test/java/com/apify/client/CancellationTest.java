@@ -23,7 +23,7 @@ class CancellationTest {
 
   private static final String RUN_JSON = "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}";
 
-  private static ApifyClient client(MockTransport backend, int maxRetries) {
+  private static ApifyClient client(com.apify.client.http.HttpTransport backend, int maxRetries) {
     return ApifyClient.builder()
         .token("t")
         .httpTransport(backend)
@@ -370,5 +370,65 @@ class CancellationTest {
     return Thread.getAllStackTraces().keySet().stream()
         .filter(thread -> thread.getName().equals("apify-streamed-log") && thread.isAlive())
         .count();
+  }
+
+  @Test
+  void aCancelThatRacesAStreamResponseClosesItsBody() throws Exception {
+    java.util.concurrent.atomic.AtomicBoolean closed =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    java.io.InputStream body =
+        new java.io.ByteArrayInputStream(new byte[0]) {
+          @Override
+          public void close() {
+            closed.set(true);
+          }
+        };
+    MockTransport mock = MockTransport.ofConstant(200, "");
+    mock.scriptStream(200, body);
+    java.net.http.HttpRequest request =
+        java.net.http.HttpRequest.newBuilder(java.net.URI.create("https://x/y")).build();
+    java.net.http.HttpResponse<java.io.InputStream> response =
+        mock.sendStreamingAsync(request).join();
+    // An exchange that has already produced its response: cancelling it is a no-op, as in the JDK
+    // client once the headers have arrived but before the callback has run.
+    CompletableFuture<java.net.http.HttpResponse<java.io.InputStream>> exchange =
+        new CompletableFuture<>() {
+          @Override
+          public boolean cancel(boolean mayInterruptIfRunning) {
+            return false;
+          }
+        };
+    com.apify.client.http.HttpTransport transport =
+        new com.apify.client.http.HttpTransport() {
+          @Override
+          public CompletableFuture<java.net.http.HttpResponse<byte[]>> sendAsync(
+              java.net.http.HttpRequest r) {
+            return mock.sendAsync(r);
+          }
+
+          @Override
+          public CompletableFuture<java.net.http.HttpResponse<java.io.InputStream>>
+              sendStreamingAsync(java.net.http.HttpRequest r) {
+            return exchange;
+          }
+        };
+    CompletableFuture<java.io.InputStream> stream = client(transport, 0).run("r1").log().stream();
+
+    assertTrue(stream.cancel(true));
+    exchange.complete(response);
+
+    await(closed::get);
+  }
+
+  @Test
+  void cancellingACopyDoesNotCancelTheOriginal() throws InterruptedException {
+    MockTransport backend = MockTransport.ofHanging(request -> true);
+    CompletableFuture<?> shared = client(backend, 0).run("r1").get();
+    await(() -> backend.calls == 1);
+
+    assertTrue(shared.copy().cancel(true));
+
+    assertFalse(shared.isCancelled());
+    assertFalse(backend.allHungCancelled(), "the request behind the original keeps running");
   }
 }

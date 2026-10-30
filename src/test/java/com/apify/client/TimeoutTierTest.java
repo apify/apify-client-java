@@ -188,8 +188,20 @@ class TimeoutTierTest {
 
     client.actor("a1").start(null, new ActorStartOptions().waitForFinish(60L)).join();
     assertTrue(
-        backend.lastUrl.contains("waitForFinish=0"),
-        "the 30s medium tier is capped at 12s, so no hold fits: " + backend.lastUrl);
+        backend.lastUrl.contains("waitForFinish=7"),
+        "the 30s medium tier is capped at 12s: the hold is cut to the cap less the margin: "
+            + backend.lastUrl);
+    assertEquals(secs(12), backend.lastTimeout);
+  }
+
+  @Test
+  void startKeepsWaitForFinishUnderTheDeprecatedTimeoutAlias() {
+    MockTransport backend = MockTransport.ofConstant(200, RUN_JSON);
+    ApifyClient client = builder(backend).timeout(Duration.ofSeconds(30)).build();
+
+    client.actor("a1").start(null, new ActorStartOptions().waitForFinish(20L)).join();
+
+    assertTrue(backend.lastUrl.contains("waitForFinish=20"), backend.lastUrl);
   }
 
   @Test

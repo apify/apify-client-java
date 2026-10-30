@@ -106,6 +106,18 @@ class CompressionTest {
   }
 
   @Test
+  void gzipDefaultsToLevelSix() throws IOException {
+    assertEquals(6, GzipHttpCompressor.DEFAULT_LEVEL);
+    byte[] payload = new byte[64 * 1024];
+    new java.util.Random(3).nextBytes(payload);
+    for (int i = 0; i < payload.length; i += 3) {
+      payload[i] = 'x';
+    }
+    assertArrayEquals(
+        new GzipHttpCompressor(6).compress(payload), new GzipHttpCompressor().compress(payload));
+  }
+
+  @Test
   void gzipLevelTradesSizeForSpeed() throws IOException {
     byte[] payload = new byte[64 * 1024];
     new java.util.Random(7).nextBytes(payload);

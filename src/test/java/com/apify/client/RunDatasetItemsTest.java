@@ -196,4 +196,37 @@ class RunDatasetItemsTest {
             .join();
     assertEquals(List.of(2, 3), ns(items));
   }
+
+  @Test
+  void aLastRunClientStaysOnTheRunItFirstResolvedTo() {
+    FakeRun fake = new FakeRun(4, 2, 0);
+    AtomicInteger lastCalls = new AtomicInteger();
+    List<String> paths = new ArrayList<>();
+    Function<HttpRequest, MockTransport.Scripted> router =
+        request -> {
+          String path = request.uri().getPath();
+          paths.add(path);
+          if (path.endsWith("/actors/a/runs/last")) {
+            String id = lastCalls.incrementAndGet() == 1 ? "r1" : "r2";
+            return MockTransport.ok(
+                200, "{\"data\":{\"id\":\"" + id + "\",\"status\":\"RUNNING\"}}");
+          }
+          return fake.answer(request);
+        };
+    List<JsonNode> items =
+        Publishers.collect(
+                client(router)
+                    .actor("a")
+                    .lastRun(new com.apify.client.run.LastRunOptions())
+                    .iterateDatasetItems(new DatasetListItemsOptions(), 2L, 0L, JsonNode.class))
+            .join();
+
+    assertEquals(range(0, 4), ns(items));
+    assertTrue(
+        paths.stream()
+            .filter(p -> !p.endsWith("/runs/last"))
+            .allMatch(p -> p.contains("/actor-runs/r1")),
+        paths.toString());
+    assertTrue(paths.stream().noneMatch(p -> p.contains("r2")), paths.toString());
+  }
 }

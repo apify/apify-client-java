@@ -17,7 +17,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and streaming `LONG`), a request with `waitForFinish` adds the hold to its tier, and the polling of
   `waitForFinish`/`call` has no timeout. `SetRecordOptions.timeout(Timeout)`.
 - Configurable request compression: `HttpCompressor`, `BrotliHttpCompressor` (quality 0-11) and
-  `GzipHttpCompressor` (level 1-9) with `ApifyClientBuilder.compression(...)`.
+  `GzipHttpCompressor` (level 1-9, default 6) with `ApifyClientBuilder.compression(...)`.
 - `ApifyClientBuilder.header(name, value)`: default headers sent with every request.
 - `RunClient.iterateDatasetItems(...)`: iterate the items of a run's default dataset while the run
   is still producing them.

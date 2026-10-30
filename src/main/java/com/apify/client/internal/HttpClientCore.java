@@ -241,7 +241,13 @@ public final class HttpClientCore {
       long coverable = Math.max(0, base.toSeconds() - HOLD_MARGIN_SECS);
       return new WaitHold(Math.min(hold, coverable), tier);
     }
-    hold = Math.min(hold, Math.max(0, retry.timeout.toSeconds() - base.toSeconds()));
+    long room = retry.timeout.toSeconds() - base.toSeconds();
+    if (room < hold) {
+      // timeoutMax leaves less above the tier than the hold: keep the hold the caller asked for as
+      // far as the cap allows, the same way an explicit timeout override does.
+      long coverable = Math.max(0, retry.timeout.toSeconds() - HOLD_MARGIN_SECS);
+      return new WaitHold(Math.min(hold, coverable), Timeout.of(retry.timeout));
+    }
     return new WaitHold(hold, hold > 0 ? Timeout.of(base.plusSeconds(hold)) : tier);
   }
 
@@ -738,7 +744,9 @@ public final class HttpClientCore {
         (resp, err) -> {
           Throwable cause = err == null ? null : unwrapCompletion(err);
           if (cause == null) {
-            result.complete(resp);
+            if (!result.complete(resp)) {
+              closeQuietly(resp.body());
+            }
           } else if (cause instanceof CancellationException) {
             result.cancel(true);
           } else {
@@ -756,15 +764,37 @@ public final class HttpClientCore {
    * dataset export streaming) so the drain-and-throw logic lives in one place.
    */
   public CompletableFuture<InputStream> streamOrThrow(String url) {
-    return streamAsync(url)
-        .thenApply(
-            resp -> {
-              if (resp.statusCode() >= MAX_SUCCESS_STATUS) {
-                byte[] body = drainQuietly(resp.body());
-                throw buildApiError(resp.statusCode(), body, 1, "GET", extractPath(url));
-              }
-              return resp.body();
-            });
+    CancellableFuture<InputStream> result = new CancellableFuture<>();
+    CompletableFuture<HttpResponse<InputStream>> stream = streamAsync(url);
+    result.link(stream);
+    stream.whenComplete(
+        (resp, err) -> {
+          if (err != null) {
+            Throwable cause = unwrapCompletion(err);
+            if (cause instanceof CancellationException) {
+              result.cancel(true);
+            } else {
+              result.completeExceptionally(cause);
+            }
+            return;
+          }
+          if (resp.statusCode() >= MAX_SUCCESS_STATUS) {
+            byte[] body = drainQuietly(resp.body());
+            result.completeExceptionally(
+                buildApiError(resp.statusCode(), body, 1, "GET", extractPath(url)));
+          } else if (!result.complete(resp.body())) {
+            closeQuietly(resp.body());
+          }
+        });
+    return result;
+  }
+
+  private static void closeQuietly(InputStream in) {
+    try {
+      in.close();
+    } catch (IOException e) {
+      // Nothing is reading the stream any more; a failed close has nobody to report to.
+    }
   }
 
   /**

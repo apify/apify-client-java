@@ -7,16 +7,19 @@ import java.util.zip.GZIPOutputStream;
 /** An {@link HttpCompressor} that gzip-encodes request bodies ({@code Content-Encoding: gzip}). */
 public final class GzipHttpCompressor implements HttpCompressor {
 
-  /** The highest compression level, and the default. */
+  /** The highest compression level. */
   private static final int MAX_LEVEL = 9;
+
+  /** zlib's own default; higher levels cost about twice the CPU for about a percent fewer bytes. */
+  public static final int DEFAULT_LEVEL = 6;
 
   private static final int MIN_LEVEL = 1;
 
   private final int level;
 
-  /** A compressor with the default level, 9. */
+  /** A compressor with the default level, {@value #DEFAULT_LEVEL}. */
   public GzipHttpCompressor() {
-    this(MAX_LEVEL);
+    this(DEFAULT_LEVEL);
   }
 
   /**
