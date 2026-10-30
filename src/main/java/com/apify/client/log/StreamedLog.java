@@ -126,8 +126,9 @@ public final class StreamedLog implements AutoCloseable {
    * leaving the reader blocked on a live read that never returns and {@code join()} hanging
    * forever.
    *
-   * <p>Cancelling the returned future cancels the stream-open request; {@link #close()} while the
-   * stream is still opening cancels it too.
+   * <p>Cancelling the returned future cancels the stream-open request. {@link #close()} while the
+   * stream is still opening closes the stream once it opens, launches no reader and cancels the
+   * returned future.
    *
    * @throws IllegalStateException if redirection is already running (or a previous {@link #start()}
    *     call's stream-open is still in flight)
