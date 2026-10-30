@@ -171,6 +171,18 @@ public final class HttpClientCore {
   }
 
   /**
+   * This client without the override set by {@link #withTimeout}: every request gets the timeout of
+   * its own method again.
+   */
+  public HttpClientCore withoutTimeoutOverride() {
+    if (timeoutOverride == null) {
+      return this;
+    }
+    return new HttpClientCore(
+        transport, token, userAgent, retry, compressor, defaultHeaders, null, warnedCappedTimeouts);
+  }
+
+  /**
    * Resolves a timeout to the duration of its first attempt: a tier to its configured duration, an
    * exact timeout to itself, and {@link Timeout#NO_TIMEOUT} to {@code null} (no timeout). A value
    * above the configured maximum is capped at it, which logs a warning once per value, since the

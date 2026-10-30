@@ -67,7 +67,8 @@ public final class UrlNormalizer {
       host = authority.substring(0, colon);
       port = authority.substring(colon + 1);
     }
-    if (special && host.isEmpty()) {
+    // An empty host is valid only for a non-special scheme without credentials or a port.
+    if (host.isEmpty() && (special || at >= 0 || !port.isEmpty())) {
       return value;
     }
     host = normalizeHost(host);

@@ -209,8 +209,10 @@ A `pushItems` request that times out is not retried, since the API may already h
 
 A `waitForFinish` hold is cut down to what the request timeout can cover, so the API answers before
 the client gives up on the request: with a small `timeoutMax`, the hold is what `timeoutMax` leaves
-above the tier, and under a `withTimeout` override (which is kept as given) it is the override less
-5 seconds. The same applies to every poll of `waitForFinish(...)` and `call(...)`.
+above the tier, and under a `withTimeout` override (which is capped at `timeoutMax` like any timeout)
+it is the override less 5 seconds. The polls of `waitForFinish(...)` and `call(...)` are not affected
+by `withTimeout`: they have no timeout and always hold for up to a minute, so cancel the returned
+future (see below) to stop one that never answers.
 
 ### Cancellation
 
@@ -221,7 +223,8 @@ work behind it: `future.cancel(true)` aborts the request in flight and stops the
 request that has no timeout (the polls of `waitForFinish`/`call` and `Timeout.NO_TIMEOUT`):
 
 ```java
-CompletableFuture<ActorRun> call = client.actor("my-actor").call(null, new ActorStartOptions(), null);
+CompletableFuture<ActorRun> call =
+    client.actor("my-actor").call(null, new ActorCallOptions(), null); // redirects the run's log
 // ... later, when the result is no longer needed:
 call.cancel(true); // stops the polling and the log redirection; the run itself keeps running
 ```

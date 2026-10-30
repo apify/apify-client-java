@@ -46,7 +46,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `batchAddRequests` serializes each request once instead of twice.
 - A `waitForFinish` hold extends the timeout of its request (the tier's plus the hold) instead of
   being clamped below it; a hold is cut down only to what `timeoutMax` (or a `withTimeout` override)
-  leaves, so the API still answers before the client gives up.
+  leaves, so the API still answers before the client gives up. The polls of `waitForFinish`/`call`
+  have no timeout and ignore `withTimeout`.
 - `Build.getChangelog()` is deprecated, as the specification deprecates `Build.changelog`.
 - The integration tests wait up to 90 s for a just-created resource to appear in a listing.
 
@@ -56,7 +57,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Cancelling a future the client returned (`CompletableFuture.cancel`) now aborts the request in
   flight and stops the retries, `waitForFinish`/`call` polling and iteration pages that would follow;
   cancelling a derived stage (`thenApply`, `thenCompose`, ...) cancels the call it comes from.
-  Cancelling `call(...)` also stops its log redirection. See the Cancellation section of the README.
+  Cancelling `call(...)` also stops its log redirection, and closing a `StreamedLog` while its
+  stream is still opening launches no reader thread (the `start()` future is cancelled). See the Cancellation section of the README.
 - `pushItems` rejects what the API rejects (anything but an object or an array of objects) before a
   request is sent, and sends a pre-serialized `String` as it is.
 - An Actor or task input given as `byte[]` or `String` is sent as it is instead of being wrapped in

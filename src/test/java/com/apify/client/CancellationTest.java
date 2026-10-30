@@ -210,23 +210,30 @@ class CancellationTest {
   }
 
   @Test
-  void pollsUnderAnOverrideAreHeldOnlyAsLongAsTheOverrideCovers() {
+  void pollsIgnoreAWithTimeoutOverrideAndKeepHoldingTheFullMinute() {
     MockTransport backend =
         MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"SUCCEEDED\"}}");
     client(backend, 0)
-        .withTimeout(com.apify.client.http.Timeout.ofSeconds(10))
+        .withTimeout(com.apify.client.http.Timeout.ofSeconds(5))
         .run("r1")
         .waitForFinish(120L)
         .join();
-    assertTrue(backend.lastUrl.contains("waitForFinish=5"), backend.lastUrl);
-    assertEquals(java.util.Optional.of(Duration.ofSeconds(10)), backend.lastTimeout);
+    assertTrue(backend.lastUrl.contains("waitForFinish=60"), backend.lastUrl);
+    assertEquals(java.util.Optional.empty(), backend.lastTimeout, "a poll has no timeout");
   }
 
   @Test
   void aLongPollLoopDoesNotKeepEarlierResponsesReachable() throws InterruptedException {
     // Each poll answers with a 1 MiB body; the loop is still pending after several polls. The
     // future the caller holds must not keep the earlier polls' responses (or parsed runs) alive.
-    java.util.List<java.lang.ref.WeakReference<byte[]>> bodies = new java.util.ArrayList<>();
+    // The test needs the JVM to honour System.gc(); skip it where it does not
+    // (-XX:+DisableExplicitGC).
+    java.lang.ref.WeakReference<Object> control = new java.lang.ref.WeakReference<>(new Object());
+    System.gc();
+    org.junit.jupiter.api.Assumptions.assumeTrue(control.get() == null, "System.gc() is a no-op");
+
+    java.util.List<java.lang.ref.WeakReference<byte[]>> bodies =
+        new java.util.concurrent.CopyOnWriteArrayList<>();
     String padding = "x".repeat(1 << 20);
     MockTransport backend =
         MockTransport.ofRouter(
@@ -257,5 +264,78 @@ class CancellationTest {
     pending.cancel(true);
     assertTrue(
         collected >= 4, "earlier poll responses stay reachable: only " + collected + " freed");
+  }
+
+  @Test
+  void cancellingCallWithACustomLogDestinationStillStopsThePolling() throws InterruptedException {
+    MockTransport backend =
+        MockTransport.ofHanging(
+            request ->
+                request.uri().getQuery() != null
+                    && request.uri().getQuery().contains("waitForFinish"));
+    backend.scriptStream(200, "2999-01-01T00:00:00.000Z hello\n");
+    var options =
+        new com.apify.client.actor.ActorCallOptions()
+            .logOptions(new com.apify.client.log.StreamedLogOptions().toLog(line -> {}));
+    CompletableFuture<?> future = client(backend, 0).actor("a1").call(null, options, null);
+    await(() -> backend.hung.size() == 1);
+
+    future.cancel(true);
+
+    assertTrue(backend.allHungCancelled(), "the poll is aborted with a custom log destination");
+  }
+
+  @Test
+  void aCancelWhileTheLogStreamIsOpeningLeavesNoReaderThread() throws InterruptedException {
+    MockTransport backend =
+        MockTransport.ofHanging(
+            request ->
+                request.uri().getQuery() != null
+                    && request.uri().getQuery().contains("waitForFinish"));
+    backend.scriptStream(200, "2999-01-01T00:00:00.000Z hello\n");
+    CompletableFuture<Void> gate = new CompletableFuture<>();
+    backend.gateStreams(gate); // the log stream does not open until the gate is released
+    long readersBefore = readerThreads();
+    CompletableFuture<?> future =
+        client(backend, 0)
+            .actor("a1")
+            .call(null, new com.apify.client.actor.ActorCallOptions(), null);
+    await(() -> backend.calls >= 3); // start, run fetch for the prefix, and the stream open request
+
+    future.cancel(true);
+    gate.complete(null); // the stream opens after the call has been cancelled
+    Thread.sleep(300);
+
+    assertEquals(readersBefore, readerThreads(), "no log reader thread is left behind");
+  }
+
+  @Test
+  void closingAStreamedLogWhileItsStreamOpensLaunchesNoReader() throws Exception {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"r1\"}}");
+    backend.scriptStream(200, "2999-01-01T00:00:00.000Z hello\n");
+    CompletableFuture<Void> gate = new CompletableFuture<>();
+    backend.gateStreams(gate);
+    long readersBefore = readerThreads();
+    var log =
+        client(backend, 0)
+            .run("r1")
+            .getStreamedLog(new com.apify.client.log.StreamedLogOptions().toLog(line -> {}))
+            .join();
+
+    CompletableFuture<Void> started = log.start();
+    log.close();
+    gate.complete(null);
+    Thread.sleep(300);
+
+    assertEquals(readersBefore, readerThreads());
+    assertTrue(started.isCancelled(), "the start that was closed is cancelled");
+    log.start().join(); // a closed-while-opening log can be started again
+    log.close();
+  }
+
+  private static long readerThreads() {
+    return Thread.getAllStackTraces().keySet().stream()
+        .filter(thread -> thread.getName().equals("apify-streamed-log") && thread.isAlive())
+        .count();
   }
 }

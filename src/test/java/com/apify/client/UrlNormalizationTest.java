@@ -86,6 +86,14 @@ class UrlNormalizationTest {
   }
 
   @Test
+  void anEmptyHostWithCredentialsOrAPortIsInvalid() {
+    assertEquals("foo://@/", UrlNormalizer.normalize("foo://@/"));
+    assertEquals("foo://user@/", UrlNormalizer.normalize("foo://user@/"));
+    assertEquals("foo://:80/", UrlNormalizer.normalize("foo://:80/"));
+    assertEquals("foo:///path", UrlNormalizer.normalize("foo:///path"));
+  }
+
+  @Test
   void leadingZerosOfAPortDoNotCount() {
     assertEquals("https://h.test/x", UrlNormalizer.normalize("https://h.test:0000443/x"));
     assertEquals("http://h.test/", UrlNormalizer.normalize("http://h.test:00080/"));
