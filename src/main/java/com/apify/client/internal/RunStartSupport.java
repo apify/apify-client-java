@@ -239,8 +239,7 @@ public final class RunStartSupport {
       AtomicReference<StreamedLog> opened,
       AtomicBoolean finished) {
     CompletableFuture<StreamedLog> created =
-        CancellableFuture.wrap(
-            logOptions != null ? runClient.getStreamedLog(logOptions) : runClient.getStreamedLog());
+        logOptions != null ? runClient.getStreamedLog(logOptions) : runClient.getStreamedLog();
     return created
         .thenCompose(
             streamedLog -> {
@@ -249,7 +248,13 @@ public final class RunStartSupport {
                 streamedLog.close();
                 return CancellableFuture.<Void>completed(null);
               }
-              return streamedLog.start();
+              CompletableFuture<Void> started = streamedLog.start();
+              if (finished.get()) {
+                // The call ended between the check above and the start: close() while the stream
+                // is opening makes it launch no reader.
+                streamedLog.close();
+              }
+              return started;
             })
         .handle((unused, error) -> (Void) null);
   }
