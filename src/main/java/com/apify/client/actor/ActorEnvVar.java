@@ -7,6 +7,7 @@ public final class ActorEnvVar extends ApifyResource {
   private String name;
   private String value;
   private Boolean isSecret;
+  private String valueHash;
 
   public ActorEnvVar() {}
 
@@ -46,5 +47,10 @@ public final class ActorEnvVar extends ApifyResource {
   public ActorEnvVar setIsSecret(Boolean isSecret) {
     this.isSecret = isSecret;
     return this;
+  }
+
+  /** A hash of the variable value, returned for secret variables whose value is hidden. */
+  public String getValueHash() {
+    return valueHash;
   }
 }

@@ -5,6 +5,58 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-10-30
+
+### Added
+
+- Timeout tiers: `Timeout` (`SHORT`, `MEDIUM`, `LONG`, `NO_TIMEOUT`, `of(Duration)`), the builder
+  setters `timeoutShort`, `timeoutMedium`, `timeoutLong` (defaults 5s, 30s, 360s) and `timeoutMax`
+  (cap of a single attempt, default 360s), and `ApifyClient.withTimeout(Timeout)` to replace the tier
+  of every request a client sends. Every method now picks its tier as the reference client does
+  (metadata reads and writes `SHORT`; listing, batch and trigger calls `MEDIUM`; downloads, uploads
+  and streaming `LONG`), a request with `waitForFinish` adds the hold to its tier, and the polling of
+  `waitForFinish`/`call` has no timeout. `SetRecordOptions.timeout(Timeout)`.
+- Configurable request compression: `HttpCompressor`, `BrotliHttpCompressor` (quality 0-11) and
+  `GzipHttpCompressor` (level 1-9) with `ApifyClientBuilder.compression(...)`.
+- `ApifyClientBuilder.header(name, value)`: default headers sent with every request.
+- `RunClient.iterateDatasetItems(...)`: iterate the items of a run's default dataset while the run
+  is still producing them.
+- `RunListOptions.deployment(...)` and `StoreListOptions.includeInputSchema(...)`.
+- `UserClient.limits()`, `updateLimits(...)` and `monthlyUsage(...)` work for any user id.
+- Typed fields: `ActorRun.getStandby()` (`ActorRunStandby`), `getConsoleUrl()`, `getOutput()`,
+  `getEventUsage()`, `getAccountedChargedEventCounts()`, `getExternalChargedTotalUsd()`,
+  `getIntegrationTracking()`, `getCreatedByOrganizationMemberUserId()`; `ActorRunMeta` origin ids;
+  `title`, `consoleUrl` and public URLs on `Dataset`, `KeyValueStore`, `KeyValueStoreKey` and
+  `RequestQueue`; `Webhook` integration fields; `Schedule.getUiState()`; `Task.getStandbyUrl()`;
+  `TaskStats.getLastRunStartedAt()`; `Build` and `BuildOptions` fields; `ActorVersion` webhook ids
+  and source URLs; `ActorEnvVar.getValueHash()`; `ActorStandby` tenancy and auth flags; the
+  `maxTotalChargeUsd` run options.
+
+### Changed
+
+- Updated to Apify OpenAPI specification `v2-2026-10-29T100357Z`.
+- The `format: uri` fields of the models are returned in the normalized WHATWG form (empty path `/`,
+  lowercase punycode host, default port dropped, unsafe characters percent-encoded).
+- A resource client's id is percent-encoded into a single path segment, and an empty id or a bare
+  `.`/`..` is rejected with `IllegalArgumentException` instead of addressing the collection.
+- `ApifyClientBuilder.timeout(Duration)` is deprecated: it is an alias of `timeoutMax(Duration)`.
+- The silent fallback from a failing brotli encode to gzip is gone: the configured compressor is the
+  only one that runs, and its failure fails the request. Brotli stays the default (quality 6) where
+  its native library loads, gzip elsewhere.
+- `batchAddRequests` serializes each request once instead of twice.
+- A `waitForFinish` hold is no longer clamped below the request timeout; the timeout of the request
+  is extended by the hold instead.
+- The integration tests wait up to 90 s for a just-created resource to appear in a listing.
+
+### Fixed
+
+- A timed-out Actor or task start, build trigger or `pushItems` request is no longer retried, so it
+  cannot start a second billed run or store items twice.
+- `pushItems` rejects what the API rejects (anything but an object or an array of objects) before a
+  request is sent, and sends a pre-serialized `String` as it is.
+- An Actor or task input given as `byte[]` or `String` is sent as it is instead of being wrapped in
+  a second layer of JSON.
+
 ## [0.11.0] - 2026-10-26
 
 ### Added

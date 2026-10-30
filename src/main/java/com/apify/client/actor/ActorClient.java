@@ -4,6 +4,7 @@ import com.apify.client.ApifyClient;
 import com.apify.client.build.Build;
 import com.apify.client.build.BuildClient;
 import com.apify.client.build.BuildCollectionClient;
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
@@ -62,7 +63,8 @@ public final class ActorClient {
 
   /**
    * Starts the Actor and completes with the created run as soon as it exists (no waiting). {@code
-   * input} is any JSON-serializable value (or {@code null} for no input).
+   * input} is any JSON-serializable value, a {@code byte[]} or {@link String} that is sent as it is
+   * (set the content type with the options' {@code contentType}), or {@code null} for no input.
    */
   public CompletableFuture<ActorRun> start(Object input, ActorStartOptions options) {
     return RunStartSupport.start(
@@ -126,18 +128,24 @@ public final class ActorClient {
 
   /**
    * Validates {@code input} against the Actor's input schema and completes with whether it is
-   * valid. {@code input} is any JSON-serializable value (or {@code null}). {@code options} may pin
-   * the build whose schema is used and the content type of the input body.
+   * valid. {@code input} is any JSON-serializable value, a {@code byte[]} or {@link String} that is
+   * sent as it is, or {@code null}. {@code options} may pin the build whose schema is used and the
+   * content type of the input body.
    */
   public CompletableFuture<Boolean> validateInput(Object input, ValidateInputOptions options) {
     ValidateInputOptions opts = options == null ? new ValidateInputOptions() : options;
     QueryParams params = new QueryParams();
     opts.apply(params);
-    byte[] body = input == null ? null : Json.toBytes(input);
+    byte[] body = Json.toRequestBody(input);
     // The validate-input endpoint returns a bare {"valid": <bool>} object, not the standard
     // {"data": ...} envelope, so parse it without unwrapping.
     return ctx.postWithBodyNoEnvelope(
-            "validate-input", params, body, opts.contentTypeOrDefault(), JsonNode.class)
+            "validate-input",
+            params,
+            body,
+            opts.contentTypeOrDefault(),
+            JsonNode.class,
+            Timeout.SHORT)
         .thenApply(
             result -> {
               JsonNode valid = result == null ? null : result.get("valid");
@@ -153,7 +161,15 @@ public final class ActorClient {
     QueryParams params = new QueryParams();
     params.addString("version", versionNumber);
     options.apply(params);
-    return ctx.postWithBody("builds", params, null, ResourceContext.CONTENT_TYPE_JSON, Build.class);
+    return ctx.postWithBody(
+        "builds",
+        params,
+        null,
+        ResourceContext.CONTENT_TYPE_JSON,
+        Build.class,
+        ctx.http.timeoutWithHold(Timeout.MEDIUM, params.getLong("waitForFinish")),
+        // A build that timed out may still have been created; retrying would start a second one.
+        true);
   }
 
   /**
@@ -163,10 +179,12 @@ public final class ActorClient {
    */
   public CompletableFuture<BuildClient> defaultBuild(Long waitForFinish) {
     QueryParams params = new QueryParams();
-    // Clamp like the getWithWait twins so a large wait paired with a short client timeout cannot
-    // abort every attempt and burn the retry budget (the API caps server-side waiting at 60s).
-    params.addLong("waitForFinish", ctx.clampServerWait(waitForFinish));
-    return ctx.getResourceRequired("builds/default", params, Build.class)
+    params.addLong("waitForFinish", waitForFinish);
+    return ctx.getResourceRequired(
+            "builds/default",
+            params,
+            Build.class,
+            ctx.http.timeoutWithHold(Timeout.SHORT, waitForFinish))
         .thenApply(build -> new BuildClient(http, baseUrl, build.getId()));
   }
 

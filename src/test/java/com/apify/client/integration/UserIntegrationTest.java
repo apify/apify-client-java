@@ -49,6 +49,17 @@ class UserIntegrationTest extends IntegrationBase {
     assertTrue(limits != null && !limits.isEmpty());
   }
 
+  @Test
+  void getLimitsAndMonthlyUsageByUserId() {
+    ApifyClient client = requireClient();
+    var me = client.me().get().join().orElseThrow();
+    // users/{userId}/limits and users/{userId}/usage/monthly address the own account by its id.
+    JsonNode limits = client.user(me.getId()).limits().join();
+    assertTrue(limits != null && !limits.isEmpty());
+    JsonNode usage = client.user(me.getId()).monthlyUsage().join();
+    assertTrue(usage != null && !usage.isEmpty());
+  }
+
   // Note: `me().updateLimits(...)` is intentionally NOT exercised by a live integration test. It
   // mutates account-global state that cannot be isolated between the concurrent cross-language test
   // runs the test-requirements mandate (unlike the per-run resources every other test creates), so

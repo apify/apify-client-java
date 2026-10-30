@@ -121,6 +121,47 @@ public final class DatasetListItemsOptions {
     return this;
   }
 
+  /** Returns an independent copy of these options. */
+  public DatasetListItemsOptions copy() {
+    DatasetListItemsOptions c = new DatasetListItemsOptions();
+    c.offset = offset;
+    c.limit = limit;
+    c.desc = desc;
+    c.fields = fields;
+    c.outputFields = outputFields;
+    c.omit = omit;
+    c.skipEmpty = skipEmpty;
+    c.skipHidden = skipHidden;
+    c.clean = clean;
+    c.unwind = unwind;
+    c.flatten = flatten;
+    c.view = view;
+    c.simplified = simplified;
+    c.skipFailedPages = skipFailedPages;
+    c.signature = signature;
+    return c;
+  }
+
+  /**
+   * Whether {@code clean}, {@code skipEmpty} or {@code unwind} is set: the server-side filters that
+   * can leave a page of existing rows without a single returned item.
+   */
+  public boolean dropsRows() {
+    return Boolean.TRUE.equals(clean)
+        || Boolean.TRUE.equals(skipEmpty)
+        || (unwind != null && !unwind.isEmpty());
+  }
+
+  /** The first row to read, or 0 when not set. */
+  public long offsetValueOrZero() {
+    return offset != null && offset > 0 ? offset : 0;
+  }
+
+  /** The maximum number of rows to read, or {@code null} when not set. */
+  public Long limitValueOrNull() {
+    return limit;
+  }
+
   Boolean descValue() {
     return desc;
   }

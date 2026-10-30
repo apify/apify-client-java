@@ -8,6 +8,8 @@ public final class BuildOptions extends ApifyResource {
   private Boolean betaPackages;
   private Long memoryMbytes;
   private Long diskMbytes;
+  private String tag;
+  private Boolean debug;
 
   /** Whether the build reused a cached image layer. */
   public Boolean getUseCache() {
@@ -27,5 +29,15 @@ public final class BuildOptions extends ApifyResource {
   /** The disk allocation applied to the build, in megabytes. */
   public Long getDiskMbytes() {
     return diskMbytes;
+  }
+
+  /** The build tag requested for the build. */
+  public String getTag() {
+    return tag;
+  }
+
+  /** Whether the build was run in debug mode. */
+  public Boolean getDebug() {
+    return debug;
   }
 }

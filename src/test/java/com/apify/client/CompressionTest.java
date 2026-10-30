@@ -3,12 +3,16 @@ package com.apify.client;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.aayushatharva.brotli4j.Brotli4jLoader;
 import com.aayushatharva.brotli4j.decoder.Decoder;
 import com.aayushatharva.brotli4j.decoder.DirectDecompress;
+import com.apify.client.http.BrotliHttpCompressor;
+import com.apify.client.http.GzipHttpCompressor;
+import com.apify.client.http.HttpCompressor;
 import com.apify.client.internal.HttpClientCore;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -22,15 +26,9 @@ import org.junit.jupiter.api.Test;
 /**
  * Offline tests for request-body compression. Mirrors the reference JS client: bodies of at least
  * 1024 bytes are compressed and announced via {@code Content-Encoding}, smaller bodies are sent
- * verbatim. The client prefers brotli ({@code br}) and falls back to gzip; both codings are
- * exercised here — the brotli/gzip decision (a pure function) directly, and the live client path
- * via a real request.
- *
- * <p>Not exercised here: {@code HttpClientCore.compress}'s per-call fallback from a
- * <em>failing</em> brotli encode to gzip (as opposed to the upfront {@code BROTLI_AVAILABLE} check,
- * which the brotli-path tests below do exercise). Accepted gap: brotli4j's {@code Encoder.compress}
- * has no portable way to be forced to throw once the native codec has loaded, and the fallback only
- * chooses between two codings already covered above.
+ * verbatim. The client uses brotli ({@code br}) by default where its native codec is available and
+ * gzip elsewhere; the compressor is configurable, and its failure fails the request. Both
+ * compressors are exercised directly, and the live client path via a real request.
  */
 class CompressionTest {
 
@@ -82,28 +80,111 @@ class CompressionTest {
     return linux && commonArch && !musl;
   }
 
-  // --- Pure encoding decision: both paths are directly reachable and verified round-trip. ---
+  // --- The compressors themselves: both codings are reachable and verified round-trip. ---
 
   @Test
-  void brotliPathEncodesAsBrAndRoundTrips() throws IOException {
-    assumeTrue(HttpClientCore.brotliAvailable(), "no brotli native codec on this platform");
+  void brotliCompressorEncodesAsBrAndRoundTrips() throws IOException {
+    assumeTrue(BrotliHttpCompressor.isAvailable(), "no brotli native codec on this platform");
     byte[] payload = payload(4096, (byte) 'a');
-    HttpClientCore.Compressed c = HttpClientCore.compress(payload, true);
+    HttpCompressor compressor = new BrotliHttpCompressor();
+    byte[] compressed = compressor.compress(payload);
 
-    assertEquals("br", c.encoding(), "brotli path must announce Content-Encoding: br");
-    assertTrue(c.body().length < payload.length, "brotli-compressed body should be smaller");
-    assertArrayEquals(
-        payload, unbrotli(c.body()), "server must recover the original body from brotli");
+    assertEquals("br", compressor.contentEncoding());
+    assertTrue(compressed.length < payload.length, "brotli-compressed body should be smaller");
+    assertArrayEquals(payload, unbrotli(compressed));
   }
 
   @Test
-  void gzipPathEncodesAsGzipAndRoundTrips() throws IOException {
+  void gzipCompressorEncodesAsGzipAndRoundTrips() throws IOException {
     byte[] payload = payload(4096, (byte) 'a');
-    HttpClientCore.Compressed c = HttpClientCore.compress(payload, false);
+    HttpCompressor compressor = new GzipHttpCompressor();
+    byte[] compressed = compressor.compress(payload);
 
-    assertEquals("gzip", c.encoding(), "gzip fallback must announce Content-Encoding: gzip");
-    assertTrue(c.body().length < payload.length, "gzip-compressed body should be smaller");
-    assertArrayEquals(payload, gunzip(c.body()), "server must recover the original body from gzip");
+    assertEquals("gzip", compressor.contentEncoding());
+    assertTrue(compressed.length < payload.length, "gzip-compressed body should be smaller");
+    assertArrayEquals(payload, gunzip(compressed));
+  }
+
+  @Test
+  void gzipLevelTradesSizeForSpeed() throws IOException {
+    byte[] payload = new byte[64 * 1024];
+    new java.util.Random(7).nextBytes(payload);
+    for (int i = 0; i < payload.length; i += 3) {
+      payload[i] = 'x'; // partly compressible, so the levels differ
+    }
+    byte[] fastest = new GzipHttpCompressor(1).compress(payload);
+    byte[] smallest = new GzipHttpCompressor(9).compress(payload);
+
+    assertArrayEquals(payload, gunzip(fastest));
+    assertArrayEquals(payload, gunzip(smallest));
+    assertTrue(smallest.length <= fastest.length, "level 9 must not be larger than level 1");
+  }
+
+  @Test
+  void compressorsRejectAnOutOfRangeQualityAtConstruction() {
+    assertThrows(IllegalArgumentException.class, () -> new GzipHttpCompressor(0));
+    assertThrows(IllegalArgumentException.class, () -> new GzipHttpCompressor(10));
+    assertThrows(IllegalArgumentException.class, () -> new BrotliHttpCompressor(-1));
+    assertThrows(IllegalArgumentException.class, () -> new BrotliHttpCompressor(12));
+  }
+
+  // --- The configured compressor is the one the client runs, with no silent fallback. ---
+
+  @Test
+  void configuredGzipCompressorIsUsedForLargeBodies() throws IOException {
+    MockTransport backend = MockTransport.ofConstant(201, "");
+    byte[] payload = payload(4096, (byte) 'a');
+
+    ApifyClient.builder()
+        .token("t")
+        .httpTransport(backend)
+        .maxRetries(0)
+        .compression(new GzipHttpCompressor(3))
+        .build()
+        .keyValueStore(STORE_ID)
+        .setRecord(RECORD_KEY, payload, CONTENT_TYPE)
+        .join();
+
+    assertEquals("gzip", backend.lastHeaders.firstValue("Content-Encoding").orElse(null));
+    assertArrayEquals(payload, gunzip(backend.lastBodyBytes));
+  }
+
+  @Test
+  void customCompressorIsUsedAndItsFailureFailsTheRequest() {
+    HttpCompressor failing =
+        new HttpCompressor() {
+          @Override
+          public String contentEncoding() {
+            return "x-custom";
+          }
+
+          @Override
+          public byte[] compress(byte[] data) throws IOException {
+            throw new IOException("boom");
+          }
+        };
+    MockTransport backend = MockTransport.ofConstant(201, "");
+    ApifyClient client =
+        ApifyClient.builder()
+            .token("t")
+            .httpTransport(backend)
+            .maxRetries(0)
+            .compression(failing)
+            .build();
+
+    var future =
+        client
+            .keyValueStore(STORE_ID)
+            .setRecord(RECORD_KEY, payload(4096, (byte) 'a'), CONTENT_TYPE);
+
+    var error = assertThrows(java.util.concurrent.CompletionException.class, future::join);
+    assertTrue(error.getCause() instanceof com.apify.client.http.ApifyTransportException);
+    assertEquals(0, backend.calls, "a body that could not be compressed must not be sent");
+  }
+
+  @Test
+  void builderRejectsNullCompression() {
+    assertThrows(IllegalArgumentException.class, () -> ApifyClient.builder().compression(null));
   }
 
   // --- Brotli native codec must load where a native is bundled (CI/runtime), so brotli runs. ---
@@ -112,7 +193,7 @@ class CompressionTest {
   void brotliNativeCodecLoadsWhereBundled() {
     assumeTrue(nativeBrotliExpected(), "no brotli native bundled for this platform; gzip fallback");
     assertTrue(
-        HttpClientCore.brotliAvailable(),
+        BrotliHttpCompressor.isAvailable(),
         "brotli native codec must load on glibc x86_64/aarch64 so the preferred brotli path runs");
   }
 
@@ -125,7 +206,7 @@ class CompressionTest {
 
     client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE).join();
 
-    boolean brotli = HttpClientCore.brotliAvailable();
+    boolean brotli = BrotliHttpCompressor.isAvailable();
     String expected = brotli ? "br" : "gzip";
     assertEquals(
         expected,
@@ -201,7 +282,7 @@ class CompressionTest {
     // image/bmp sits under the "image/" prefix but is raw, so it should still be compressed.
     client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, "image/bmp").join();
 
-    boolean brotli = HttpClientCore.brotliAvailable();
+    boolean brotli = BrotliHttpCompressor.isAvailable();
     assertEquals(
         brotli ? "br" : "gzip", backend.lastHeaders.firstValue("Content-Encoding").orElse(null));
     byte[] recovered = brotli ? unbrotli(backend.lastBodyBytes) : gunzip(backend.lastBodyBytes);
@@ -215,7 +296,7 @@ class CompressionTest {
 
     client(backend).keyValueStore(STORE_ID).setRecord(RECORD_KEY, payload, CONTENT_TYPE).join();
 
-    boolean brotli = HttpClientCore.brotliAvailable();
+    boolean brotli = BrotliHttpCompressor.isAvailable();
     assertEquals(
         brotli ? "br" : "gzip",
         backend.lastHeaders.firstValue("Content-Encoding").orElse(null),

@@ -4,6 +4,7 @@ import com.apify.client.PaginationList;
 import com.apify.client.http.ApiResponse;
 import com.apify.client.http.ApifyApiException;
 import com.apify.client.http.ApifyTransportException;
+import com.apify.client.http.Timeout;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -34,13 +35,6 @@ public final class ResourceContext {
 
   /** Server-side waitForFinish chunk size (the API caps server waiting at 60 seconds). */
   private static final long WAIT_REQUEST_SECS = 60;
-
-  /**
-   * Safety margin subtracted from the configured per-request timeout when choosing the server-side
-   * {@code waitForFinish} value, so the server responds before the client's socket timeout fires
-   * (otherwise a short client timeout would abort every healthy poll and burn all retries).
-   */
-  private static final long WAIT_TIMEOUT_MARGIN_SECS = 5;
 
   /**
    * Finite upper bound used when the caller asks to wait "indefinitely" ({@code waitSecs == null}).
@@ -140,7 +134,7 @@ public final class ResourceContext {
   public static ResourceContext single(
       HttpClientCore http, String baseUrl, String resourcePath, String id) {
     return new ResourceContext(
-        http, baseUrl + "/" + resourcePath + "/" + toSafeId(id), baseUrl, true);
+        http, baseUrl + "/" + resourcePath + "/" + encodePathSegment(toSafeId(id)), baseUrl, true);
   }
 
   /** A copy of this context with the origin used to build public URLs overridden. */
@@ -190,12 +184,17 @@ public final class ResourceContext {
 
   public <T> CompletableFuture<Optional<T>> getResource(
       String subPath, QueryParams params, JavaType dataType) {
+    return getResource(subPath, params, dataType, Timeout.SHORT);
+  }
+
+  public <T> CompletableFuture<Optional<T>> getResource(
+      String subPath, QueryParams params, JavaType dataType, Timeout timeout) {
     // ofNullable, not of: an HTTP 200 with body {"data": null} unwraps to null, which is a valid
     // "no resource" answer rather than a programming error — never surface it as a raw NPE.
     // Explicit <T> witness: getResourceRequired is the *receiver* of .handle below (not an argument
     // to another generic call), so unlike a direct `return`, its type parameter cannot be inferred
     // from the surrounding target type and must be pinned here.
-    return this.<T>getResourceRequired(subPath, params, dataType)
+    return this.<T>getResourceRequired(subPath, params, dataType, timeout)
         .handle(
             (value, error) -> {
               if (error == null) {
@@ -214,16 +213,31 @@ public final class ResourceContext {
     return getResource(subPath, params, Json.type(dataClass));
   }
 
+  public <T> CompletableFuture<Optional<T>> getResource(
+      String subPath, QueryParams params, Class<T> dataClass, Timeout timeout) {
+    return getResource(subPath, params, Json.type(dataClass), timeout);
+  }
+
   public <T> CompletableFuture<T> getResourceRequired(
       String subPath, QueryParams params, JavaType dataType) {
+    return getResourceRequired(subPath, params, dataType, Timeout.SHORT);
+  }
+
+  public <T> CompletableFuture<T> getResourceRequired(
+      String subPath, QueryParams params, JavaType dataType, Timeout timeout) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("GET", u, null, "", http.baseRequestTimeout())
+    return http.call("GET", u, null, "", timeout)
         .thenApply(resp -> Json.<T>parseData(resp.body(), dataType));
   }
 
   public <T> CompletableFuture<T> getResourceRequired(
       String subPath, QueryParams params, Class<T> dataClass) {
     return getResourceRequired(subPath, params, Json.type(dataClass));
+  }
+
+  public <T> CompletableFuture<T> getResourceRequired(
+      String subPath, QueryParams params, Class<T> dataClass, Timeout timeout) {
+    return getResourceRequired(subPath, params, Json.type(dataClass), timeout);
   }
 
   /**
@@ -236,10 +250,16 @@ public final class ResourceContext {
    */
   public <T> CompletableFuture<Optional<T>> getResourceUnlessAmbiguous(
       String subPath, QueryParams params, JavaType dataType) {
+    return getResourceUnlessAmbiguous(subPath, params, dataType, Timeout.SHORT);
+  }
+
+  public <T> CompletableFuture<Optional<T>> getResourceUnlessAmbiguous(
+      String subPath, QueryParams params, JavaType dataType, Timeout timeout) {
     if (ownId) {
-      return getResource(subPath, params, dataType);
+      return getResource(subPath, params, dataType, timeout);
     }
-    return this.<T>getResourceRequired(subPath, params, dataType).thenApply(Optional::ofNullable);
+    return this.<T>getResourceRequired(subPath, params, dataType, timeout)
+        .thenApply(Optional::ofNullable);
   }
 
   public <T> CompletableFuture<Optional<T>> getResourceUnlessAmbiguous(
@@ -248,15 +268,20 @@ public final class ResourceContext {
   }
 
   public <T> CompletableFuture<T> updateResource(String subPath, Object body, Class<T> dataClass) {
+    return updateResource(subPath, body, dataClass, Timeout.SHORT);
+  }
+
+  public <T> CompletableFuture<T> updateResource(
+      String subPath, Object body, Class<T> dataClass, Timeout timeout) {
     String u = mergedParams(new QueryParams()).applyToUrl(subUrl(subPath));
-    return http.call("PUT", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout())
+    return http.call("PUT", u, Json.toBytes(body), CONTENT_TYPE_JSON, timeout)
         .thenApply(resp -> Json.parseData(resp.body(), dataClass));
   }
 
   /** Performs a DELETE; a not-found is treated as a successful no-op. */
   public CompletableFuture<Void> deleteResource(String subPath) {
     String u = mergedParams(new QueryParams()).applyToUrl(subUrl(subPath));
-    return http.call("DELETE", u, null, "", http.baseRequestTimeout())
+    return http.call("DELETE", u, null, "", Timeout.SHORT)
         .handle(
             (resp, error) -> {
               if (error == null) {
@@ -280,13 +305,18 @@ public final class ResourceContext {
       return deleteResource(subPath);
     }
     String u = mergedParams(new QueryParams()).applyToUrl(subUrl(subPath));
-    return http.call("DELETE", u, null, "", http.baseRequestTimeout()).thenApply(resp -> null);
+    return http.call("DELETE", u, null, "", Timeout.SHORT).thenApply(resp -> null);
   }
 
   public <T> CompletableFuture<PaginationList<T>> listResource(
       String subPath, QueryParams params, Class<T> itemClass) {
+    return listResource(subPath, params, itemClass, Timeout.MEDIUM);
+  }
+
+  public <T> CompletableFuture<PaginationList<T>> listResource(
+      String subPath, QueryParams params, Class<T> itemClass, Timeout timeout) {
     JavaType listType = Json.parametric(PaginationList.class, Json.type(itemClass));
-    return getResourceRequired(subPath, params, listType);
+    return getResourceRequired(subPath, params, listType, timeout);
   }
 
   /**
@@ -320,8 +350,13 @@ public final class ResourceContext {
 
   public <T> CompletableFuture<T> createResource(
       QueryParams params, Object body, Class<T> dataClass) {
+    return createResource(params, body, dataClass, Timeout.SHORT);
+  }
+
+  public <T> CompletableFuture<T> createResource(
+      QueryParams params, Object body, Class<T> dataClass, Timeout timeout) {
     String u = mergedParams(params).applyToUrl(subUrl(""));
-    return http.call("POST", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout())
+    return http.call("POST", u, Json.toBytes(body), CONTENT_TYPE_JSON, timeout)
         .thenApply(resp -> Json.parseData(resp.body(), dataClass));
   }
 
@@ -354,21 +389,59 @@ public final class ResourceContext {
     }
     String u = params.applyToUrl(subUrl(""));
     byte[] bodyBytes = body == null ? null : Json.toBytes(body);
-    return http.call(
-            "POST", u, bodyBytes, body == null ? "" : CONTENT_TYPE_JSON, http.baseRequestTimeout())
+    return http.call("POST", u, bodyBytes, body == null ? "" : CONTENT_TYPE_JSON, Timeout.SHORT)
         .thenApply(resp -> Json.parseData(resp.body(), dataClass));
   }
 
   /** POST with a raw body (optional) and content type, unwrapping the data envelope. */
   public <T> CompletableFuture<T> postWithBody(
-      String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
-    return postWithBody(subPath, params, body, contentType, Json.type(dataClass));
+      String subPath,
+      QueryParams params,
+      byte[] body,
+      String contentType,
+      Class<T> dataClass,
+      Timeout timeout) {
+    return postWithBody(subPath, params, body, contentType, Json.type(dataClass), timeout, false);
+  }
+
+  /** As {@link #postWithBody(String, QueryParams, byte[], String, Class, Timeout)}, see above. */
+  public <T> CompletableFuture<T> postWithBody(
+      String subPath,
+      QueryParams params,
+      byte[] body,
+      String contentType,
+      Class<T> dataClass,
+      Timeout timeout,
+      boolean doNotRetryTimeouts) {
+    return postWithBody(
+        subPath, params, body, contentType, Json.type(dataClass), timeout, doNotRetryTimeouts);
   }
 
   public <T> CompletableFuture<T> postWithBody(
-      String subPath, QueryParams params, byte[] body, String contentType, JavaType dataType) {
+      String subPath,
+      QueryParams params,
+      byte[] body,
+      String contentType,
+      JavaType dataType,
+      Timeout timeout) {
+    return postWithBody(subPath, params, body, contentType, dataType, timeout, false);
+  }
+
+  /**
+   * As {@link #postWithBody(String, QueryParams, byte[], String, JavaType, Timeout)}, with control
+   * over whether a transport timeout is retried. A request that creates a billed resource (a run, a
+   * build) must not be retried on a timeout, since the API may already have created it.
+   */
+  public <T> CompletableFuture<T> postWithBody(
+      String subPath,
+      QueryParams params,
+      byte[] body,
+      String contentType,
+      JavaType dataType,
+      Timeout timeout,
+      boolean doNotRetryTimeouts) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("POST", u, body, contentType, http.baseRequestTimeout())
+    return http.call("POST", u, body, contentType, timeout, doNotRetryTimeouts)
         .thenApply(resp -> Json.<T>parseData(resp.body(), dataType));
   }
 
@@ -378,17 +451,27 @@ public final class ResourceContext {
    * plain object rather than the standard data envelope.
    */
   public <T> CompletableFuture<T> postWithBodyNoEnvelope(
-      String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
+      String subPath,
+      QueryParams params,
+      byte[] body,
+      String contentType,
+      Class<T> dataClass,
+      Timeout timeout) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("POST", u, body, contentType, http.baseRequestTimeout())
+    return http.call("POST", u, body, contentType, timeout)
         .thenApply(resp -> Json.parse(resp.body(), dataClass));
   }
 
   /** PUT with a raw body (optional) and content type, unwrapping the data envelope. */
   public <T> CompletableFuture<T> putWithBody(
-      String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
+      String subPath,
+      QueryParams params,
+      byte[] body,
+      String contentType,
+      Class<T> dataClass,
+      Timeout timeout) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("PUT", u, body, contentType, http.baseRequestTimeout())
+    return http.call("PUT", u, body, contentType, timeout)
         .thenApply(resp -> Json.parseData(resp.body(), dataClass));
   }
 
@@ -398,26 +481,32 @@ public final class ResourceContext {
    * response is a plain object rather than the standard data envelope.
    */
   public <T> CompletableFuture<T> putWithBodyNoEnvelope(
-      String subPath, QueryParams params, byte[] body, String contentType, Class<T> dataClass) {
+      String subPath,
+      QueryParams params,
+      byte[] body,
+      String contentType,
+      Class<T> dataClass,
+      Timeout timeout) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("PUT", u, body, contentType, http.baseRequestTimeout())
+    return http.call("PUT", u, body, contentType, timeout)
         .thenApply(resp -> Json.parse(resp.body(), dataClass));
   }
 
   /** DELETE with a JSON body (used for batch request deletion), unwrapping the data envelope. */
   public <T> CompletableFuture<T> deleteWithBody(
-      String subPath, QueryParams params, Object body, Class<T> dataClass) {
+      String subPath, QueryParams params, Object body, Class<T> dataClass, Timeout timeout) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("DELETE", u, Json.toBytes(body), CONTENT_TYPE_JSON, http.baseRequestTimeout())
+    return http.call("DELETE", u, Json.toBytes(body), CONTENT_TYPE_JSON, timeout)
         .thenApply(resp -> Json.parseData(resp.body(), dataClass));
   }
 
   /**
    * GET returning the raw response (no data envelope). Completes with {@code null} on not-found.
    */
-  public CompletableFuture<ApiResponse> getRaw(String subPath, QueryParams params) {
+  public CompletableFuture<ApiResponse> getRaw(
+      String subPath, QueryParams params, Timeout timeout) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("GET", u, null, "", http.baseRequestTimeout())
+    return http.call("GET", u, null, "", timeout)
         .handle(
             (resp, error) -> {
               if (error == null) {
@@ -434,23 +523,26 @@ public final class ResourceContext {
   /**
    * As {@link #getRaw}, but a 404 is not swallowed - it propagates as an {@link ApifyApiException}.
    */
-  public CompletableFuture<ApiResponse> getRawRequired(String subPath, QueryParams params) {
+  public CompletableFuture<ApiResponse> getRawRequired(
+      String subPath, QueryParams params, Timeout timeout) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("GET", u, null, "", http.baseRequestTimeout());
+    return http.call("GET", u, null, "", timeout);
   }
 
   /**
    * Like {@link #getRaw}, but - mirroring {@link #getResourceUnlessAmbiguous} - a 404 is only
    * swallowed to {@code null} when this context addresses its resource by an explicit id.
    */
-  public CompletableFuture<ApiResponse> getRawUnlessAmbiguous(String subPath, QueryParams params) {
-    return ownId ? getRaw(subPath, params) : getRawRequired(subPath, params);
+  public CompletableFuture<ApiResponse> getRawUnlessAmbiguous(
+      String subPath, QueryParams params, Timeout timeout) {
+    return ownId ? getRaw(subPath, params, timeout) : getRawRequired(subPath, params, timeout);
   }
 
   /** HEAD request; completes with whether the resource exists. */
-  public CompletableFuture<Boolean> headExists(String subPath, QueryParams params) {
+  public CompletableFuture<Boolean> headExists(
+      String subPath, QueryParams params, Timeout timeout) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("HEAD", u, null, "", http.baseRequestTimeout())
+    return http.call("HEAD", u, null, "", timeout)
         .handle(
             (resp, error) -> {
               if (error == null) {
@@ -467,7 +559,7 @@ public final class ResourceContext {
   /** PUT with raw bytes and a content type (used for key-value-store record uploads). */
   public CompletableFuture<Void> putRaw(
       String subPath, QueryParams params, byte[] body, String contentType) {
-    return putRaw(subPath, params, body, contentType, http.baseRequestTimeout(), false);
+    return putRaw(subPath, params, body, contentType, Timeout.SHORT, false);
   }
 
   /**
@@ -481,16 +573,16 @@ public final class ResourceContext {
       QueryParams params,
       byte[] body,
       String contentType,
-      Duration timeout,
+      Timeout timeout,
       boolean doNotRetryTimeouts) {
     return putRaw(subPath, params, body, contentType, null, timeout, doNotRetryTimeouts);
   }
 
   /**
-   * As {@link #putRaw(String, QueryParams, byte[], String, Duration, boolean)}, additionally
-   * setting {@code extraHeaders} on the request (used to forward a caller-supplied {@code
-   * Content-Encoding} on a key-value-store record upload - see {@link HttpHeaders#CONTENT_ENCODING}
-   * - which also stops {@link HttpClientCore} from compressing the already-encoded body again).
+   * As {@link #putRaw(String, QueryParams, byte[], String, Timeout, boolean)}, additionally setting
+   * {@code extraHeaders} on the request (used to forward a caller-supplied {@code Content-Encoding}
+   * on a key-value-store record upload - see {@link HttpHeaders#CONTENT_ENCODING} - which also
+   * stops {@link HttpClientCore} from compressing the already-encoded body again).
    */
   public CompletableFuture<Void> putRaw(
       String subPath,
@@ -498,36 +590,11 @@ public final class ResourceContext {
       byte[] body,
       String contentType,
       Map<String, String> extraHeaders,
-      Duration timeout,
+      Timeout timeout,
       boolean doNotRetryTimeouts) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
     return http.call("PUT", u, body, contentType, extraHeaders, timeout, doNotRetryTimeouts)
         .thenApply(resp -> null);
-  }
-
-  /**
-   * The largest server-side {@code waitForFinish} value that is safe to send: below the configured
-   * per-request timeout by a safety margin (or the API's 60s cap when no finite timeout is set), so
-   * the server always responds before the client's socket timeout fires.
-   */
-  private long serverWaitCapSecs() {
-    long configuredTimeoutSecs = http.requestTimeoutSeconds();
-    return configuredTimeoutSecs > 0
-        ? Math.max(0, configuredTimeoutSecs - WAIT_TIMEOUT_MARGIN_SECS)
-        : WAIT_REQUEST_SECS;
-  }
-
-  /**
-   * Clamps a caller-supplied server-side {@code waitForFinish} value (seconds) to {@link
-   * #serverWaitCapSecs()}, so a synchronous get/wait can never ask the server to hold the
-   * connection longer than the client's own per-request timeout. Returns {@code null} for a {@code
-   * null} input (no server-side wait requested).
-   */
-  public Long clampServerWait(Long waitForFinishSecs) {
-    if (waitForFinishSecs == null) {
-      return null;
-    }
-    return Math.min(Math.max(0, waitForFinishSecs), serverWaitCapSecs());
   }
 
   /**
@@ -557,9 +624,7 @@ public final class ResourceContext {
             : MAX_WAIT_FOR_FINISH_SECS;
     long budgetMillis = effectiveWaitSecs * 1000L;
     long start = System.currentTimeMillis();
-    long serverWaitCap = serverWaitCapSecs();
-    return pollOnce(
-        dataType, isTerminal, resourceName, start, budgetMillis, serverWaitCap, null, null);
+    return pollOnce(dataType, isTerminal, resourceName, start, budgetMillis, null, null);
   }
 
   /**
@@ -594,18 +659,16 @@ public final class ResourceContext {
       String resourceName,
       long start,
       long budgetMillis,
-      long serverWaitCap,
       T lastSeen,
       Long absentSinceMillis) {
     long elapsed = System.currentTimeMillis() - start;
     long remainingSecs = (budgetMillis - elapsed) / 1000L;
-    long requestSecs =
-        Math.min(Math.min(Math.max(remainingSecs, 0), WAIT_REQUEST_SECS), serverWaitCap);
+    long requestSecs = Math.min(Math.max(remainingSecs, 0), WAIT_REQUEST_SECS);
 
     QueryParams params = new QueryParams();
     params.addLong("waitForFinish", requestSecs);
 
-    return this.<T>getResourceRequired("", params, dataType)
+    return this.<T>getResourceRequired("", params, dataType, Timeout.NO_TIMEOUT)
         .handle(
             (value, error) -> {
               if (error == null) {
@@ -653,7 +716,6 @@ public final class ResourceContext {
                               resourceName,
                               start,
                               budgetMillis,
-                              serverWaitCap,
                               seen,
                               absentSince));
             });
@@ -715,7 +777,15 @@ public final class ResourceContext {
       throw new IllegalArgumentException(
           "a URL path segment must not be empty or a dot segment (\".\" or \"..\"), was: " + input);
     }
-    return URLEncoder.encode(input, StandardCharsets.UTF_8).replace("+", "%20");
+    // URLEncoder targets form encoding: it writes a space as "+" and escapes "~" and the
+    // characters of encodeURIComponent's unreserved set, none of which a path segment needs.
+    return URLEncoder.encode(input, StandardCharsets.UTF_8)
+        .replace("+", "%20")
+        .replace("%7E", "~")
+        .replace("%21", "!")
+        .replace("%27", "'")
+        .replace("%28", "(")
+        .replace("%29", ")");
   }
 
   /** Extracts the origin ({@code scheme://host[:port]}) from a URL, dropping any path. */

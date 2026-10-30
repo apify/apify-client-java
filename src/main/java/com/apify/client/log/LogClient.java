@@ -1,5 +1,6 @@
 package com.apify.client.log;
 
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
@@ -49,7 +50,7 @@ public final class LogClient {
   public CompletableFuture<Optional<String>> get(LogOptions options) {
     QueryParams params = new QueryParams();
     options.apply(params);
-    return ctx.getRawUnlessAmbiguous("", params)
+    return ctx.getRawUnlessAmbiguous("", params, Timeout.LONG)
         .thenApply(
             resp ->
                 resp == null
@@ -71,7 +72,7 @@ public final class LogClient {
   public CompletableFuture<Optional<byte[]>> getAsBytes(LogOptions options) {
     QueryParams params = new QueryParams();
     options.apply(params);
-    return ctx.getRawUnlessAmbiguous("", params)
+    return ctx.getRawUnlessAmbiguous("", params, Timeout.LONG)
         .thenApply(resp -> resp == null ? Optional.empty() : Optional.of(resp.body()));
   }
 
