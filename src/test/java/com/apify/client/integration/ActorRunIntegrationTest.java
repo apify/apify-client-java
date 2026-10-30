@@ -10,6 +10,7 @@ import com.apify.client.actor.ActorCallOptions;
 import com.apify.client.actor.ActorClient;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.http.Timeout;
 import com.apify.client.keyvalue.ListKeysOptions;
 import com.apify.client.log.StreamedLog;
 import com.apify.client.log.StreamedLogOptions;
@@ -88,7 +89,7 @@ class ActorRunIntegrationTest extends IntegrationBase {
     ApifyClient client = requireClient();
     var page =
         client
-            .withTimeout(com.apify.client.http.Timeout.ofSeconds(60))
+            .withTimeout(Timeout.ofSeconds(60))
             .runs()
             .list(new ListOptions().limit(1L), new RunListOptions())
             .join();

@@ -1,6 +1,7 @@
 package com.apify.client.http;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -92,12 +93,12 @@ public final class Timeout {
     return o instanceof Timeout other
         && tier == other.tier
         && noTimeout == other.noTimeout
-        && java.util.Objects.equals(duration, other.duration);
+        && Objects.equals(duration, other.duration);
   }
 
   @Override
   public int hashCode() {
-    return java.util.Objects.hash(tier, duration, noTimeout);
+    return Objects.hash(tier, duration, noTimeout);
   }
 
   @Override

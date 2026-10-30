@@ -8,6 +8,7 @@ import com.apify.client.internal.Json;
 import com.apify.client.internal.UrlNormalizer;
 import com.apify.client.run.ActorRun;
 import com.apify.client.webhook.Webhook;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -128,8 +129,7 @@ class UrlNormalizationTest {
         "{\"id\":\"r1\",\"consoleUrl\":\"https://CONSOLE.apify.com\","
             + "\"containerUrl\":\"https://abc.runs.apify.net:443\","
             + "\"output\":{\"dataset\":\"https://api.apify.com:443/v2/datasets/d\"}}";
-    ActorRun parsed =
-        Json.parse(run.getBytes(java.nio.charset.StandardCharsets.UTF_8), ActorRun.class);
+    ActorRun parsed = Json.parse(run.getBytes(StandardCharsets.UTF_8), ActorRun.class);
     assertEquals("https://console.apify.com/", parsed.getConsoleUrl());
     assertEquals("https://abc.runs.apify.net/", parsed.getContainerUrl());
     assertEquals("https://api.apify.com/v2/datasets/d", parsed.getOutput().get("dataset"));
@@ -137,7 +137,7 @@ class UrlNormalizationTest {
     Dataset dataset =
         Json.parse(
             "{\"id\":\"d\",\"itemsPublicUrl\":\"https://api.apify.com\",\"title\":\"T\"}"
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                .getBytes(StandardCharsets.UTF_8),
             Dataset.class);
     assertEquals("https://api.apify.com/", dataset.getItemsPublicUrl());
     assertEquals("T", dataset.getTitle());
@@ -145,7 +145,7 @@ class UrlNormalizationTest {
     Webhook webhook =
         Json.parse(
             "{\"id\":\"w\",\"requestUrl\":\"https://Example.com/hook\"}"
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                .getBytes(StandardCharsets.UTF_8),
             Webhook.class);
     assertEquals("https://example.com/hook", webhook.getRequestUrl());
   }
@@ -154,8 +154,7 @@ class UrlNormalizationTest {
   void aNullUrlFieldStaysNull() {
     ActorRun parsed =
         Json.parse(
-            "{\"id\":\"r1\",\"containerUrl\":null}"
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8),
+            "{\"id\":\"r1\",\"containerUrl\":null}".getBytes(StandardCharsets.UTF_8),
             ActorRun.class);
     assertNull(parsed.getContainerUrl());
   }

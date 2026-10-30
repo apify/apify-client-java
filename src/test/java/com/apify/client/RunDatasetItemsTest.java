@@ -4,10 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.run.LastRunOptions;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -70,7 +72,7 @@ class RunDatasetItemsTest {
             200, "{\"data\":{\"id\":\"d1\",\"itemCount\":" + itemCountReported + "}}");
       }
       if (path.endsWith("/actor-runs/r1/dataset/items")) {
-        Map<String, String> params = new java.util.HashMap<>();
+        Map<String, String> params = new HashMap<>();
         for (String pair : query.split("&")) {
           String[] kv = pair.split("=", 2);
           params.put(kv[0], kv.length > 1 ? kv[1] : "");
@@ -217,7 +219,7 @@ class RunDatasetItemsTest {
         Publishers.collect(
                 client(router)
                     .actor("a")
-                    .lastRun(new com.apify.client.run.LastRunOptions())
+                    .lastRun(new LastRunOptions())
                     .iterateDatasetItems(new DatasetListItemsOptions(), 2L, 0L, JsonNode.class))
             .join();
 

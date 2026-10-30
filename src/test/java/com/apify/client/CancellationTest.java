@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.apify.client.actor.ActorCallOptions;
 import com.apify.client.actor.ActorListOptions;
@@ -243,7 +244,7 @@ class CancellationTest {
     // (-XX:+DisableExplicitGC).
     WeakReference<Object> control = new WeakReference<>(new Object());
     System.gc();
-    org.junit.jupiter.api.Assumptions.assumeTrue(control.get() == null, "System.gc() is a no-op");
+    assumeTrue(control.get() == null, "System.gc() is a no-op");
 
     List<WeakReference<byte[]>> bodies = new CopyOnWriteArrayList<>();
     String padding = "x".repeat(1 << 20);

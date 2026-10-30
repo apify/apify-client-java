@@ -5,12 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.apify.client.actor.ActorListOptions;
 import com.apify.client.actor.ActorStartOptions;
+import com.apify.client.dataset.DatasetListItemsOptions;
 import com.apify.client.http.ApifyTransportException;
 import com.apify.client.http.Timeout;
 import com.apify.client.keyvalue.SetRecordOptions;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import org.junit.jupiter.api.Test;
@@ -50,17 +53,14 @@ class TimeoutTierTest {
   @Test
   void listingUsesTheMediumTier() {
     MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"items\":[],\"total\":0}}");
-    client(backend).actors().list(new com.apify.client.actor.ActorListOptions()).join();
+    client(backend).actors().list(new ActorListOptions()).join();
     assertEquals(secs(30), backend.lastTimeout);
   }
 
   @Test
   void downloadsAndRecordReadsUseTheLongTier() {
     MockTransport backend = MockTransport.ofConstant(200, "[]");
-    client(backend)
-        .dataset("d1")
-        .listItems(new com.apify.client.dataset.DatasetListItemsOptions())
-        .join();
+    client(backend).dataset("d1").listItems(new DatasetListItemsOptions()).join();
     assertEquals(secs(360), backend.lastTimeout);
 
     backend = MockTransport.ofConstant(200, "abc");
@@ -71,7 +71,7 @@ class TimeoutTierTest {
   @Test
   void keyValueStoreUpdateAndRequestQueueUnlockFollowTheReferenceTiers() {
     MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"s1\"}}");
-    client(backend).keyValueStore("s1").update(java.util.Map.of("name", "x")).join();
+    client(backend).keyValueStore("s1").update(Map.of("name", "x")).join();
     assertEquals(secs(360), backend.lastTimeout);
 
     backend = MockTransport.ofConstant(200, "{\"data\":{\"unlockedCount\":0}}");
@@ -132,7 +132,7 @@ class TimeoutTierTest {
             .build();
     client.run("r1").get().join();
     assertEquals(secs(2), backend.lastTimeout);
-    client.runs().list(new com.apify.client.ListOptions(), null).join();
+    client.runs().list(new ListOptions(), null).join();
     assertEquals(secs(7), backend.lastTimeout);
     client.keyValueStore("s").getRecord("k").join();
     assertEquals(secs(90), backend.lastTimeout);
@@ -233,7 +233,7 @@ class TimeoutTierTest {
         new MockTransport(List.of(MockTransport.timeoutError(), MockTransport.ok(201, "{}")));
     ApifyClient client = builder(backend).maxRetries(3).build();
 
-    var future = client.dataset("d1").pushItems(java.util.Map.of("a", 1));
+    var future = client.dataset("d1").pushItems(Map.of("a", 1));
     var error = assertThrows(CompletionException.class, future::join);
     assertTrue(error.getCause() instanceof ApifyTransportException);
     assertEquals(1, backend.calls, "a push that timed out must not be sent again");

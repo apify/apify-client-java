@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
+import java.nio.charset.StandardCharsets;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.DeserializationFeature;
@@ -83,7 +84,7 @@ public final class Json {
       return bytes;
     }
     if (payload instanceof String text) {
-      return text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      return text.getBytes(StandardCharsets.UTF_8);
     }
     return toBytes(payload);
   }
