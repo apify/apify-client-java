@@ -43,6 +43,14 @@ class RunDatasetItemsTest {
       }
     }
 
+    /** Replaces the first {@code count} rows with empty items. */
+    FakeRun withEmptyHead(int count) {
+      for (int i = 0; i < count; i++) {
+        rows.set(i, "{}");
+      }
+      return this;
+    }
+
     MockTransport.Scripted answer(HttpRequest request) {
       URI uri = request.uri();
       String path = uri.getPath();
@@ -70,11 +78,16 @@ class RunDatasetItemsTest {
         int offset = Integer.parseInt(params.getOrDefault("offset", "0"));
         int limit = Integer.parseInt(params.getOrDefault("limit", "1000"));
         int end = Math.min(totalRows, offset + limit);
-        List<String> page = offset >= end ? List.of() : rows.subList(offset, end);
+        List<String> scanned = offset >= end ? List.of() : rows.subList(offset, end);
+        // skipEmpty drops the empty rows from what is returned, but they were still scanned.
+        List<String> page =
+            "1".equals(params.get("skipEmpty"))
+                ? scanned.stream().filter(row -> !row.equals("{}")).toList()
+                : scanned;
         return MockTransport.ok(
             200,
             "[" + String.join(",", page) + "]",
-            Map.of("X-Apify-Pagination-Count", String.valueOf(page.size())));
+            Map.of("X-Apify-Pagination-Count", String.valueOf(scanned.size())));
       }
       return MockTransport.ok(404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"x\"}}");
     }
@@ -166,5 +179,21 @@ class RunDatasetItemsTest {
     assertEquals(range(0, 4), ns(items));
     assertTrue(
         fake.requests.stream().noneMatch(r -> r.contains("desc=")), fake.requests.toString());
+  }
+
+  @Test
+  void theTailKeepsReadingPastRowsAFilterEmptiedAndLaggingCounts() {
+    // Two empty rows, then two with data; the run has finished but the dataset's itemCount still
+    // reads 0, so every row is read by the tail. skipEmpty empties the first page entirely, which
+    // must not end the iteration: the next row is probed without the filter.
+    FakeRun fake = new FakeRun(4, 4, 4).withEmptyHead(2);
+    List<JsonNode> items =
+        Publishers.collect(
+                client(fake::answer)
+                    .run("r1")
+                    .iterateDatasetItems(
+                        new DatasetListItemsOptions().skipEmpty(true), 2L, 0L, JsonNode.class))
+            .join();
+    assertEquals(List.of(2, 3), ns(items));
   }
 }

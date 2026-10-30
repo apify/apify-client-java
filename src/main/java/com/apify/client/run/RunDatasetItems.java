@@ -4,9 +4,11 @@ import com.apify.client.PaginationList;
 import com.apify.client.dataset.Dataset;
 import com.apify.client.dataset.DatasetClient;
 import com.apify.client.dataset.DatasetListItemsOptions;
+import com.apify.client.internal.DatasetItemsOptionsAccess;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import tools.jackson.databind.JsonNode;
 
 /**
  * The paging state machine behind {@link RunClient#iterateDatasetItems}: it reads a run's default
@@ -26,6 +28,7 @@ final class RunDatasetItems<T> {
   private final RunClient runClient;
   private final DatasetListItemsOptions options;
   private final Class<T> itemClass;
+  private final DatasetItemsOptionsAccess access;
   private final long pageSize;
   private final long pollIntervalSecs;
 
@@ -53,12 +56,13 @@ final class RunDatasetItems<T> {
       long pollIntervalSecs,
       Class<T> itemClass) {
     this.runClient = runClient;
-    this.options = options;
+    this.access = DatasetItemsOptionsAccess.get();
+    this.options = access.snapshot(options);
     this.itemClass = itemClass;
     this.pageSize = pageSize;
     this.pollIntervalSecs = pollIntervalSecs;
-    this.position = options.offsetValueOrZero();
-    Long limit = options.limitValueOrNull();
+    this.position = access.offset(this.options);
+    Long limit = access.limit(this.options);
     this.end = limit != null && limit > 0 ? position + limit : null;
   }
 
@@ -132,13 +136,14 @@ final class RunDatasetItems<T> {
               if (!empty) {
                 return CompletableFuture.completedFuture(advance(page, limit));
               }
-              if (!options.dropsRows()) {
+              if (!access.dropsRows(options)) {
                 return finish();
               }
               // A page that clean, skipEmpty or unwind emptied past a lagging itemCount reports no
-              // scanned rows either, so a plain read of the next row tells whether any are left.
+              // scanned rows either, so a read of the next row without those filters (they would
+              // empty it again) tells whether any rows are left.
               return dataset
-                  .listItems(options.copy().desc(null).offset(position).limit(1L), itemClass)
+                  .listItems(access.plainPage(position, 1L), JsonNode.class)
                   .thenCompose(
                       probe ->
                           probe.getItems().isEmpty()
@@ -157,7 +162,7 @@ final class RunDatasetItems<T> {
   }
 
   private CompletableFuture<PaginationList<T>> page(long offset, long limit) {
-    return dataset.listItems(options.copy().desc(null).offset(offset).limit(limit), itemClass);
+    return dataset.listItems(access.page(options, offset, limit), itemClass);
   }
 
   /** Moves past the {@code limit} rows a page covered and marks it as having scanned them. */

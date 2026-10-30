@@ -79,6 +79,7 @@ public final class ListPublisher<T> implements Flow.Publisher<T> {
     @Override
     public void cancel() {
       cancelled.set(true);
+      source.cancel(true);
     }
 
     private void drain() {

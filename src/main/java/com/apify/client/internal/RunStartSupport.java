@@ -92,12 +92,15 @@ public final class RunStartSupport {
     QueryParams params = new QueryParams();
     applyParams.accept(params);
     byte[] body = Json.toRequestBody(input);
-    Timeout requestTimeout =
-        timeout != null
-            ? timeout
-            : ctx.http.timeoutWithHold(Timeout.MEDIUM, params.getLong("waitForFinish"));
+    Timeout requestTimeout = timeout;
+    if (requestTimeout == null) {
+      HttpClientCore.WaitHold hold =
+          ctx.http.waitHold(Timeout.MEDIUM, params.getLong("waitForFinish"));
+      params.setLong("waitForFinish", hold.waitForFinishSecs());
+      requestTimeout = hold.timeout();
+    }
     if (waitForResourcesSecs == null) {
-      return postRun(ctx, params, body, contentType, requestTimeout);
+      return ctx.postWithBody("runs", params, body, contentType, ActorRun.class, requestTimeout);
     }
     long deadlineMillis =
         waitForResourcesSecs == ActorStartOptions.WAIT_FOR_RESOURCES_INDEFINITELY
@@ -121,7 +124,7 @@ public final class RunStartSupport {
       String contentType,
       Timeout timeout,
       long deadlineMillis) {
-    return postRun(ctx, params, body, contentType, timeout)
+    return ctx.postWithBody("runs", params, body, contentType, ActorRun.class, timeout)
         .handle(
             (run, error) -> {
               if (error == null) {
@@ -150,15 +153,6 @@ public final class RunStartSupport {
                               ctx, params, body, contentType, timeout, deadlineMillis));
             })
         .thenCompose(future -> future);
-  }
-
-  /**
-   * Posts the run-start request. A start that timed out is not retried: the API may already have
-   * created the run, and a retry would start a second, billed one.
-   */
-  private static CompletableFuture<ActorRun> postRun(
-      ResourceContext ctx, QueryParams params, byte[] body, String contentType, Timeout timeout) {
-    return ctx.postWithBody("runs", params, body, contentType, ActorRun.class, timeout, true);
   }
 
   /**
@@ -211,7 +205,7 @@ public final class RunStartSupport {
               CompletableFuture<StreamedLog> streamedLogFuture =
                   logStreamingEnabled
                       ? startStreamedLogQuietly(runClient, logOptions)
-                      : CompletableFuture.completedFuture(null);
+                      : CancellableFuture.completed(null);
               return streamedLogFuture.thenCompose(
                   streamedLog ->
                       runClient

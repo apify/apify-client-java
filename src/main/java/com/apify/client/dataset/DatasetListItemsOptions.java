@@ -1,5 +1,6 @@
 package com.apify.client.dataset;
 
+import com.apify.client.internal.DatasetItemsOptionsAccess;
 import com.apify.client.internal.QueryParams;
 import java.util.List;
 
@@ -121,8 +122,53 @@ public final class DatasetListItemsOptions {
     return this;
   }
 
+  static {
+    DatasetItemsOptionsAccess.register(
+        new DatasetItemsOptionsAccess() {
+          @Override
+          public long offset(DatasetListItemsOptions options) {
+            return options.offset != null && options.offset > 0 ? options.offset : 0;
+          }
+
+          @Override
+          public Long limit(DatasetListItemsOptions options) {
+            return options.limit;
+          }
+
+          @Override
+          public boolean dropsRows(DatasetListItemsOptions options) {
+            return Boolean.TRUE.equals(options.clean)
+                || Boolean.TRUE.equals(options.skipEmpty)
+                || (options.unwind != null && !options.unwind.isEmpty());
+          }
+
+          @Override
+          public DatasetListItemsOptions snapshot(DatasetListItemsOptions options) {
+            DatasetListItemsOptions c =
+                options != null ? options.copy() : new DatasetListItemsOptions();
+            c.desc = null;
+            return c;
+          }
+
+          @Override
+          public DatasetListItemsOptions page(
+              DatasetListItemsOptions options, long offset, long limit) {
+            DatasetListItemsOptions c = options.copy();
+            c.desc = null;
+            c.offset = offset;
+            c.limit = limit;
+            return c;
+          }
+
+          @Override
+          public DatasetListItemsOptions plainPage(long offset, long limit) {
+            return new DatasetListItemsOptions().offset(offset).limit(limit);
+          }
+        });
+  }
+
   /** Returns an independent copy of these options. */
-  public DatasetListItemsOptions copy() {
+  private DatasetListItemsOptions copy() {
     DatasetListItemsOptions c = new DatasetListItemsOptions();
     c.offset = offset;
     c.limit = limit;
@@ -140,26 +186,6 @@ public final class DatasetListItemsOptions {
     c.skipFailedPages = skipFailedPages;
     c.signature = signature;
     return c;
-  }
-
-  /**
-   * Whether {@code clean}, {@code skipEmpty} or {@code unwind} is set: the server-side filters that
-   * can leave a page of existing rows without a single returned item.
-   */
-  public boolean dropsRows() {
-    return Boolean.TRUE.equals(clean)
-        || Boolean.TRUE.equals(skipEmpty)
-        || (unwind != null && !unwind.isEmpty());
-  }
-
-  /** The first row to read, or 0 when not set. */
-  public long offsetValueOrZero() {
-    return offset != null && offset > 0 ? offset : 0;
-  }
-
-  /** The maximum number of rows to read, or {@code null} when not set. */
-  public Long limitValueOrNull() {
-    return limit;
   }
 
   Boolean descValue() {

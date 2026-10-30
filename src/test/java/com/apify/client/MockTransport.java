@@ -63,6 +63,15 @@ final class MockTransport implements HttpTransport {
   /** The per-attempt timeout of every request, in order. */
   final List<Optional<java.time.Duration>> timeouts = new ArrayList<>();
 
+  /**
+   * Requests this predicate accepts are never answered; their futures are kept in {@link #hung}.
+   */
+  private java.util.function.Predicate<HttpRequest> hangWhen = request -> false;
+
+  /** The futures of the requests that were left unanswered. */
+  final List<CompletableFuture<HttpResponse<byte[]>>> hung =
+      new java.util.concurrent.CopyOnWriteArrayList<>();
+
   /** When set, answers each request itself instead of serving the scripted queue. */
   private java.util.function.Function<HttpRequest, Scripted> router;
 
@@ -96,6 +105,18 @@ final class MockTransport implements HttpTransport {
     MockTransport transport = new MockTransport(List.of(new Scripted(500, "no route", null)));
     transport.router = router;
     return transport;
+  }
+
+  /** A transport that never answers the requests {@code hangWhen} accepts. */
+  static MockTransport ofHanging(java.util.function.Predicate<HttpRequest> hangWhen) {
+    MockTransport transport = ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");
+    transport.hangWhen = hangWhen;
+    return transport;
+  }
+
+  /** Whether every request left unanswered has been cancelled by the client. */
+  boolean allHungCancelled() {
+    return !hung.isEmpty() && hung.stream().allMatch(CompletableFuture::isCancelled);
   }
 
   static MockTransport ofConstant(int status, String body) {
@@ -136,6 +157,11 @@ final class MockTransport implements HttpTransport {
     lastBody = lastBodyBytes == null ? null : new String(lastBodyBytes, StandardCharsets.UTF_8);
     if (lastBody != null) {
       bodies.add(lastBody);
+    }
+    if (hangWhen.test(request)) {
+      CompletableFuture<HttpResponse<byte[]>> never = new CompletableFuture<>();
+      hung.add(never);
+      return never;
     }
     if (idx >= responses.size()) {
       idx = responses.size() - 1; // repeat the last entry

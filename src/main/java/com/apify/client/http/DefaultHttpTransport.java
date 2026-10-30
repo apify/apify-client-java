@@ -69,6 +69,13 @@ public final class DefaultHttpTransport implements HttpTransport {
    */
   private static <T> CompletableFuture<T> unwrapTimeout(CompletableFuture<T> future) {
     CompletableFuture<T> result = new CompletableFuture<>();
+    // Cancelling the returned future aborts the exchange the JDK client has in flight.
+    result.whenComplete(
+        (value, error) -> {
+          if (result.isCancelled()) {
+            future.cancel(true);
+          }
+        });
     future.whenComplete(
         (value, error) -> {
           if (error == null) {

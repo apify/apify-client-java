@@ -183,6 +183,34 @@ class CompressionTest {
   }
 
   @Test
+  void aCompressorThatThrowsAnErrorFailsTheFutureInsteadOfThrowing() {
+    HttpCompressor broken =
+        new HttpCompressor() {
+          @Override
+          public String contentEncoding() {
+            return "x-broken";
+          }
+
+          @Override
+          public byte[] compress(byte[] data) {
+            throw new UnsatisfiedLinkError("native codec missing");
+          }
+        };
+    MockTransport backend = MockTransport.ofConstant(201, "");
+    ApifyClient client =
+        ApifyClient.builder().token("t").httpTransport(backend).compression(broken).build();
+
+    var future =
+        client
+            .keyValueStore(STORE_ID)
+            .setRecord(RECORD_KEY, payload(4096, (byte) 'a'), CONTENT_TYPE);
+
+    var error = assertThrows(java.util.concurrent.CompletionException.class, future::join);
+    assertTrue(error.getCause() instanceof com.apify.client.http.ApifyTransportException);
+    assertEquals(0, backend.calls);
+  }
+
+  @Test
   void builderRejectsNullCompression() {
     assertThrows(IllegalArgumentException.class, () -> ApifyClient.builder().compression(null));
   }

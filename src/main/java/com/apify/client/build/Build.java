@@ -127,7 +127,12 @@ public final class Build extends ApifyResource {
     return Statuses.isTerminal(status);
   }
 
-  /** The changelog of the Actor version built. */
+  /**
+   * The changelog of the Actor version built.
+   *
+   * @deprecated The OpenAPI specification marks {@code Build.changelog} as deprecated.
+   */
+  @Deprecated
   public String getChangelog() {
     return changelog;
   }

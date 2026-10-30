@@ -401,20 +401,7 @@ public final class ResourceContext {
       String contentType,
       Class<T> dataClass,
       Timeout timeout) {
-    return postWithBody(subPath, params, body, contentType, Json.type(dataClass), timeout, false);
-  }
-
-  /** As {@link #postWithBody(String, QueryParams, byte[], String, Class, Timeout)}, see above. */
-  public <T> CompletableFuture<T> postWithBody(
-      String subPath,
-      QueryParams params,
-      byte[] body,
-      String contentType,
-      Class<T> dataClass,
-      Timeout timeout,
-      boolean doNotRetryTimeouts) {
-    return postWithBody(
-        subPath, params, body, contentType, Json.type(dataClass), timeout, doNotRetryTimeouts);
+    return postWithBody(subPath, params, body, contentType, Json.type(dataClass), timeout);
   }
 
   public <T> CompletableFuture<T> postWithBody(
@@ -424,24 +411,8 @@ public final class ResourceContext {
       String contentType,
       JavaType dataType,
       Timeout timeout) {
-    return postWithBody(subPath, params, body, contentType, dataType, timeout, false);
-  }
-
-  /**
-   * As {@link #postWithBody(String, QueryParams, byte[], String, JavaType, Timeout)}, with control
-   * over whether a transport timeout is retried. A request that creates a billed resource (a run, a
-   * build) must not be retried on a timeout, since the API may already have created it.
-   */
-  public <T> CompletableFuture<T> postWithBody(
-      String subPath,
-      QueryParams params,
-      byte[] body,
-      String contentType,
-      JavaType dataType,
-      Timeout timeout,
-      boolean doNotRetryTimeouts) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.call("POST", u, body, contentType, timeout, doNotRetryTimeouts)
+    return http.call("POST", u, body, contentType, timeout)
         .thenApply(resp -> Json.<T>parseData(resp.body(), dataType));
   }
 

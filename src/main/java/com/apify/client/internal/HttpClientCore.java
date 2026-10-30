@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -72,6 +73,14 @@ public final class HttpClientCore {
 
   /** The API holds a {@code waitForFinish} request for at most this many seconds. */
   private static final long MAX_HOLD_SECS = 60;
+
+  /**
+   * Seconds of a caller-chosen request timeout kept free of a {@code waitForFinish} hold, so the
+   * API answers before the client's own timeout fires.
+   */
+  private static final long HOLD_MARGIN_SECS = 5;
+
+  private static final double MILLIS_PER_SECOND = 1000.0;
 
   private static final Logger LOG = LoggerFactory.getLogger(HttpClientCore.class);
 
@@ -161,11 +170,6 @@ public final class HttpClientCore {
         warnedCappedTimeouts);
   }
 
-  /** Whether {@link #withTimeout} replaced the per-method timeouts of this client. */
-  public boolean hasTimeoutOverride() {
-    return timeoutOverride != null;
-  }
-
   /**
    * Resolves a timeout to the duration of its first attempt: a tier to its configured duration, an
    * exact timeout to itself, and {@link Timeout#NO_TIMEOUT} to {@code null} (no timeout). A value
@@ -193,8 +197,8 @@ public final class HttpClientCore {
         LOG.warn(
             "The requested timeout of {}s exceeds timeoutMax ({}s) and is capped at it. Raise"
                 + " timeoutMax on the client builder to allow longer request timeouts.",
-            duration.toMillis() / 1000.0,
-            retry.timeout.toMillis() / 1000.0);
+            duration.toMillis() / MILLIS_PER_SECOND,
+            retry.timeout.toMillis() / MILLIS_PER_SECOND);
       }
       return retry.timeout;
     }
@@ -202,18 +206,41 @@ public final class HttpClientCore {
   }
 
   /**
-   * The timeout for a request that asks the API to hold its response for {@code holdSecs} with
-   * {@code waitForFinish}: the hold plus the round trip {@code tier} allows, so the client does not
-   * abort a request the API is still holding (which, for a start or build, would retry a call that
-   * creates a resource). An override set by {@link #withTimeout} is used as given.
+   * The {@code waitForFinish} value to send and the timeout to send it with, for a request that
+   * asks the API to hold its response for up to {@code requestedHold} seconds.
+   *
+   * <p>The hold is at most {@link #MAX_HOLD_SECS} and is cut down to what the request timeout can
+   * cover, so the client never aborts a request the API is still holding (which, for a start or a
+   * build, would retry a call that creates a resource). Without an override the timeout is the
+   * tier's plus the hold, and the hold is limited by what {@code timeoutMax} leaves above the tier.
+   * An override set by {@link #withTimeout} is kept as given, and the hold is limited to it less a
+   * safety margin.
    */
-  public Timeout timeoutWithHold(Timeout tier, Long holdSecs) {
-    if (timeoutOverride != null || tier.isNoTimeout() || holdSecs == null || holdSecs <= 0) {
-      return tier;
+  public WaitHold waitHold(Timeout tier, Long requestedHold) {
+    if (requestedHold == null) {
+      return new WaitHold(null, tier);
     }
+    long hold = Math.min(Math.max(requestedHold, 0), MAX_HOLD_SECS);
     Duration base = resolveTimeout(tier);
-    return Timeout.of(base.plusSeconds(Math.min(holdSecs, MAX_HOLD_SECS)));
+    if (base == null) {
+      return new WaitHold(hold, tier);
+    }
+    if (timeoutOverride != null) {
+      long coverable = Math.max(0, base.toSeconds() - HOLD_MARGIN_SECS);
+      return new WaitHold(Math.min(hold, coverable), tier);
+    }
+    hold = Math.min(hold, Math.max(0, retry.timeout.toSeconds() - base.toSeconds()));
+    return new WaitHold(hold, hold > 0 ? Timeout.of(base.plusSeconds(hold)) : tier);
   }
+
+  /**
+   * The outcome of {@link #waitHold}.
+   *
+   * @param waitForFinishSecs the {@code waitForFinish} query value to send, or {@code null} for
+   *     none
+   * @param timeout the timeout to send the request with
+   */
+  public record WaitHold(Long waitForFinishSecs, Timeout timeout) {}
 
   /** Sends a request with auth, User-Agent and the retry policy applied. */
   public CompletableFuture<ApiResponse> call(
@@ -269,8 +296,9 @@ public final class HttpClientCore {
     if (shouldCompress(requestBody, contentType, extraHeaders)) {
       try {
         requestBody = compressor.compress(requestBody);
-      } catch (IOException | RuntimeException e) {
-        // No fallback to another coding: the configured compressor is the only one that runs.
+      } catch (Exception | LinkageError e) {
+        // No fallback to another coding: the configured compressor is the only one that runs. A
+        // LinkageError is what a native codec that fails to load raises.
         return failedFuture(new ApifyTransportException(e));
       }
       headers = new LinkedHashMap<>(extraHeaders == null ? Map.of() : extraHeaders);
@@ -371,6 +399,10 @@ public final class HttpClientCore {
                     null, false, isStatusRetryable(resp.statusCode()), apiError);
               }
               Throwable cause = unwrapCompletion(err);
+              if (cause instanceof CancellationException cancellation) {
+                // The caller cancelled the call: end it, never retry.
+                return new AttemptOutcome(null, false, false, cancellation);
+              }
               ApifyTransportException transportError =
                   cause instanceof ApifyTransportException apifyTransportException
                       ? apifyTransportException
@@ -424,8 +456,7 @@ public final class HttpClientCore {
       Map<String, String> extraHeaders,
       Duration timeout) {
     HttpRequest request = buildRequest(method, url, body, contentType, extraHeaders, timeout);
-    return transport
-        .sendAsync(request)
+    return CancellableFuture.wrap(transport.sendAsync(request))
         .thenApply(resp -> new ApiResponse(resp.statusCode(), resp.headers(), resp.body()));
   }
 
@@ -531,8 +562,8 @@ public final class HttpClientCore {
    * ending in {@code +json}/{@code +xml} (e.g. {@code image/svg+xml}). A missing content type is
    * assumed compressible. Matches the reference JS client's {@code isCompressibleContentType}.
    *
-   * <p>Public (like {@link #compress} and {@link #brotliAvailable}) so {@code CompressionTest},
-   * outside this non-exported package, can exercise the classification directly.
+   * <p>Public so {@code CompressionTest}, outside this non-exported package, can exercise the
+   * classification directly.
    */
   public static boolean isCompressibleContentType(String contentType) {
     if (contentType == null || contentType.isEmpty()) {
@@ -687,17 +718,21 @@ public final class HttpClientCore {
    */
   public CompletableFuture<HttpResponse<InputStream>> streamAsync(String url) {
     HttpRequest request = buildRequest("GET", url, null, null, null, resolveTimeout(Timeout.LONG));
-    CompletableFuture<HttpResponse<InputStream>> result = new CompletableFuture<>();
-    transport
-        .sendStreamingAsync(request)
-        .whenComplete(
-            (resp, err) -> {
-              if (err == null) {
-                result.complete(resp);
-              } else {
-                result.completeExceptionally(new ApifyTransportException(unwrapCompletion(err)));
-              }
-            });
+    CancellableFuture<HttpResponse<InputStream>> result = new CancellableFuture<>();
+    CompletableFuture<HttpResponse<InputStream>> exchange = transport.sendStreamingAsync(request);
+    // Cancelling the returned future aborts the exchange.
+    result.link(exchange);
+    exchange.whenComplete(
+        (resp, err) -> {
+          Throwable cause = err == null ? null : unwrapCompletion(err);
+          if (cause == null) {
+            result.complete(resp);
+          } else if (cause instanceof CancellationException) {
+            result.cancel(true);
+          } else {
+            result.completeExceptionally(new ApifyTransportException(cause));
+          }
+        });
     return result;
   }
 

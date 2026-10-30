@@ -150,6 +150,7 @@ public final class KeyValueStoreClient {
       private final AtomicLong requested = new AtomicLong();
       private final AtomicBoolean draining = new AtomicBoolean();
       private final AtomicBoolean cancelled = new AtomicBoolean();
+      private volatile CompletableFuture<?> inFlight;
       private final AtomicBoolean terminated = new AtomicBoolean();
 
       // Only touched from within the draining-guarded section; see AsyncPaginatedPublisher.Session.
@@ -182,6 +183,10 @@ public final class KeyValueStoreClient {
       @Override
       public void cancel() {
         cancelled.set(true);
+        CompletableFuture<?> fetch = inFlight;
+        if (fetch != null) {
+          fetch.cancel(true);
+        }
       }
 
       private void drain() {
@@ -228,23 +233,25 @@ public final class KeyValueStoreClient {
         params.addLong("limit", pageLimit);
         params.addString("exclusiveStartKey", cursor);
         params.extend(filters);
-        ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class, Timeout.MEDIUM)
-            .whenComplete(
-                (page, error) -> {
-                  if (cancelled.get()) {
-                    draining.set(false);
-                    return;
-                  }
-                  if (error != null) {
-                    if (terminated.compareAndSet(false, true)) {
-                      subscriber.onError(HttpClientCore.unwrapCompletion(error));
-                    }
-                    draining.set(false);
-                    return;
-                  }
-                  applyPage(page);
-                  drainLoop();
-                });
+        CompletableFuture<KeyValueStoreKeysPage> fetch =
+            ctx.getResourceRequired("keys", params, KeyValueStoreKeysPage.class, Timeout.MEDIUM);
+        inFlight = fetch;
+        fetch.whenComplete(
+            (page, error) -> {
+              if (cancelled.get()) {
+                draining.set(false);
+                return;
+              }
+              if (error != null) {
+                if (terminated.compareAndSet(false, true)) {
+                  subscriber.onError(HttpClientCore.unwrapCompletion(error));
+                }
+                draining.set(false);
+                return;
+              }
+              applyPage(page);
+              drainLoop();
+            });
       }
 
       private void applyPage(KeyValueStoreKeysPage page) {

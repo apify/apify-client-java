@@ -67,6 +67,30 @@ class UrlNormalizationTest {
   }
 
   @Test
+  void userInfoKeepsItsSeparatorAndEncodesEachPart() {
+    assertEquals(
+        "https://user:pass@example.com/hook",
+        UrlNormalizer.normalize("https://user:pass@example.com/hook"));
+    assertEquals(
+        "https://us%20er:p%40ss@example.com/",
+        UrlNormalizer.normalize("https://us er:p@ss@Example.com"));
+    assertEquals(
+        "https://token@example.com/", UrlNormalizer.normalize("https://token@example.com"));
+  }
+
+  @Test
+  void anInvalidPortLeavesTheValueAlone() {
+    assertEquals(
+        "https://example.com:99999999999/",
+        UrlNormalizer.normalize("https://example.com:99999999999/"));
+    assertEquals(
+        "https://example.com:65536/", UrlNormalizer.normalize("https://example.com:65536/"));
+    assertEquals(
+        "https://example.com:65535/", UrlNormalizer.normalize("https://example.com:65535"));
+    assertEquals("https://example.com:abc/", UrlNormalizer.normalize("https://example.com:abc/"));
+  }
+
+  @Test
   void valuesThatAreNotAbsoluteUrlsAreLeftAlone() {
     assertNull(UrlNormalizer.normalize(null));
     assertEquals("not a url", UrlNormalizer.normalize("not a url"));
