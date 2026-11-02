@@ -34,6 +34,12 @@ public final class QueryParams {
     return this;
   }
 
+  /** Sets an integer parameter, replacing any earlier value; a {@code null} value removes it. */
+  public QueryParams setLong(String key, Long value) {
+    pairs.removeIf(pair -> pair.key().equals(key));
+    return addLong(key, value);
+  }
+
   /** Adds a floating-point parameter if the value is non-null. */
   public QueryParams addDouble(String key, Double value) {
     if (value != null) {
@@ -62,6 +68,16 @@ public final class QueryParams {
   public QueryParams addRaw(String key, String value) {
     pairs.add(new Pair(key, value));
     return this;
+  }
+
+  /** The value of the first {@code key} parameter parsed as an integer, or {@code null}. */
+  public Long getLong(String key) {
+    for (Pair p : pairs) {
+      if (p.key().equals(key)) {
+        return Long.valueOf(p.value());
+      }
+    }
+    return null;
   }
 
   boolean isEmpty() {

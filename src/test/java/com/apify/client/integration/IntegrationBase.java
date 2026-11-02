@@ -55,16 +55,16 @@ public abstract class IntegrationBase {
 
   /**
    * {@link #pollUntil} attempt count bounding how long a CRUD-flow test waits for a just-created
-   * resource to surface in its own top-level collection {@code list()} (a write and the LIST
-   * endpoint's index can converge asynchronously - the same class of eventual-consistency race as
-   * {@link #STREAM_CATCH_UP_ATTEMPTS} and {@code ActorRunIntegrationTest#RUN_LIST_FIND_ATTEMPTS},
-   * just with a shorter budget since these are exclusively-owned resources, not entries in a
-   * heavily-shared public collection).
+   * resource to surface in its own top-level collection {@code list()}. The list endpoints read
+   * from database secondaries with up to 90 s of staleness, so under load a fresh resource can be
+   * missing from the listing for that long. {@link #LIST_FIND_ATTEMPTS} attempts, {@link
+   * #LIST_FIND_BACKOFF_MILLIS} apart, cover that window; the wait still ends as soon as the
+   * resource shows up.
    */
-  static final int LIST_FIND_ATTEMPTS = 5;
+  static final int LIST_FIND_ATTEMPTS = 30;
 
   /** Poll interval used while waiting out {@link #LIST_FIND_ATTEMPTS}. */
-  static final long LIST_FIND_BACKOFF_MILLIS = 500L;
+  static final long LIST_FIND_BACKOFF_MILLIS = 3_000L;
 
   private static final SecureRandom RANDOM = new SecureRandom();
 

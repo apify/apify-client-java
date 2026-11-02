@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
@@ -32,11 +33,22 @@ public final class Async {
 
   private Async() {}
 
-  /** Returns a future that completes after {@code delay} has elapsed (never negative/blocking). */
+  /**
+   * Returns a future that completes after {@code delay} has elapsed (never negative/blocking).
+   * Cancelling it cancels the timer.
+   */
   public static CompletableFuture<Void> delay(Duration delay) {
-    CompletableFuture<Void> future = new CompletableFuture<>();
+    CancellableFuture<Void> future = new CancellableFuture<>();
     long millis = Math.max(0, delay.toMillis());
-    SCHEDULER.schedule(() -> future.complete(null), millis, TimeUnit.MILLISECONDS);
+    ScheduledFuture<?> timer =
+        SCHEDULER.schedule(() -> future.complete(null), millis, TimeUnit.MILLISECONDS);
+    // A cancelled delay releases its timer instead of firing into a future nobody waits for.
+    future.whenComplete(
+        (unused, error) -> {
+          if (future.isCancelled()) {
+            timer.cancel(false);
+          }
+        });
     return future;
   }
 }

@@ -1,5 +1,6 @@
 package com.apify.client.webhook;
 
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
@@ -34,7 +35,8 @@ public final class WebhookClient {
 
   /** Dispatches the webhook immediately and completes with the resulting dispatch. */
   public CompletableFuture<WebhookDispatch> test() {
-    return ctx.postWithBody("test", new QueryParams(), null, "", WebhookDispatch.class);
+    return ctx.postWithBody(
+        "test", new QueryParams(), null, "", WebhookDispatch.class, Timeout.MEDIUM);
   }
 
   /** A client for this webhook's dispatch collection. */

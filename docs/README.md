@@ -16,8 +16,10 @@ ApifyClient client = ApifyClient.create("my-api-token");
 ```
 
 `ApifyClient.create` takes the token as an explicit argument — it does not read `APIFY_TOKEN`
-automatically. Use `ApifyClient.builder()` for non-default settings (base URL, retries, timeout,
-user-agent suffix, custom HTTP transport).
+automatically. Use `ApifyClient.builder()` for non-default settings (base URL, retries, timeout tiers,
+compression, default headers, user-agent suffix, custom HTTP transport). `client.withTimeout(...)`
+returns a client that sends every request with a different timeout (see
+[Timeouts](../README.md#timeouts)).
 
 Get your API token from the
 [Apify Console → Settings → API & Integrations](https://console.apify.com/settings/integrations).
@@ -39,10 +41,10 @@ option types, so import each resource you use from its own package:
 | Package | Contains |
 |---|---|
 | `com.apify.client` (root) | `ApifyClient`, `ApifyClientBuilder`, `Version`, `PaginationList<T>`, `ListOptions`, `StorageListOptions`, `ApifyResource` |
-| `com.apify.client.http` | `ApifyClientException`, `ApifyApiException`, `ApifyTransportException`, `HttpTransport`, `DefaultHttpTransport`, `HttpTimeoutException` |
+| `com.apify.client.http` | `ApifyClientException`, `ApifyApiException`, `ApifyTransportException`, `HttpTransport`, `DefaultHttpTransport`, `HttpTimeoutException`, `Timeout`, `HttpCompressor`, `BrotliHttpCompressor`, `GzipHttpCompressor` |
 | `com.apify.client.actor` | `Actor`, `ActorClient`, `ActorCollectionClient`, `ActorListOptions`, `ActorStartOptions`, `ActorCallOptions`, `ActorBuildOptions`, `ActorStandby`, `ActorVersion`, `SourceCodeFile`, `ActorVersionClient`, `ActorVersionCollectionClient`, `ActorEnvVar`, `ActorEnvVarClient`, `ActorEnvVarCollectionClient`, `ValidateInputOptions`, `ActorStats`, `ActorDefaultRunOptions` |
 | `com.apify.client.build` | `Build`, `BuildClient`, `BuildCollectionClient`, `BuildActVersion`, `ActorDefinition`, `ActorDefinitionMeta`, `ActorDefinitionStorages`, `BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage` |
-| `com.apify.client.run` | `ActorRun`, `ActorRunStats`, `ActorRunOptions`, `ActorRunMeta`, `ActorRunUsage`, `RunClient`, `RunCollectionClient`, `RunListOptions`, `LastRunOptions`, `MetamorphOptions`, `RunChargeOptions`, `RunResurrectOptions`, `SetStatusMessageOptions` |
+| `com.apify.client.run` | `ActorRun`, `ActorRunStats`, `ActorRunOptions`, `ActorRunMeta`, `ActorRunStandby`, `ActorRunUsage`, `RunClient`, `RunCollectionClient`, `RunListOptions`, `LastRunOptions`, `MetamorphOptions`, `RunChargeOptions`, `RunResurrectOptions`, `SetStatusMessageOptions` |
 | `com.apify.client.dataset` | `Dataset`, `DatasetClient`, `DatasetCollectionClient`, `DatasetListItemsOptions`, `DatasetDownloadOptions`, `DownloadItemsFormat` |
 | `com.apify.client.keyvalue` | `KeyValueStore`, `KeyValueStoreClient`, `KeyValueStoreCollectionClient`, `KeyValueStoreRecord`, `KeyValueStoreKeysPage`, `KeyValueStoreKey`, `GetRecordOptions`, `SetRecordOptions`, `ListKeysOptions` |
 | `com.apify.client.requestqueue` | `RequestQueue`, `RequestQueueClient`, `RequestQueueCollectionClient`, `RequestQueueRequest`, `RequestQueueHead`, `LockedRequestQueueHead`, `RequestQueueOperationInfo`, `RequestLockInfo`, `UnlockRequestsResult`, `RequestsList`, `BatchAddResult`, `BatchDeleteResult`, `DeletedRequestInfo`, `ListRequestsOptions`, `BatchAddRequestsOptions` |
@@ -71,13 +73,21 @@ Raw-JSON return values use Jackson's `tools.jackson.databind.JsonNode`. Jackson 
 `tools.jackson.*` package, not the older `com.fasterxml.jackson.databind.*` from Jackson 2) is a
 transitive dependency of this client, so it is already on your classpath.
 
+## Cancellation
+
+Cancelling a future a client method returned (`future.cancel(true)`), or the `Flow.Subscription` of
+an iteration, aborts the request in flight and stops the retries, the `waitForFinish`/`call` polling
+and the pages that would follow; see [Cancellation](../README.md#cancellation) for the details and
+the caveat about derived stages. A cancelled `call(...)` also stops redirecting the run's log, but
+the run itself keeps running.
+
 ## Raw JSON values
 
 A few methods return data whose shape is not modelled by this client and is instead exposed as a
 Jackson `JsonNode` (or accept an arbitrary `Object` serialized to JSON):
 
 - Read, returning a required `JsonNode` (never absent; a 404 throws rather than returning empty —
-  see [error handling](../README.md#error-handling)): `me().monthlyUsage(...)`, `me().limits()`,
+  see [error handling](../README.md#error-handling)): `me().monthlyUsage(...)`, `me().limits()` (and the same on `user(id)`),
   `dataset(id).getStatistics()`, `task(id).getInput()`.
 - Read, returning `Optional<JsonNode>` (empty when the underlying resource has none):
   `build(id).getOpenApiDefinition()`.

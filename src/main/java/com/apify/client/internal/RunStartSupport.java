@@ -3,6 +3,7 @@ package com.apify.client.internal;
 import com.apify.client.ApifyClient;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.http.ApifyApiException;
+import com.apify.client.http.Timeout;
 import com.apify.client.log.StreamedLog;
 import com.apify.client.log.StreamedLogOptions;
 import com.apify.client.run.ActorRun;
@@ -10,6 +11,8 @@ import com.apify.client.run.RunClient;
 import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,10 +60,10 @@ public final class RunStartSupport {
 
   /**
    * Starts a run on {@code ctx}'s {@code runs} sub-resource and completes with the created run as
-   * soon as it exists (no waiting). {@code input} is any JSON-serializable value, or {@code null}
-   * for no input. {@code applyParams} applies every start-option query parameter (build, memory,
-   * timeout, ...) the caller's options type configures; {@code contentType} is the input body's
-   * content type.
+   * soon as it exists (no waiting). {@code input} is any JSON-serializable value, a {@code byte[]}
+   * or {@link String} sent as it is, or {@code null} for no input. {@code applyParams} applies
+   * every start-option query parameter (build, memory, timeout, ...) the caller's options type
+   * configures; {@code contentType} is the input body's content type.
    *
    * @param waitForResourcesSecs mirrors {@link ActorStartOptions#waitForResources(Long)}: {@code
    *     null} does not retry a start rejected for lack of resources (the default); {@link
@@ -73,18 +76,41 @@ public final class RunStartSupport {
       Consumer<QueryParams> applyParams,
       String contentType,
       Long waitForResourcesSecs) {
+    return start(ctx, input, applyParams, contentType, waitForResourcesSecs, null);
+  }
+
+  /**
+   * As {@link #start(ResourceContext, Object, Consumer, String, Long)}, with an explicit request
+   * timeout; {@code null} picks the {@link Timeout#MEDIUM} tier extended by the start's {@code
+   * waitForFinish} hold, so the client does not abort a request the API is still holding.
+   */
+  private static CompletableFuture<ActorRun> start(
+      ResourceContext ctx,
+      Object input,
+      Consumer<QueryParams> applyParams,
+      String contentType,
+      Long waitForResourcesSecs,
+      Timeout timeout) {
     QueryParams params = new QueryParams();
     applyParams.accept(params);
-    byte[] body = input == null ? null : Json.toBytes(input);
+    byte[] body = Json.toRequestBody(input);
+    Timeout requestTimeout = timeout;
+    if (requestTimeout == null) {
+      HttpClientCore.WaitHold hold =
+          ctx.http.waitHold(Timeout.MEDIUM, params.getLong("waitForFinish"));
+      params.setLong("waitForFinish", hold.waitForFinishSecs());
+      requestTimeout = hold.timeout();
+    }
     if (waitForResourcesSecs == null) {
-      return ctx.postWithBody("runs", params, body, contentType, ActorRun.class);
+      return ctx.postWithBody("runs", params, body, contentType, ActorRun.class, requestTimeout);
     }
     long deadlineMillis =
         waitForResourcesSecs == ActorStartOptions.WAIT_FOR_RESOURCES_INDEFINITELY
             ? Long.MAX_VALUE
             : System.currentTimeMillis()
                 + Math.min(Math.max(0, waitForResourcesSecs), MAX_WAIT_FOR_RESOURCES_SECS) * 1000L;
-    return startRetryingForResources(ctx, params, body, contentType, deadlineMillis);
+    return startRetryingForResources(
+        ctx, params, body, contentType, requestTimeout, deadlineMillis);
   }
 
   /**
@@ -98,8 +124,9 @@ public final class RunStartSupport {
       QueryParams params,
       byte[] body,
       String contentType,
+      Timeout timeout,
       long deadlineMillis) {
-    return ctx.postWithBody("runs", params, body, contentType, ActorRun.class)
+    return ctx.postWithBody("runs", params, body, contentType, ActorRun.class, timeout)
         .handle(
             (run, error) -> {
               if (error == null) {
@@ -125,7 +152,7 @@ public final class RunStartSupport {
                   .thenCompose(
                       unused ->
                           startRetryingForResources(
-                              ctx, params, body, contentType, deadlineMillis));
+                              ctx, params, body, contentType, timeout, deadlineMillis));
             })
         .thenCompose(future -> future);
   }
@@ -144,7 +171,7 @@ public final class RunStartSupport {
       String contentType,
       Long waitSecs,
       Long waitForResourcesSecs) {
-    return start(ctx, input, applyParams, contentType, waitForResourcesSecs)
+    return start(ctx, input, applyParams, contentType, waitForResourcesSecs, Timeout.NO_TIMEOUT)
         .thenCompose(run -> root.run(run.getId()).waitForFinish(waitSecs));
   }
 
@@ -173,40 +200,62 @@ public final class RunStartSupport {
       StreamedLogOptions logOptions,
       Long waitSecs,
       Long waitForResourcesSecs) {
-    return start(ctx, input, applyParams, contentType, waitForResourcesSecs)
-        .thenCompose(
-            run -> {
-              RunClient runClient = root.run(run.getId());
-              CompletableFuture<StreamedLog> streamedLogFuture =
-                  logStreamingEnabled
-                      ? startStreamedLogQuietly(runClient, logOptions)
-                      : CompletableFuture.completedFuture(null);
-              return streamedLogFuture.thenCompose(
-                  streamedLog ->
-                      runClient
-                          .waitForFinish(waitSecs)
-                          .whenComplete(
-                              (result, error) -> {
-                                if (streamedLog != null) {
-                                  streamedLog.close();
-                                }
-                              }));
-            });
+    AtomicReference<StreamedLog> opened = new AtomicReference<>();
+    AtomicBoolean finished = new AtomicBoolean();
+    CompletableFuture<ActorRun> result =
+        start(ctx, input, applyParams, contentType, waitForResourcesSecs, Timeout.NO_TIMEOUT)
+            .thenCompose(
+                run -> {
+                  RunClient runClient = root.run(run.getId());
+                  CompletableFuture<?> logStarted =
+                      logStreamingEnabled
+                          ? startStreamedLogQuietly(runClient, logOptions, opened, finished)
+                          : CancellableFuture.completed(null);
+                  return logStarted.thenCompose(unused -> runClient.waitForFinish(waitSecs));
+                });
+    // Closed from a callback of the returned future itself, which runs whether the call finishes,
+    // fails or is cancelled (a stage that is cancelled never runs its own callbacks).
+    result.whenComplete(
+        (run, error) -> {
+          finished.set(true);
+          StreamedLog streamedLog = opened.get();
+          if (streamedLog != null) {
+            streamedLog.close();
+          }
+        });
+    return result;
   }
 
   /**
    * Starts {@code call}'s default log streaming, swallowing (rather than propagating) any failure
-   * to open the live log stream, so a transient log-endpoint issue cannot abort the run itself.
-   * Completes with the started {@link StreamedLog}, or {@code null} if it could not be started.
+   * to open the live log stream, so a transient log-endpoint issue cannot abort the run itself. The
+   * {@link StreamedLog} is handed to {@code opened} as soon as it exists, before it is started, so
+   * a call that ends while the stream is still opening can close it; one that has already ended
+   * ({@code finished}) closes it right away.
    */
-  private static CompletableFuture<StreamedLog> startStreamedLogQuietly(
-      RunClient runClient, StreamedLogOptions logOptions) {
+  private static CompletableFuture<Void> startStreamedLogQuietly(
+      RunClient runClient,
+      StreamedLogOptions logOptions,
+      AtomicReference<StreamedLog> opened,
+      AtomicBoolean finished) {
     CompletableFuture<StreamedLog> created =
         logOptions != null ? runClient.getStreamedLog(logOptions) : runClient.getStreamedLog();
     return created
         .thenCompose(
-            streamedLog ->
-                streamedLog.start().handle((unused, error) -> error == null ? streamedLog : null))
-        .exceptionally(error -> null);
+            streamedLog -> {
+              opened.set(streamedLog);
+              if (finished.get()) {
+                streamedLog.close();
+                return CancellableFuture.<Void>completed(null);
+              }
+              CompletableFuture<Void> started = streamedLog.start();
+              if (finished.get()) {
+                // The call ended between the check above and the start: close() while the stream
+                // is opening makes it launch no reader.
+                streamedLog.close();
+              }
+              return started;
+            })
+        .handle((unused, error) -> (Void) null);
   }
 }

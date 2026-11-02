@@ -18,7 +18,7 @@
 
   2. UWF_UNWRITTEN_FIELD / UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD on Jackson-populated DTOs/response
      shapes ({@code KeyValueStoreKey}, {@code DeletedRequestInfo}, {@code ActorRunMeta}, {@code
-     TaskOptions}, {@code WebhookLastDispatch}, {@code ActorDefaultRunOptions}, {@code BuildActVersion},
+     TaskOptions}, {@code WebhookLastDispatch}, {@code ActorDefaultRunOptions}, {@code ActorRunStandby}, {@code TaskStats}, {@code BuildActVersion},
      {@code ActorDefinitionMeta}, {@code ActorDefinitionStorages},
      {@code BuildMeta}, {@code BuildOptions}, {@code BuildStats}, {@code PricingInfo}, {@code ProxyGroup}, {@code
      UserProxy}, {@code WebhookDispatchEventData}, {@code WebhookDispatchWebhookInfo}, the internal
@@ -26,13 +26,12 @@
      deserializer via reflection, which SpotBugs cannot see - a known false positive for
      data-binding models.
 
-  3. EI_EXPOSE_REP / EI_EXPOSE_REP2 on {@code ApiResponse} and {@code HttpClientCore$Compressed}'s
-     {@code body} component: both are {@code record}s whose {@code byte[] body} intentionally holds
-     the raw payload without a defensive copy (the payload can be large, e.g. dataset exports, so
+  3. EI_EXPOSE_REP / EI_EXPOSE_REP2 on {@code ApiResponse}'s {@code body} component: a {@code
+     record} whose {@code byte[] body} intentionally holds the raw payload without a defensive copy (the payload can be large, e.g. dataset exports, so
      copying it on every construction/access would be wasteful). A plain field of the same shape is
      not flagged (SpotBugs' constructor/getter analysis does not trace a raw public field the way it
-     traces a record's synthesized accessor and canonical constructor), so this pair of exclusions is
-     specific to the record form.
+     traces a record's synthesized accessor and canonical constructor), so this exclusion is specific
+     to the record form.
 
   4. EI_EXPOSE_REP on the specific getters listed below, each returning a field whose type extends
      the shared {@code ApifyResource} forward-compatibility base (an {@code extra} catch-all map +
@@ -75,6 +74,8 @@
       <Class name="com.apify.client.task.TaskOptions"/>
       <Class name="com.apify.client.webhook.WebhookLastDispatch"/>
       <Class name="com.apify.client.actor.ActorDefaultRunOptions"/>
+      <Class name="com.apify.client.run.ActorRunStandby"/>
+      <Class name="com.apify.client.task.TaskStats"/>
       <Class name="com.apify.client.build.BuildActVersion"/>
       <Class name="com.apify.client.build.ActorDefinitionMeta"/>
       <Class name="com.apify.client.build.ActorDefinitionStorages"/>
@@ -95,10 +96,7 @@
     <Bug pattern="UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD"/>
   </Match>
   <Match>
-    <Or>
-      <Class name="com.apify.client.http.ApiResponse"/>
-      <Class name="com.apify.client.internal.HttpClientCore$Compressed"/>
-    </Or>
+    <Class name="com.apify.client.http.ApiResponse"/>
     <Or>
       <Bug pattern="EI_EXPOSE_REP"/>
       <Bug pattern="EI_EXPOSE_REP2"/>
@@ -139,6 +137,7 @@
     <Or>
       <Method name="getMeta"/>
       <Method name="getOptions"/>
+      <Method name="getStandby"/>
       <Method name="getStats"/>
       <Method name="getUsage"/>
       <Method name="getUsageUsd"/>

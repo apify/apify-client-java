@@ -1,6 +1,7 @@
 package com.apify.client.task;
 
 import com.apify.client.ListOptions;
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.AbstractCollectionClient;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
@@ -20,6 +21,6 @@ public final class TaskCollectionClient extends AbstractCollectionClient<Task, L
 
   /** Creates a new task. {@code task} is any JSON-serializable task definition. */
   public CompletableFuture<Task> create(Object task) {
-    return ctx.createResource(new QueryParams(), task, Task.class);
+    return ctx.createResource(new QueryParams(), task, Task.class, Timeout.MEDIUM);
   }
 }

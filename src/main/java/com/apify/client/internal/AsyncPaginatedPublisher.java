@@ -112,6 +112,7 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
     private long yielded;
     private boolean exhausted;
     private boolean fetchInFlight;
+    private volatile CompletableFuture<?> inFlight;
 
     Session(Flow.Subscriber<? super T> subscriber) {
       this.subscriber = subscriber;
@@ -141,6 +142,11 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
     @Override
     public void cancel() {
       cancelled.set(true);
+      // Abort the page being fetched, with its request and retries.
+      CompletableFuture<?> fetch = inFlight;
+      if (fetch != null) {
+        fetch.cancel(true);
+      }
     }
 
     /** Enters the drain loop unless another drain (of this same session) is already running. */
@@ -203,22 +209,22 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
       fetchInFlight = true;
       Long capRemaining = totalLimit != null ? totalLimit - yielded : null;
       Long pageLimit = minForLimit(capRemaining, chunkSize);
-      fetcher
-          .fetch(offset, pageLimit)
-          .whenComplete(
-              (page, error) -> {
-                fetchInFlight = false;
-                if (cancelled.get()) {
-                  draining.set(false);
-                  return;
-                }
-                if (error != null) {
-                  terminate(() -> subscriber.onError(HttpClientCore.unwrapCompletion(error)));
-                  return;
-                }
-                applyPage(page);
-                drainLoop();
-              });
+      CompletableFuture<PaginationList<T>> fetch = fetcher.fetch(offset, pageLimit);
+      inFlight = fetch;
+      fetch.whenComplete(
+          (page, error) -> {
+            fetchInFlight = false;
+            if (cancelled.get()) {
+              draining.set(false);
+              return;
+            }
+            if (error != null) {
+              terminate(() -> subscriber.onError(HttpClientCore.unwrapCompletion(error)));
+              return;
+            }
+            applyPage(page);
+            drainLoop();
+          });
     }
 
     private void applyPage(PaginationList<T> page) {

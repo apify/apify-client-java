@@ -13,9 +13,17 @@ getters `getId()`, `getName()`, `getUserId()`, `getCreatedAt()` (`Instant`), and
 
 | Model | Common getters | Type-specific |
 |---|---|---|
-| `Dataset` | `getId`, `getName`, `getUserId`, `getCreatedAt`, `getModifiedAt` | `getItemCount()` (`long`) |
-| `KeyValueStore` | `getId`, `getName`, `getUserId`, `getCreatedAt`, `getModifiedAt` | — |
-| `RequestQueue` | `getId`, `getName`, `getUserId`, `getCreatedAt`, `getModifiedAt` | `getTotalRequestCount()` (`long`) |
+| `Dataset` | `getId`, `getName`, `getTitle`, `getUserId`, `getCreatedAt`, `getModifiedAt`, `getConsoleUrl` | `getItemCount()` (`long`), `getItemsPublicUrl()` |
+| `KeyValueStore` | `getId`, `getName`, `getTitle`, `getUserId`, `getCreatedAt`, `getModifiedAt`, `getConsoleUrl` | `getKeysPublicUrl()`, `getRecordsPublicUrl()` |
+| `RequestQueue` | `getId`, `getName`, `getTitle`, `getUserId`, `getCreatedAt`, `getModifiedAt`, `getConsoleUrl` | `getTotalRequestCount()` (`long`) |
+
+The URL fields of every model (`getConsoleUrl()`, `getItemsPublicUrl()`, `getContainerUrl()`, a
+webhook's `getRequestUrl()`, ...) are the fields the OpenAPI spec marks `format: uri`. They are
+returned normalized, the way a WHATWG URL serializer writes them, so every Apify client returns the
+same string: an empty path becomes `/`, the scheme and host are lowercased (a non-ASCII host is
+punycoded), a default port is dropped and unsafe characters are percent-encoded. Compare such a field
+against a stored URL after normalizing the stored one too. A value that is not an absolute URL is
+returned as it is.
 
 `Dataset`, `KeyValueStore`, `RequestQueue` and `RequestQueueRequest` all extend `ApifyResource`, so
 any field not covered by a typed getter above is still available via the inherited `getExtra()`
@@ -45,7 +53,7 @@ any field not covered by a typed getter above is still available via the inherit
 | `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Flow.Publisher<T>`. For typed iteration at the server-default page size, pass a `null` chunk size: `iterateItems(opts, null, T.class)`. |
 | `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes. `DownloadItemsFormat` is one of `JSON`, `JSONL`, `CSV`, `XLSX`, `XML`, `RSS`, `HTML`. Completes with `byte[]`. |
 | `streamItems(DownloadItemsFormat, DatasetDownloadOptions)` | As above, but resolves to a live `InputStream` over the export instead of fully buffering it, so a large export is processed in chunks. The caller closes the stream (or reads it to the end). Throws on any error response, including a 404. |
-| `pushItems(Object)` | Push a single item or a list of items. Completes with no value (`CompletableFuture<Void>`). |
+| `pushItems(Object)` | Push a single item (a `Map`, a POJO, a `JsonNode` object, ...), a list/array of items, or a `String` that already is the JSON serialization of either (sent as it is). The API accepts only an object or an array of objects, so anything else (a number, a plain string, an array of strings) throws `IllegalArgumentException` before a request is sent. A push that times out is not retried, so items cannot be stored twice. Completes with no value (`CompletableFuture<Void>`). |
 | `getStatistics()` | Dataset statistics. Completes with `JsonNode`; throws `NotFoundError` if the dataset is gone (no separate "statistics absent" state). |
 | `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL, served as `json`. Completes with `String`. |
 | `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs, DownloadItemsFormat format)` | As above, with the URL's serialization `format` set explicitly. |
@@ -127,7 +135,7 @@ datasets.
 | `recordExists(String key)` | Whether a record exists. Completes with `boolean`. |
 | `getRecord(String key)` / `getRecord(String key, GetRecordOptions)` | Fetch a record. Completes with `Optional<KeyValueStoreRecord>`. |
 | `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. Completes with no value (`CompletableFuture<Void>`). |
-| `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`SetRecordOptions`: `timeoutSecs` (`Long`), `doNotRetryTimeouts` (`Boolean`), `contentEncoding` (`String`, see below)). Completes with no value. |
+| `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`SetRecordOptions`: `timeoutSecs` (`Long`) or `timeout` (`Timeout`: a tier, an exact duration or `NO_TIMEOUT`; the default is the `LONG` tier), `doNotRetryTimeouts` (`Boolean`), `contentEncoding` (`String`, see below)). Completes with no value. |
 | `setRecordJson(String key, Object value)` | Store JSON. Completes with no value. |
 | `deleteRecord(String key)` | Delete a record. Completes with no value. |
 | `getRecordPublicUrl(String key)` | A public (optionally signed) record URL. Completes with `String`. |

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
+import java.nio.charset.StandardCharsets;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.DeserializationFeature;
@@ -66,6 +67,31 @@ public final class Json {
    */
   public static byte[] toBytes(Object value) {
     return MAPPER.writeValueAsBytes(value);
+  }
+
+  /**
+   * The request body for a caller-supplied payload (an Actor or task input): a {@code byte[]} and a
+   * {@link String} are already serialized and sent as they are (a string is UTF-8 encoded), so an
+   * input read from a file, or the exact bytes of a non-JSON content type, are not wrapped in a
+   * second layer of JSON. Anything else is serialized to JSON. A {@code null} payload sends no
+   * body.
+   */
+  public static byte[] toRequestBody(Object payload) {
+    if (payload == null) {
+      return null;
+    }
+    if (payload instanceof byte[] bytes) {
+      return bytes;
+    }
+    if (payload instanceof String text) {
+      return text.getBytes(StandardCharsets.UTF_8);
+    }
+    return toBytes(payload);
+  }
+
+  /** Converts a value to its JSON tree, as {@link #toBytes} would serialize it. */
+  public static JsonNode toTree(Object value) {
+    return MAPPER.valueToTree(value);
   }
 
   /** Parses JSON bytes into the given type. */

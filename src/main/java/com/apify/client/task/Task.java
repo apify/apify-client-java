@@ -2,8 +2,10 @@ package com.apify.client.task;
 
 import com.apify.client.ApifyResource;
 import com.apify.client.actor.ActorStandby;
+import com.apify.client.internal.NormalizedUrlDeserializer;
 import java.time.Instant;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /** A pre-configured Actor run (an Actor task). */
 public final class Task extends ApifyResource {
@@ -21,6 +23,9 @@ public final class Task extends ApifyResource {
   private ActorStandby actorStandby;
   private Boolean isPublic;
   private TaskPublicConfig publicConfig;
+
+  @JsonDeserialize(using = NormalizedUrlDeserializer.class)
+  private String standbyUrl;
 
   /** The unique task ID. */
   public String getId() {
@@ -99,5 +104,10 @@ public final class Task extends ApifyResource {
   /** The task's public landing page display configuration, if it has one. */
   public TaskPublicConfig getPublicConfig() {
     return publicConfig;
+  }
+
+  /** The Actor Standby URL of the task, if standby is enabled (normalized). */
+  public String getStandbyUrl() {
+    return standbyUrl;
   }
 }

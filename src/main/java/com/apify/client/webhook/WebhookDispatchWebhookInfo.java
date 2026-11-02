@@ -1,13 +1,17 @@
 package com.apify.client.webhook;
 
 import com.apify.client.ApifyResource;
+import com.apify.client.internal.NormalizedUrlDeserializer;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /**
  * A summary of the {@link Webhook} that produced a {@link WebhookDispatch} (only the subset of
  * fields the API includes alongside a dispatch, not the full webhook object).
  */
 public final class WebhookDispatchWebhookInfo extends ApifyResource {
+  @JsonDeserialize(using = NormalizedUrlDeserializer.class)
   private String requestUrl;
+
   private boolean isAdHoc;
 
   /**

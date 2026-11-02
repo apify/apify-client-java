@@ -2,6 +2,8 @@ package com.apify.client.store;
 
 import com.apify.client.ApifyResource;
 import com.apify.client.actor.ActorStats;
+import com.apify.client.internal.NormalizedUrlDeserializer;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /** An Actor as listed in the Apify Store. */
 public final class ActorStoreListItem extends ApifyResource {
@@ -13,8 +15,13 @@ public final class ActorStoreListItem extends ApifyResource {
   private ActorStats stats;
   private PricingInfo currentPricingInfo;
   private String pictureUrl;
+
+  @JsonDeserialize(using = NormalizedUrlDeserializer.class)
   private String userPictureUrl;
+
+  @JsonDeserialize(using = NormalizedUrlDeserializer.class)
   private String url;
+
   private String readmeSummary;
 
   /** The unique Actor ID. */

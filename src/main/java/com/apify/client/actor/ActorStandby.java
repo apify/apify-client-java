@@ -12,6 +12,9 @@ public final class ActorStandby extends ApifyResource {
   private Long maxRequestsPerActorRun;
   private Long memoryMbytes;
   private Boolean shouldPassActorInput;
+  private String tenancy;
+  private Boolean isConsoleAuthEnabled;
+  private Boolean isTokenlessEnabled;
 
   /**
    * Whether standby mode is enabled. Only present on {@link Actor#getActorStandby()} (the API
@@ -56,5 +59,23 @@ public final class ActorStandby extends ApifyResource {
   /** Whether the incoming HTTP request is passed as the standby run's input. */
   public Boolean getShouldPassActorInput() {
     return shouldPassActorInput;
+  }
+
+  /**
+   * Who the Server Actor serves: {@code SINGLE_TENANT} (a private instance per caller) or a {@code
+   * MULTI_TENANT_*} pool.
+   */
+  public String getTenancy() {
+    return tenancy;
+  }
+
+  /** Whether Console authentication is enabled for the standby URL. */
+  public Boolean getIsConsoleAuthEnabled() {
+    return isConsoleAuthEnabled;
+  }
+
+  /** Whether requests to the standby URL may omit the API token. */
+  public Boolean getIsTokenlessEnabled() {
+    return isTokenlessEnabled;
   }
 }

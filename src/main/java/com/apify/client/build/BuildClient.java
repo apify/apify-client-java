@@ -1,5 +1,6 @@
 package com.apify.client.build;
 
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
@@ -27,20 +28,20 @@ public final class BuildClient {
 
   /**
    * Fetches the build, optionally asking the API to wait up to {@code waitForFinishSecs} seconds
-   * for the build to finish before responding. The value is clamped so the server always responds
-   * before the client's per-request timeout; the API itself caps server-side waiting at 60 seconds.
-   * Pass {@code null} for an immediate fetch.
+   * for the build to finish before responding; the API itself caps server-side waiting at 60
+   * seconds, and the request timeout is extended by that hold. Pass {@code null} for an immediate
+   * fetch.
    */
   public CompletableFuture<Optional<Build>> getWithWait(Long waitForFinishSecs) {
     QueryParams params = new QueryParams();
-    // Clamp to the client's per-request timeout so a short custom timeout doesn't abort the call.
-    params.addLong("waitForFinish", ctx.clampServerWait(waitForFinishSecs));
-    return ctx.getResource("", params, Build.class);
+    HttpClientCore.WaitHold hold = ctx.http.waitHold(Timeout.SHORT, waitForFinishSecs);
+    params.addLong("waitForFinish", hold.waitForFinishSecs());
+    return ctx.getResource("", params, Build.class, hold.timeout());
   }
 
   /** Aborts the build and returns its updated state. */
   public CompletableFuture<Build> abort() {
-    return ctx.postWithBody("abort", new QueryParams(), null, "", Build.class);
+    return ctx.postWithBody("abort", new QueryParams(), null, "", Build.class, Timeout.SHORT);
   }
 
   /** Deletes the build. */
@@ -61,7 +62,7 @@ public final class BuildClient {
    * result is the raw OpenAPI document.
    */
   public CompletableFuture<Optional<JsonNode>> getOpenApiDefinition() {
-    return ctx.getRaw("openapi.json", new QueryParams())
+    return ctx.getRaw("openapi.json", new QueryParams(), Timeout.MEDIUM)
         .thenApply(
             resp ->
                 resp == null

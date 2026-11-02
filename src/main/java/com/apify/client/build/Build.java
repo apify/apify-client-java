@@ -22,6 +22,11 @@ public final class Build extends ApifyResource {
   private BuildUsage usage;
   private BuildUsage usageUsd;
   private Double usageTotalUsd;
+  private String changelog;
+  private Integer exitCode;
+  private String gitCommitId;
+  private String gitBranchName;
+  private String createdByOrganizationMemberUserId;
 
   /** The unique build ID. */
   public String getId() {
@@ -120,5 +125,35 @@ public final class Build extends ApifyResource {
   /** Whether the build has reached a terminal (finished) status. */
   public boolean isTerminal() {
     return Statuses.isTerminal(status);
+  }
+
+  /**
+   * The changelog of the Actor version built.
+   *
+   * @deprecated The OpenAPI specification marks {@code Build.changelog} as deprecated.
+   */
+  @Deprecated
+  public String getChangelog() {
+    return changelog;
+  }
+
+  /** The exit code of the build process. */
+  public Integer getExitCode() {
+    return exitCode;
+  }
+
+  /** The Git commit the build was created from, for Git-sourced versions. */
+  public String getGitCommitId() {
+    return gitCommitId;
+  }
+
+  /** The Git branch the build was created from, for Git-sourced versions. */
+  public String getGitBranchName() {
+    return gitBranchName;
+  }
+
+  /** The organization member who started the build, when started on behalf of an organization. */
+  public String getCreatedByOrganizationMemberUserId() {
+    return createdByOrganizationMemberUserId;
   }
 }

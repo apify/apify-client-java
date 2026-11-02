@@ -1,22 +1,34 @@
 package com.apify.client.keyvalue;
 
+import com.apify.client.http.Timeout;
+
 /**
  * Write options for {@link KeyValueStoreClient#setRecord(String, byte[], String,
  * SetRecordOptions)}, mirroring the reference client's {@code timeoutSecs}/{@code
  * doNotRetryTimeouts}/{@code contentEncoding}.
  */
 public final class SetRecordOptions {
-  private Long timeoutSecs;
+  private Timeout timeout;
   private Boolean doNotRetryTimeouts;
   private String contentEncoding;
 
   /**
-   * Per-request timeout for the upload, in seconds. Use it to shorten the wait for this upload;
-   * defaults to (and is capped at) the client's configured overall request timeout, so a value
-   * larger than that timeout has no effect.
+   * Per-request timeout for the upload, in seconds. Shorthand for {@link #timeout(Timeout)
+   * timeout(Timeout.ofSeconds(timeoutSecs))}; a {@code null} or non-positive value leaves the
+   * default.
    */
   public SetRecordOptions timeoutSecs(Long timeoutSecs) {
-    this.timeoutSecs = timeoutSecs;
+    this.timeout = timeoutSecs == null || timeoutSecs <= 0 ? null : Timeout.ofSeconds(timeoutSecs);
+    return this;
+  }
+
+  /**
+   * Timeout of the upload request: a tier, an exact duration or {@link Timeout#NO_TIMEOUT}.
+   * Defaults to {@link Timeout#LONG}. A value above the client's {@code timeoutMax} is capped at
+   * it.
+   */
+  public SetRecordOptions timeout(Timeout timeout) {
+    this.timeout = timeout;
     return this;
   }
 
@@ -46,8 +58,8 @@ public final class SetRecordOptions {
     return this;
   }
 
-  Long timeoutSecsValue() {
-    return timeoutSecs;
+  Timeout timeoutValue() {
+    return timeout;
   }
 
   boolean doNotRetryTimeoutsValue() {

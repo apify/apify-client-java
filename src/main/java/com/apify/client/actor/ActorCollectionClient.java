@@ -1,5 +1,6 @@
 package com.apify.client.actor;
 
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.AbstractCollectionClient;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
@@ -19,6 +20,6 @@ public final class ActorCollectionClient extends AbstractCollectionClient<Actor,
 
   /** Creates a new Actor. {@code actor} is any JSON-serializable Actor definition. */
   public CompletableFuture<Actor> create(Object actor) {
-    return ctx.createResource(new QueryParams(), actor, Actor.class);
+    return ctx.createResource(new QueryParams(), actor, Actor.class, Timeout.MEDIUM);
   }
 }

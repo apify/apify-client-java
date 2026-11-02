@@ -39,12 +39,12 @@ still available via the inherited `getExtra()` (see
 | Method | Description |
 |---|---|
 | `get()` | Fetch the user. Completes with `Optional<User>` (private details for `me()` via `getExtra()`). |
-| `monthlyUsage()` / `monthlyUsage(String date)` | Account monthly usage (`me()` only). `date` (any day within the target month, formatted `YYYY-MM-DD`) reports that month; `null`/empty reports the current month. Completes with `JsonNode`. |
-| `limits()` | Account resource limits (`me()` only). Completes with `JsonNode`. |
-| `updateLimits(Object)` | Update account limits (`me()` only). Completes with no value (`CompletableFuture<Void>`). |
+| `monthlyUsage()` / `monthlyUsage(String date)` | The user's monthly usage. `date` (any day within the target month, formatted `YYYY-MM-DD`) reports that month; `null`/empty reports the current month. Completes with `JsonNode`. |
+| `limits()` | The user's account and usage limits. Completes with `JsonNode`. |
+| `updateLimits(Object)` | Update the user's account and usage limits. Completes with no value (`CompletableFuture<Void>`). |
 
-The usage/limits methods are only available for `me()`; calling them on `user(id)` throws
-`IllegalStateException`.
+The usage/limits methods work on `me()` and on `user(id)` (`/v2/users/{userId}/usage/monthly` and
+`/v2/users/{userId}/limits`), subject to what the API token may access.
 
 ```java
 Optional<User> me = client.me().get().join();

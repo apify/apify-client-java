@@ -1,5 +1,6 @@
 package com.apify.client;
 
+import com.apify.client.internal.CancellableFuture;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -30,13 +31,20 @@ public final class Publishers {
    * publisher signals completion, or exceptionally with whatever error the publisher signalled.
    */
   public static <T> CompletableFuture<List<T>> collect(Flow.Publisher<T> publisher) {
-    CompletableFuture<List<T>> result = new CompletableFuture<>();
+    CompletableFuture<List<T>> result = new CancellableFuture<>();
     ConcurrentLinkedQueue<T> items = new ConcurrentLinkedQueue<>();
     AtomicBoolean done = new AtomicBoolean();
     publisher.subscribe(
         new Flow.Subscriber<>() {
           @Override
           public void onSubscribe(Flow.Subscription subscription) {
+            // Cancelling the returned future cancels the subscription (and so the page in flight).
+            result.whenComplete(
+                (list, error) -> {
+                  if (result.isCancelled()) {
+                    subscription.cancel();
+                  }
+                });
             subscription.request(Long.MAX_VALUE);
           }
 

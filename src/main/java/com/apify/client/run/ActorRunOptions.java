@@ -15,6 +15,7 @@ public final class ActorRunOptions extends ApifyResource {
   private Long maxItems;
   private Double maxTotalChargeUsd;
   private Boolean restartOnError;
+  private Boolean isMaxTotalChargeUsdSetByUser;
 
   /** The tag or number of the build that was run. */
   public String getBuild() {
@@ -49,5 +50,10 @@ public final class ActorRunOptions extends ApifyResource {
   /** Whether the run is restarted if it fails. */
   public Boolean getRestartOnError() {
     return restartOnError;
+  }
+
+  /** Whether {@link #getMaxTotalChargeUsd()} was set by the user rather than defaulted. */
+  public Boolean getIsMaxTotalChargeUsdSetByUser() {
+    return isMaxTotalChargeUsdSetByUser;
   }
 }

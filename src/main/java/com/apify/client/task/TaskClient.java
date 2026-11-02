@@ -1,6 +1,7 @@
 package com.apify.client.task;
 
 import com.apify.client.ApifyClient;
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
@@ -138,7 +139,7 @@ public final class TaskClient {
    * is gone", so a missing task is reported as a failure here too.
    */
   public CompletableFuture<JsonNode> getInput() {
-    return ctx.getRawRequired("input", new QueryParams())
+    return ctx.getRawRequired("input", new QueryParams(), Timeout.SHORT)
         .thenApply(resp -> Json.parse(resp.body(), JsonNode.class));
   }
 
@@ -149,7 +150,8 @@ public final class TaskClient {
         new QueryParams(),
         Json.toBytes(input),
         ResourceContext.CONTENT_TYPE_JSON,
-        JsonNode.class);
+        JsonNode.class,
+        Timeout.SHORT);
   }
 
   /**

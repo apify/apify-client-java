@@ -1,5 +1,6 @@
 package com.apify.client.schedule;
 
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
@@ -42,6 +43,6 @@ public final class ScheduleClient {
    */
   public CompletableFuture<List<ScheduleInvoked>> getLog() {
     JavaType listType = Json.parametric(List.class, Json.type(ScheduleInvoked.class));
-    return ctx.getResourceRequired("log", new QueryParams(), listType);
+    return ctx.getResourceRequired("log", new QueryParams(), listType, Timeout.MEDIUM);
   }
 }
