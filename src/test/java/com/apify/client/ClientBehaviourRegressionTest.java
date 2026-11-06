@@ -33,14 +33,17 @@ import com.apify.client.store.ActorStoreListItem;
 import com.apify.client.store.StoreListOptions;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
 import com.apify.client.webhook.Webhook;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -995,6 +998,32 @@ class ClientBehaviourRegressionTest {
             .createItemsPublicUrl(new DatasetListItemsOptions(), 3600L)
             .join();
     assertTrue(url.contains("signature="), url);
+  }
+
+  @Test
+  void createItemsPublicUrlCountsTheValidityFromAfterTheLookup() {
+    AtomicLong lookupDoneAt = new AtomicLong();
+    MockTransport backend =
+        MockTransport.ofRouter(
+            request -> {
+              try {
+                Thread.sleep(300);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              lookupDoneAt.set(System.currentTimeMillis());
+              return new MockTransport.Scripted(
+                  200, "{\"data\":{\"id\":\"d1\",\"urlSigningSecretKey\":\"secret\"}}", null);
+            });
+    String url =
+        client(backend)
+            .dataset("d1")
+            .createItemsPublicUrl(new DatasetListItemsOptions(), 60L)
+            .join();
+    String signature = url.substring(url.indexOf("signature=") + "signature=".length());
+    String decoded = new String(Base64.getUrlDecoder().decode(signature), StandardCharsets.UTF_8);
+    long expiresAt = Long.parseLong(decoded.split("\\.")[1]);
+    assertTrue(expiresAt >= lookupDoneAt.get() + 60_000L, decoded + " signed before the lookup");
   }
 
   @Test

@@ -77,8 +77,8 @@ public final class Signatures {
    * #createHmacSignature}, then returns the base64url (no padding) encoding of {@code
    * "{version}.{expiresAtMillis}.{hmac}"}.
    *
-   * <p>The expiry is computed when this method is called, so call it after the storage lookup and
-   * the lookup time does not come off the validity.
+   * <p>The expiry counts from this call, so call it after the storage lookup; otherwise the lookup
+   * time comes off the validity.
    *
    * @param expiresInSecs optional expiry in seconds ({@code null} for a non-expiring URL)
    * @throws IllegalArgumentException if {@code expiresInSecs} fails {@link

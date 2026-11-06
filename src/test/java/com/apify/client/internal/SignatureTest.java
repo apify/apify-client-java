@@ -63,6 +63,14 @@ class SignatureTest {
   @ValueSource(longs = {1L, 3600L, Signatures.MAX_EXPIRES_IN_SECS})
   void signingAcceptsAPositiveExpiryUpToTheMaximum(long expiresInSecs) {
     assertDoesNotThrow(() -> Signatures.signStorageContent("secret", "RESID", expiresInSecs));
+  }
+
+  @Test
+  void theMaximumExpiryDoesNotOverflow() {
     assertEquals(4_611_686_018_427_387L, Signatures.MAX_EXPIRES_IN_SECS);
+    String sig = Signatures.signStorageContent("secret", "RESID", Signatures.MAX_EXPIRES_IN_SECS);
+    String decoded = new String(Base64.getUrlDecoder().decode(sig), StandardCharsets.UTF_8);
+    long expiresAt = Long.parseLong(decoded.split("\\.")[1]);
+    assertTrue(expiresAt > System.currentTimeMillis(), decoded);
   }
 }
