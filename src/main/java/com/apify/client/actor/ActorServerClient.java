@@ -60,7 +60,7 @@ public final class ActorServerClient {
    * and the requests. It is pending while the first lookup runs, so concurrent first calls share
    * one API request, and it is cleared when the lookup fails, so the next call tries again.
    */
-  private final AtomicReference<CompletableFuture<String>> url = new AtomicReference<>();
+  private final AtomicReference<CancellableFuture<String>> url = new AtomicReference<>();
 
   ActorServerClient(HttpClientCore http, String baseUrl, String id) {
     this.http = http;

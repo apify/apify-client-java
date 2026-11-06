@@ -39,7 +39,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 import org.junit.jupiter.api.AfterEach;
@@ -694,6 +696,8 @@ class ActorServerClientTest {
     assertEquals(1, backend.calls, "only the Actor lookup was sent, never the server request");
   }
 
+  // ---- URL cache and cancellation ---------------------------------------------------------
+
   /** A transport that delegates to a mock and supports requests that do not follow redirects. */
   private record RedirectAwareTransport(MockTransport mock) implements HttpTransport {
     @Override
@@ -720,8 +724,7 @@ class ActorServerClientTest {
   }
 
   /** Cancelling a request after the URL was looked up by {@code warmUp} cancels the HTTP call. */
-  private void assertCancellingARequestReachesTheHttpCall(
-      java.util.function.Consumer<ActorServerClient> warmUp) {
+  private void assertCancellingARequestReachesTheHttpCall(Consumer<ActorServerClient> warmUp) {
     MockTransport backend =
         MockTransport.ofRouter(
             request -> {
@@ -771,6 +774,53 @@ class ActorServerClientTest {
 
     assertEquals(server.url() + SERVER_PREFIX, serverClient.getUrl().join());
     assertEquals(200, serverClient.request().join().statusCode());
+  }
+
+  /** A transport whose first call throws instead of returning a future, then serves for real. */
+  private static final class ThrowingOnceTransport implements HttpTransport {
+    private final HttpTransport delegate = new DefaultHttpTransport();
+    private final AtomicBoolean thrown = new AtomicBoolean();
+
+    @Override
+    public CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request) {
+      if (thrown.compareAndSet(false, true)) {
+        throw new IllegalStateException("the transport failed before it returned a future");
+      }
+      return delegate.sendAsync(request);
+    }
+
+    @Override
+    public CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request) {
+      return delegate.sendStreamingAsync(request);
+    }
+
+    @Override
+    public CompletableFuture<HttpResponse<byte[]>> sendAsync(
+        HttpRequest request, boolean followRedirects) {
+      return followRedirects ? sendAsync(request) : delegate.sendAsync(request, false);
+    }
+
+    @Override
+    public CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(
+        HttpRequest request, boolean followRedirects) {
+      return delegate.sendStreamingAsync(request, followRedirects);
+    }
+  }
+
+  @Test
+  void aLookupThatFailsWhileStartingIsNotKept() throws Exception {
+    ApifyClient client =
+        ApifyClient.builder()
+            .token(TOKEN)
+            .baseUrl(server.url())
+            .httpTransport(new ThrowingOnceTransport())
+            .maxRetries(0)
+            .build();
+    ActorServerClient serverClient = client.actor(ACTOR_ID).server();
+
+    failureOf(IllegalStateException.class, serverClient.getUrl());
+
+    assertEquals(server.url() + SERVER_PREFIX, serverClient.getUrl().get(10, TimeUnit.SECONDS));
   }
 
   // ---- OpenAPI specification ----------------------------------------------------------------

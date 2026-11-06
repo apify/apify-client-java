@@ -190,8 +190,9 @@ the JDK's built-in Reactive Streams type) that fetches pages only as the subscri
 that is the rows each page covers (`PaginationList.getCount()`, capped at the page limit that was
 requested). That is the number of items yielded, unless a page's count differs from its items:
 filtered or unwound dataset items, or a Store list that drops entries after counting them.
-`null`/unset — or a non-positive value such as `0` — means no cap, so every item is yielded. (This differs from `list(...)`, which sends `limit=0` to the server verbatim rather than
-treating it as unbounded — the iteration behavior matches the reference JS client.) The per-request
+`null`/unset — or a non-positive value such as `0` — means no cap, so every item is yielded. (This
+differs from `list(...)`, which sends `limit=0` to the server verbatim rather than treating it as
+unbounded — the iteration behavior matches the reference JS client.) The per-request
 page size is an optional trailing `chunkSize` argument: the per-resource tables below show the
 `chunkSize` form, and each publisher also has an overload that omits it (using the server's default
 page size). The page size does not change which items a collection publisher yields; note the one
