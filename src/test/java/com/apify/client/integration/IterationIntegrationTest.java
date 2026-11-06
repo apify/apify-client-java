@@ -144,7 +144,8 @@ class IterationIntegrationTest extends IntegrationBase {
       List<Integer> seen = all.stream().map(n -> n.get("n").asInt()).toList();
       assertEquals(List.of(1, 2, 3, 4, 5), seen, "iterateItems should yield all items in order");
 
-      // The total cap trims the tail: limit=3 over 5 items with page size 2 yields exactly 3.
+      // limit=3 over 5 items with page size 2 reads 2 rows, then the 1 row that is left of the
+      // limit.
       List<JsonNode> cappedAll =
           Publishers.collect(dataset.iterateItems(new DatasetListItemsOptions().limit(3L), 2L))
               .join();

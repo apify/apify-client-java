@@ -42,12 +42,13 @@ public final class PaginationList<T> extends ApifyResource {
   /**
    * Number of entries on this page. On a page from {@link
    * com.apify.client.dataset.DatasetClient#listItems}, the number of dataset rows the API scanned
-   * for it, or the number of items returned when that is larger. Filters ({@code clean}, {@code
-   * skipEmpty}) can leave it above the number of items returned. The next page starts at {@code
-   * offset + Math.min(count, limit)}; the cap matters only with {@code unwind}, which can return
-   * more items than the rows scanned. On any other list it is usually the number of items returned;
-   * when the API drops entries after counting them, as the Store list can, it is the number
-   * counted.
+   * for it ({@code X-Apify-Pagination-Count}), or the number of items returned when that is larger,
+   * since the header is derived from the dataset's item count, which lags a fresh push. Filters
+   * ({@code clean}, {@code skipEmpty}) can leave it above the number of items returned. The next
+   * page starts at {@code offset + Math.min(count, limit)}; the cap matters only with {@code
+   * unwind}, which can return more items than the rows scanned. On any other list it is usually the
+   * number of items returned; when the API drops entries after counting them, as the Store list
+   * can, it is the number counted.
    */
   public long getCount() {
     return count;

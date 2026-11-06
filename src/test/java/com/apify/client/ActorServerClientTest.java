@@ -25,7 +25,10 @@ import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -689,6 +692,85 @@ class ActorServerClientTest {
     assertInstanceOf(ApifyTransportException.class, cause);
     assertInstanceOf(UnsupportedOperationException.class, cause.getCause());
     assertEquals(1, backend.calls, "only the Actor lookup was sent, never the server request");
+  }
+
+  /** A transport that delegates to a mock and supports requests that do not follow redirects. */
+  private record RedirectAwareTransport(MockTransport mock) implements HttpTransport {
+    @Override
+    public CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request) {
+      return mock.sendAsync(request);
+    }
+
+    @Override
+    public CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request) {
+      return mock.sendStreamingAsync(request);
+    }
+
+    @Override
+    public CompletableFuture<HttpResponse<byte[]>> sendAsync(
+        HttpRequest request, boolean followRedirects) {
+      return mock.sendAsync(request);
+    }
+
+    @Override
+    public CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(
+        HttpRequest request, boolean followRedirects) {
+      return mock.sendStreamingAsync(request);
+    }
+  }
+
+  /** Cancelling a request after the URL was looked up by {@code warmUp} cancels the HTTP call. */
+  private void assertCancellingARequestReachesTheHttpCall(
+      java.util.function.Consumer<ActorServerClient> warmUp) {
+    MockTransport backend =
+        MockTransport.ofRouter(
+            request -> {
+              String path = request.uri().getPath();
+              if (path.equals("/v2/actors/a")) {
+                return MockTransport.ok(
+                    200,
+                    "{\"data\":{\"id\":\"a\",\"standbyUrl\":\"https://a--b.apify.actor\","
+                        + "\"taggedBuilds\":{\"latest\":{\"buildId\":\"b1\"}}}}");
+              }
+              return MockTransport.ok(200, "{\"data\":{\"id\":\"b1\"}}");
+            },
+            request -> request.uri().getHost().equals("a--b.apify.actor"));
+    ApifyClient client =
+        ApifyClient.builder()
+            .token(TOKEN)
+            .httpTransport(new RedirectAwareTransport(backend))
+            .maxRetries(0)
+            .build();
+    ActorServerClient serverClient = client.actor("a").server();
+    warmUp.accept(serverClient);
+
+    CompletableFuture<ApiResponse> call = serverClient.request("/x");
+    assertEquals(1, backend.hung.size(), "the server request is in flight");
+    call.cancel(true);
+
+    assertTrue(backend.allHungCancelled(), "cancelling the request must cancel the HTTP call");
+  }
+
+  @Test
+  void cancellingARequestReachesTheHttpCallAfterGetUrl() {
+    assertCancellingARequestReachesTheHttpCall(serverClient -> serverClient.getUrl().join());
+  }
+
+  @Test
+  void cancellingARequestReachesTheHttpCallAfterGetOpenApiSpec() {
+    assertCancellingARequestReachesTheHttpCall(
+        serverClient -> serverClient.getOpenApiSpec().join());
+  }
+
+  @Test
+  void aNullTimeoutIsRejectedAndLeavesTheClientUsable() {
+    ActorServerClient serverClient = client().actor(ACTOR_ID).server();
+
+    assertThrows(IllegalArgumentException.class, () -> serverClient.getUrl(null));
+    assertThrows(IllegalArgumentException.class, () -> serverClient.getOpenApiSpec(null));
+
+    assertEquals(server.url() + SERVER_PREFIX, serverClient.getUrl().join());
+    assertEquals(200, serverClient.request().join().statusCode());
   }
 
   // ---- OpenAPI specification ----------------------------------------------------------------

@@ -120,6 +120,17 @@ final class MockTransport implements HttpTransport {
     return transport;
   }
 
+  /**
+   * A transport that answers every request with {@code router}'s response for it, except the
+   * requests {@code hangWhen} accepts, which it never answers.
+   */
+  static MockTransport ofRouter(
+      Function<HttpRequest, Scripted> router, Predicate<HttpRequest> hangWhen) {
+    MockTransport transport = ofRouter(router);
+    transport.hangWhen = hangWhen;
+    return transport;
+  }
+
   /** A transport that never answers the requests {@code hangWhen} accepts. */
   static MockTransport ofHanging(Predicate<HttpRequest> hangWhen) {
     MockTransport transport = ofConstant(200, "{\"data\":{\"id\":\"r1\",\"status\":\"RUNNING\"}}");

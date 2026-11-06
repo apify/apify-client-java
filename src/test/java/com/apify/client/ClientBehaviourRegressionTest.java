@@ -362,7 +362,7 @@ class ClientBehaviourRegressionTest {
   void paginateRequestsTrimsPageToTotalLimitWhenServerOvershoots() {
     // If the server ignores (or overshoots) the requested per-page `limit` and returns more items
     // than the caller's totalLimit cap allows, the publisher must still yield exactly totalLimit
-    // items, mirroring AsyncPaginatedPublisher's own defensive trim.
+    // items.
     MockTransport backend =
         MockTransport.ofConstant(
             200,

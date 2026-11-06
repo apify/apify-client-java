@@ -25,9 +25,8 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <ul>
  *   <li>{@code totalLimit} caps the <em>total</em> number of rows read across all pages ({@code
- *       null} = read everything). For every list but dataset items a row is an item; a page of
- *       dataset items can return fewer items than the rows it covers (filters) or more ({@code
- *       unwind}), and all of them are yielded.
+ *       null} = read everything). A row is an item unless a page's {@link PaginationList#getCount()
+ *       count} differs from the items it returns; all returned items are yielded.
  *   <li>{@code chunkSize} is the per-request page size ({@code null} = let the API choose). Each
  *       page requests {@code min(remaining-under-cap, chunkSize)} rows so the cap is never
  *       overshot.
@@ -237,10 +236,8 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
       pos = 0;
       int count = buffer.size();
       // The rows the page covered, which are not the items it returned: see
-      // PaginationList#getCount.
-      // The count of a dataset page can lag a fresh push, so it is raised to the items returned,
-      // and capped at the rows requested so that an unwound page does not advance past rows the
-      // next request would never read.
+      // PaginationList#getCount. Capped at the rows requested, so an unwound page does not advance
+      // past rows the next request would never read.
       long scanned = Math.max(page.getCount(), count);
       if (requestedLimit != null) {
         scanned = Math.min(scanned, requestedLimit);

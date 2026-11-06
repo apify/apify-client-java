@@ -186,9 +186,11 @@ Each paginated collection also offers a lazy `Flow.Publisher` (`java.util.concur
 the JDK's built-in Reactive Streams type) that fetches pages only as the subscriber signals demand:
 `iterate(...)` on the collection clients, `DatasetClient.iterateItems(...)`, and
 `KeyValueStoreClient.iterateKeys(...)` (request-queue requests use
-`RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the **total** number of items
-yielded; `null`/unset — or a non-positive value such as `0` — means no cap, so every item is
-yielded. (This differs from `list(...)`, which sends `limit=0` to the server verbatim rather than
+`RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the **total** number of rows read,
+that is the rows each page covers (`PaginationList.getCount()`, capped at the page limit that was
+requested). That is the number of items yielded, unless a page's count differs from its items:
+filtered or unwound dataset items, or a Store list that drops entries after counting them.
+`null`/unset — or a non-positive value such as `0` — means no cap, so every item is yielded. (This differs from `list(...)`, which sends `limit=0` to the server verbatim rather than
 treating it as unbounded — the iteration behavior matches the reference JS client.) The per-request
 page size is an optional trailing `chunkSize` argument: the per-resource tables below show the
 `chunkSize` form, and each publisher also has an overload that omits it (using the server's default

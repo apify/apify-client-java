@@ -87,11 +87,21 @@ public final class ActorServerClient {
 
   /**
    * As {@link #getUrl()}, with {@code timeout} for the API request that fetches the URL. It is not
-   * used when the URL is already cached.
+   * used when the URL is already cached, nor while another caller's lookup is running, since the
+   * timeout of the caller that started it applies.
+   *
+   * @throws IllegalArgumentException if {@code timeout} is {@code null}
    */
   public CompletableFuture<String> getUrl(Timeout timeout) {
+    requireTimeout(timeout);
     // A copy, so that cancelling the returned future leaves the shared lookup alone.
     return sharedUrl(timeout).copy();
+  }
+
+  private static void requireTimeout(Timeout timeout) {
+    if (timeout == null) {
+      throw new IllegalArgumentException("timeout must not be null");
+    }
   }
 
   /** The cached lookup of the server URL, started if there is none. */
@@ -103,16 +113,23 @@ public final class ActorServerClient {
       }
       CancellableFuture<String> lookup = new CancellableFuture<>();
       if (url.compareAndSet(null, lookup)) {
-        fetchServerActor(timeout)
-            .whenComplete(
-                (actor, error) -> {
-                  if (error == null) {
-                    lookup.complete(actor.getStandbyUrl());
-                  } else {
-                    url.compareAndSet(lookup, null);
-                    lookup.completeExceptionally(HttpClientCore.unwrapCompletion(error));
-                  }
-                });
+        CompletableFuture<Actor> fetch;
+        try {
+          fetch = fetchServerActor(timeout);
+        } catch (RuntimeException e) {
+          // A lookup that cannot even start must not stay cached, or every later call would wait on
+          // it.
+          fetch = CompletableFuture.failedFuture(e);
+        }
+        fetch.whenComplete(
+            (actor, error) -> {
+              if (error == null) {
+                lookup.complete(actor.getStandbyUrl());
+              } else {
+                url.compareAndSet(lookup, null);
+                lookup.completeExceptionally(HttpClientCore.unwrapCompletion(error));
+              }
+            });
         return lookup;
       }
     }
@@ -140,10 +157,11 @@ public final class ActorServerClient {
 
   /** As {@link #getOpenApiSpec()}, with {@code timeout} for each API request it makes. */
   public CompletableFuture<Optional<JsonNode>> getOpenApiSpec(Timeout timeout) {
+    requireTimeout(timeout);
     return fetchServerActor(timeout)
         .thenCompose(
             actor -> {
-              url.set(CompletableFuture.completedFuture(actor.getStandbyUrl()));
+              url.set(CancellableFuture.completed(actor.getStandbyUrl()));
               String buildRef = buildRefOf(actor);
               Optional<String> taggedBuildId = taggedBuildId(actor, buildRef);
               CompletableFuture<Optional<String>> buildId =

@@ -910,9 +910,7 @@ public final class HttpClientCore {
         .thenCompose(
             response -> {
               boolean retryable =
-                  response.statusCode() >= MAX_SUCCESS_STATUS
-                      && isStatusRetryable(response.statusCode(), policy)
-                      && attempt < maxAttempts;
+                  isStatusRetryable(response.statusCode(), policy) && attempt < maxAttempts;
               if (!retryable) {
                 return CompletableFuture.completedFuture(response);
               }

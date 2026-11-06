@@ -20,6 +20,9 @@ import org.junit.jupiter.api.Test;
  */
 class AsyncPaginatedPublisherTest {
 
+  /** The fetches recorded by the tests that script their own page fetcher. */
+  private final List<long[]> fetches = new ArrayList<>();
+
   /**
    * A fake paginated endpoint over integers {@code [0, available)}. Like the real API, it clamps a
    * requested page size (or an unset one) to {@code maxPageSize} ({@code 0} = no clamp).
@@ -138,8 +141,6 @@ class AsyncPaginatedPublisherTest {
     assertEquals(List.of(0L, 2L), List.of(fetches.get(0)[0], fetches.get(1)[0]));
     assertEquals(List.of(2L, 1L), List.of(fetches.get(0)[1], fetches.get(1)[1]));
   }
-
-  private final List<long[]> fetches = new ArrayList<>();
 
   @Test
   void emptyCollectionYieldsNothing() {
