@@ -8,6 +8,7 @@ public final class ActorVersion extends ApifyResource {
   private String sourceType;
   private String tarballUrl;
   private String gitHubGistUrl;
+  private String actorPath;
   private Integer githubWebhookId;
   private Integer gitlabWebhookId;
   private String bitbucketWebhookId;
@@ -22,7 +23,7 @@ public final class ActorVersion extends ApifyResource {
     return sourceType;
   }
 
-  /** The tarball URL the source is fetched from, for {@code TARBALL} versions. */
+  /** The URL of the zip archive the source is downloaded from, for {@code TARBALL} versions. */
   public String getTarballUrl() {
     return tarballUrl;
   }
@@ -30,6 +31,16 @@ public final class ActorVersion extends ApifyResource {
   /** The GitHub Gist URL the source is fetched from, for {@code GITHUB_GIST} versions. */
   public String getGitHubGistUrl() {
     return gitHubGistUrl;
+  }
+
+  /**
+   * The Actor's directory inside the uploaded source, as a path relative to the upload root with
+   * {@code /} separators (for example {@code "actors/typescript-actor"}). It applies to {@code
+   * SOURCE_FILES} and {@code TARBALL} versions. {@code null} when the upload root is the Actor's
+   * directory. On a {@code TARBALL} version, only users with write access to the Actor get it.
+   */
+  public String getActorPath() {
+    return actorPath;
   }
 
   /** The ID of the GitHub webhook that triggers builds on push, if configured. */

@@ -477,6 +477,34 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void storeIterateSkipsEntriesTheApiDroppedAfterCountingThem() {
+    // The Store list can drop entries after counting them: a page that counted 2 rows returns 1
+    // item. The next page must start after both rows, or it would read the dropped one again, and
+    // a page that counted rows but returned none must not end the iteration.
+    MockTransport backend =
+        new MockTransport(
+            List.of(
+                MockTransport.ok(
+                    200,
+                    "{\"data\":{\"items\":[{}],\"total\":5,\"offset\":0,\"limit\":2,\"count\":2}}"),
+                MockTransport.ok(
+                    200,
+                    "{\"data\":{\"items\":[],\"total\":5,\"offset\":2,\"limit\":2,\"count\":2}}"),
+                MockTransport.ok(
+                    200,
+                    "{\"data\":{\"items\":[{}],\"total\":5,\"offset\":4,\"limit\":2,\"count\":1}}"),
+                MockTransport.ok(
+                    200,
+                    "{\"data\":{\"items\":[],\"total\":5,\"offset\":5,\"limit\":2,\"count\":0}}")));
+    List<ActorStoreListItem> items =
+        Publishers.collect(client(backend).store().iterate(new StoreListOptions(), 2L)).join();
+    assertEquals(2, items.size());
+    assertEquals(4, backend.calls, "a page that counted rows continues even without items");
+    assertTrue(backend.urls.get(1).contains("offset=2"), backend.urls.get(1));
+    assertTrue(backend.urls.get(2).contains("offset=4"), backend.urls.get(2));
+  }
+
+  @Test
   void collectionIterateSingleArgDelegatesToServerDefaultPageSize() {
     // The arg-less-chunkSize convenience overload must page correctly (delegates with null chunk).
     MockTransport backend =

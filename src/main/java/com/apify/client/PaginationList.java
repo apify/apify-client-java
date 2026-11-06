@@ -39,7 +39,16 @@ public final class PaginationList<T> extends ApifyResource {
     return limit;
   }
 
-  /** Number of items actually returned in this page. */
+  /**
+   * Number of entries on this page. On a page from {@link
+   * com.apify.client.dataset.DatasetClient#listItems}, the number of dataset rows the API scanned
+   * for it, or the number of items returned when that is larger. Filters ({@code clean}, {@code
+   * skipEmpty}) can leave it above the number of items returned. The next page starts at {@code
+   * offset + Math.min(count, limit)}; the cap matters only with {@code unwind}, which can return
+   * more items than the rows scanned. On any other list it is usually the number of items returned;
+   * when the API drops entries after counting them, as the Store list can, it is the number
+   * counted.
+   */
   public long getCount() {
     return count;
   }
@@ -50,24 +59,17 @@ public final class PaginationList<T> extends ApifyResource {
   }
 
   /**
-   * The number of rows the API scanned to produce this page, before any item-level transform (e.g.
-   * dataset items' {@code clean}/{@code skipEmpty}/{@code skipHidden} filters, which can make this
-   * larger than {@link #getCount()}, or {@code unwind}, which can make it smaller), as reported by
-   * the {@code X-Apify-Pagination-Count} response header. {@code null} when the endpoint does not
-   * send that header, in which case {@link #getCount()} is the right value to advance pagination by
-   * - the two always agree outside the dataset items endpoint.
+   * The raw value of the {@code X-Apify-Pagination-Count} response header of a dataset items page:
+   * the number of rows the API scanned to produce it. {@code null} when the header is absent, which
+   * is always the case outside the dataset items endpoint.
    *
-   * <p>A reported {@code 0} together with a nonzero {@link #getCount()} cannot be a genuine answer
-   * (scanning zero rows can never produce items), so that specific combination is treated as the
-   * header not actually being populated for the request rather than as real data. See {@code
-   * AsyncPaginatedPublisher.applyPage} for the exact fallback callers reading this field directly
-   * should mirror.
-   *
-   * <p>Internal pagination-engine detail, exposed here (rather than hidden) only because {@link
-   * #getItems()} and this metadata necessarily travel together on the same page object; most
-   * callers never need it directly - {@link com.apify.client.dataset.DatasetClient#iterateItems}
-   * already accounts for it.
+   * @deprecated {@link #getCount()} reports the scanned rows, or the items returned when that is
+   *     larger, which is what pagination has to advance by: the header is derived from the
+   *     dataset's item count, which lags a fresh push, so it can fall below the items returned.
+   *     Page by {@code getCount()}, as {@link com.apify.client.dataset.DatasetClient#iterateItems}
+   *     does.
    */
+  @Deprecated
   public Long getScannedCount() {
     return scannedCount;
   }
@@ -104,6 +106,12 @@ public final class PaginationList<T> extends ApifyResource {
     this.desc = desc;
   }
 
+  /**
+   * Sets the raw value of the scanned-rows header.
+   *
+   * @deprecated see {@link #getScannedCount()}
+   */
+  @Deprecated
   public void setScannedCount(Long scannedCount) {
     this.scannedCount = scannedCount;
   }

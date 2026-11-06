@@ -35,7 +35,7 @@ public final class DatasetClient {
   /**
    * Header reporting the number of rows the API scanned to produce this page, before any item-level
    * filtering ({@code clean}/{@code skipEmpty}/{@code skipHidden}) is applied. Absent on older API
-   * responses; see {@link PaginationList#getScannedCount()}.
+   * responses; see {@link PaginationList#getCount()}.
    */
   private static final String HEADER_PAGINATION_COUNT = "X-Apify-Pagination-Count";
 
@@ -147,8 +147,15 @@ public final class DatasetClient {
    * array field into several items (returns more). Where the API reports the scanned count ({@code
    * X-Apify-Pagination-Count}), this iterator advances by that number rather than by the number of
    * items returned, so neither case repeats already-seen items, skips rows, nor ends iteration
-   * early. See {@link PaginationList#getScannedCount()} for the one case that header value is not
-   * trusted (and why).
+   * early. The step is {@link PaginationList#getCount()}: the scanned rows, or the items returned
+   * when that is larger (the header is derived from the dataset's item count, which lags a fresh
+   * push), capped at the rows the request asked for, which keeps an unwound page from advancing
+   * past rows the next request would never read.
+   *
+   * <p>Without {@code chunkSize}, each request gets the API's default page size, capped by the
+   * remaining {@code limit}. Dataset items have no default limit, so iterating without {@code
+   * chunkSize} loads the whole dataset, or all {@code limit} rows, in one response. Pass {@code
+   * chunkSize} to iterate a large dataset.
    */
   public <T> Flow.Publisher<T> iterateItems(
       DatasetListItemsOptions options, Long chunkSize, Class<T> itemClass) {
@@ -182,15 +189,18 @@ public final class DatasetClient {
             resp -> {
               JavaType listType = Json.parametric(List.class, Json.type(itemClass));
               List<T> items = Json.parse(resp.body(), listType);
-              long count = items.size();
+              long returned = items.size();
+              Long scanned = headerLongOrNull(resp, HEADER_PAGINATION_COUNT);
 
               PaginationList<T> result = new PaginationList<>();
               result.setItems(items);
-              result.setCount(count);
-              result.setTotal(headerLong(resp, HEADER_PAGINATION_TOTAL, count));
+              // The header is derived from the dataset's item count, which lags a fresh push, so it
+              // can also fall below the items returned on an unfiltered page.
+              result.setCount(Math.max(scanned == null ? 0 : scanned, returned));
+              result.setTotal(headerLong(resp, HEADER_PAGINATION_TOTAL, returned));
               result.setOffset(headerLong(resp, HEADER_PAGINATION_OFFSET, 0));
-              result.setLimit(headerLong(resp, HEADER_PAGINATION_LIMIT, count));
-              result.setScannedCount(headerLongOrNull(resp, HEADER_PAGINATION_COUNT));
+              result.setLimit(headerLong(resp, HEADER_PAGINATION_LIMIT, returned));
+              result.setScannedCount(scanned);
               if (desc != null) {
                 result.setDesc(desc);
               }
@@ -363,8 +373,7 @@ public final class DatasetClient {
   /**
    * As {@link #headerLong}, but returns {@code null} (rather than a fallback value) when the header
    * is absent, so callers can distinguish "not reported" from any particular number - notably
-   * {@code 0}, a value the header can legitimately carry (see {@link
-   * PaginationList#getScannedCount()}).
+   * {@code 0}, a value the header can legitimately carry (see {@link PaginationList#getCount()}).
    */
   private static Long headerLongOrNull(ApiResponse resp, String name) {
     var value = resp.headers().firstValueAsLong(name);

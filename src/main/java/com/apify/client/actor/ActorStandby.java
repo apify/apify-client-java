@@ -62,19 +62,28 @@ public final class ActorStandby extends ApifyResource {
   }
 
   /**
-   * Who the Server Actor serves: {@code SINGLE_TENANT} (a private instance per caller) or a {@code
-   * MULTI_TENANT_*} pool.
+   * Whether each user gets their own standby runs ({@code SINGLE_TENANT}) or the runs are shared
+   * across users ({@code MULTI_TENANT}). {@code null} when it is not set.
    */
   public String getTenancy() {
     return tenancy;
   }
 
-  /** Whether Console authentication is enabled for the standby URL. */
+  /**
+   * Whether standby requests can be authenticated with an Apify Console session. When creating an
+   * Actor, omit it or set it to {@code false}. When updating an Actor, only Apify administrators
+   * can change it; other users can only send the current value, or {@code false} if it is not set
+   * yet.
+   */
   public Boolean getIsConsoleAuthEnabled() {
     return isConsoleAuthEnabled;
   }
 
-  /** Whether requests to the standby URL may omit the API token. */
+  /**
+   * Whether standby requests can be made without an API token. When creating an Actor, omit it or
+   * set it to {@code false}. When updating an Actor, only Apify administrators can change it; other
+   * users can only send the current value, or {@code false} if it is not set yet.
+   */
   public Boolean getIsTokenlessEnabled() {
     return isTokenlessEnabled;
   }

@@ -18,6 +18,8 @@ import com.apify.client.run.RunCollectionClient;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -27,11 +29,14 @@ import tools.jackson.databind.JsonNode;
  * access its runs, builds, versions and webhooks.
  */
 public final class ActorClient {
+  private static final Logger LOG = LoggerFactory.getLogger(ActorClient.class);
+
   private final ApifyClient root;
   private final HttpClientCore http;
   private final ResourceContext ctx;
   private final String baseUrl;
   private final String id;
+  private final ActorServerClient server;
 
   public ActorClient(ApifyClient root, HttpClientCore http, String baseUrl, String id) {
     this.root = root;
@@ -39,6 +44,7 @@ public final class ActorClient {
     this.ctx = ResourceContext.single(http, baseUrl, ApiPaths.ACTORS, id);
     this.baseUrl = baseUrl;
     this.id = id;
+    this.server = new ActorServerClient(http, baseUrl, id);
   }
 
   /** The Actor's ID (or {@code username~name}) as provided. */
@@ -194,6 +200,34 @@ public final class ActorClient {
    */
   public RunClient lastRun(LastRunOptions options) {
     return RunClient.lastRun(root, http, ctx.subUrl(""), options);
+  }
+
+  /**
+   * Returns a client for the server interface of this Actor.
+   *
+   * <p>A Server Actor runs a web server, its server interface, that is called over HTTP without
+   * starting a run for each call. Server Actors were formerly called Actor Standby, and {@link
+   * #standby()} is a deprecated alias of this method. Every call returns the same client, so the
+   * server URL it fetches is reused.
+   *
+   * @see <a href="https://docs.apify.com/platform/actors/running/standby">Standby mode</a>
+   */
+  public ActorServerClient server() {
+    return server;
+  }
+
+  /**
+   * Returns a client for the server interface of this Actor in Standby mode, named after Actor
+   * Standby, the former name of Server Actors.
+   *
+   * @deprecated Use {@link #server()} instead. Will be removed in a future major version.
+   */
+  @Deprecated
+  public ActorServerClient standby() {
+    LOG.warn(
+        "`standby()` is deprecated and will be removed in a future major version. Use"
+            + " `server()` instead.");
+    return server();
   }
 
   /** A client for this Actor's build collection. */

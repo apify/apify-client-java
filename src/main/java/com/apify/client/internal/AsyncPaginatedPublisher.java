@@ -31,13 +31,14 @@ import java.util.concurrent.atomic.AtomicLong;
  *       overshot.
  * </ul>
  *
- * <p>Each page advances the offset by the number of items actually returned, and iteration stops
- * only when the cap is reached or the API returns an empty page. It deliberately does <em>not</em>
- * stop on a short page or a reported {@code total}: the API clamps an over-large requested page
- * size to its own maximum (so a "short" page is common mid-collection), and some endpoints report a
- * {@code total} of {@code 0} or a value that lags right after a write (e.g. dataset items) — either
- * signal would truncate iteration. Terminating on an empty page costs one extra request at the end
- * but yields the complete result in every case.
+ * <p>Each page advances the offset by the page's {@link PaginationList#getCount() count} or by the
+ * number of items it returned, whichever is larger, capped at the page limit that was requested.
+ * Iteration stops only when the cap is reached or a page covers no rows. It deliberately does
+ * <em>not</em> stop on a short page or a reported {@code total}: the API clamps an over-large
+ * requested page size to its own maximum (so a "short" page is common mid-collection), and some
+ * endpoints report a {@code total} of {@code 0} or a value that lags right after a write (e.g.
+ * dataset items) — either signal would truncate iteration. Terminating on an empty page costs one
+ * extra request at the end but yields the complete result in every case.
  *
  * <p>Supports a single subscriber (as permitted by the Reactive Streams specification); subscribing
  * twice completes the second subscriber's subscription with an error instead of sharing state
@@ -112,6 +113,7 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
     private long yielded;
     private boolean exhausted;
     private boolean fetchInFlight;
+    private Long requestedLimit;
     private volatile CompletableFuture<?> inFlight;
 
     Session(Flow.Subscriber<? super T> subscriber) {
@@ -209,6 +211,7 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
       fetchInFlight = true;
       Long capRemaining = totalLimit != null ? totalLimit - yielded : null;
       Long pageLimit = minForLimit(capRemaining, chunkSize);
+      requestedLimit = pageLimit;
       CompletableFuture<PaginationList<T>> fetch = fetcher.fetch(offset, pageLimit);
       inFlight = fetch;
       fetch.whenComplete(
@@ -231,26 +234,19 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
       buffer = page.getItems();
       pos = 0;
       int count = buffer.size();
-      // Advance the offset (and decide exhaustion) by the number of rows the API scanned, not the
-      // number of items it returned: an endpoint with item-level filtering (dataset items' clean /
-      // skipEmpty / skipHidden) can scan up to the requested page size while returning fewer rows,
-      // or none at all. Using the returned count here would re-scan (and re-yield) already-seen
-      // rows, or stop iteration early on a page that filtered out everything but still had more
-      // data ahead.
-      //
-      // getScannedCount() is null on every endpoint that does not report the header at all
-      // (everything but dataset items). Where it is reported, a *nonzero* value is always trusted:
-      // the returned count can legitimately fall on either side of it (a filter drops rows, so
-      // returned < scanned; unwind splits one scanned row's array field into several output items,
-      // so returned > scanned), and the scanned count is what offset must advance by in both cases.
-      // A reported *zero* is trusted only when the page also returned nothing: scanning zero rows
-      // can never produce items, so "0 scanned, N>0 returned" is not a real answer the API can give
-      // - it means the header is not actually populated for this request yet (observed in practice
-      // as a flat 0 on every page of an unfiltered, non-unwound live-API request that did return
-      // real items), and falling back to the returned count there keeps this exactly as safe as
-      // before the header existed.
-      Long reported = page.getScannedCount();
-      long scanned = reported != null && (reported > 0 || count == 0) ? reported : count;
+      // Advance the offset (and decide exhaustion) by the rows the page covered, not the items it
+      // returned: a page can return fewer items than the rows it scanned (dataset items' clean /
+      // skipEmpty / skipHidden filters, or a Store list that drops entries after counting them) or
+      // more (unwind splits one row into several items). Advancing by the returned count would
+      // re-scan rows after a filter dropped some, and stopping at an empty page would end the
+      // iteration in front of rows a filter hid. The step is the larger of the page's count and the
+      // items returned, as the count of a dataset page is derived from the dataset's item count,
+      // which lags a fresh push. It is capped at the rows the request asked for, so an unwound
+      // page does not advance past rows the next request would never read.
+      long scanned = Math.max(page.getCount(), count);
+      if (requestedLimit != null) {
+        scanned = Math.min(scanned, requestedLimit);
+      }
       offset += scanned;
       yielded += count;
       // Defensively trim the last page to the cap in case the server returned more than requested,

@@ -41,4 +41,46 @@ public interface HttpTransport {
    * stream. Completes exceptionally the same way as {@link #sendAsync(HttpRequest)}.
    */
   CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request);
+
+  /**
+   * As {@link #sendAsync(HttpRequest)}, but a transport that is asked not to follow redirects
+   * returns a redirect response as it is, since the request carries a token that must not follow a
+   * redirect to another host. A request to an Actor's server is sent this way (see {@link
+   * com.apify.client.actor.ActorServerClient#request}).
+   *
+   * <p>The default implementation sends the request as {@link #sendAsync(HttpRequest)} does when
+   * {@code followRedirects} is {@code true}, and otherwise completes the returned future
+   * exceptionally with an {@link UnsupportedOperationException}: a transport that cannot hold back
+   * redirects must not be trusted with such a request. Override it to support them.
+   *
+   * @param followRedirects whether the transport may follow redirects
+   */
+  default CompletableFuture<HttpResponse<byte[]>> sendAsync(
+      HttpRequest request, boolean followRedirects) {
+    return followRedirects
+        ? sendAsync(request)
+        : CompletableFuture.failedFuture(redirectsCannotBeDisabled());
+  }
+
+  /**
+   * As {@link #sendStreamingAsync(HttpRequest)}, with the redirect handling and the default
+   * implementation of {@link #sendAsync(HttpRequest, boolean)}.
+   *
+   * @param followRedirects whether the transport may follow redirects
+   */
+  default CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(
+      HttpRequest request, boolean followRedirects) {
+    return followRedirects
+        ? sendStreamingAsync(request)
+        : CompletableFuture.failedFuture(redirectsCannotBeDisabled());
+  }
+
+  /** The failure of the default implementations when redirects must not be followed. */
+  private static UnsupportedOperationException redirectsCannotBeDisabled() {
+    return new UnsupportedOperationException(
+        "This HttpTransport does not support disabling redirects, which a request to an Actor's"
+            + " server needs so that the API token never follows a redirect to another host."
+            + " Override sendAsync(HttpRequest, boolean) and sendStreamingAsync(HttpRequest,"
+            + " boolean) to support it.");
+  }
 }

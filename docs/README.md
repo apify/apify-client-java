@@ -173,7 +173,11 @@ PaginationList<Build> builds = client.builds().list(new ListOptions().limit(50L)
 ## Pagination — `PaginationList<T>`
 
 `list` methods return a `PaginationList<T>` page with `getTotal()`, `getOffset()`, `getLimit()`,
-`getCount()`, `isDesc()` and `getItems()`. Within-storage listers (`listKeys`, `listHead`) return
+`getCount()`, `isDesc()` and `getItems()`. `getCount()` is the number of entries on the page. On a
+page of dataset items it is the number of dataset rows the API scanned for it, or the number of items
+returned when that is larger, which filters (`clean`, `skipEmpty`) can leave above `getItems().size()`.
+The next page starts at `offset + Math.min(count, limit)`; the cap matters only with `unwind`, which
+can return more items than the rows scanned. Within-storage listers (`listKeys`, `listHead`) return
 their own page/head containers instead.
 
 ## Iteration — `iterate` / `iterateItems` / `iterateKeys`
@@ -203,7 +207,7 @@ List<Actor> actors = Publishers.collect(client.actors().iterate(new ActorListOpt
 
 ## Resource pages
 
-- [Actors, versions & environment variables](actors.md)
+- [Actors, versions, environment variables & Server Actors](actors.md)
 - [Builds](builds.md)
 - [Runs](runs.md)
 - [Storages (datasets, key-value stores, request queues)](storages.md)
