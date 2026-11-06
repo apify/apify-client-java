@@ -286,6 +286,28 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void createKeysPublicUrlRejectsAnInvalidExpiryBeforeAnyRequest() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"store1\"}}");
+    var store = client(backend).keyValueStore("store1");
+    for (long expiresInSecs : new long[] {0L, -1L, Long.MAX_VALUE}) {
+      assertThrows(IllegalArgumentException.class, () -> store.createKeysPublicUrl(expiresInSecs));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> store.createKeysPublicUrl(new ListKeysOptions(), expiresInSecs));
+    }
+    assertEquals(0, backend.calls, "an invalid expiresInSecs must fail before any request");
+  }
+
+  @Test
+  void createKeysPublicUrlSignsAPrivateStoreWithAPositiveExpiry() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200, "{\"data\":{\"id\":\"store1\",\"urlSigningSecretKey\":\"secret\"}}");
+    String url = client(backend).keyValueStore("store1").createKeysPublicUrl(3600L).join();
+    assertTrue(url.contains("signature="), url);
+  }
+
+  @Test
   void downloadItemsForwardsItemSelectionParams() {
     MockTransport backend = MockTransport.ofConstant(200, "col1,col2\n");
     client(backend)
@@ -943,6 +965,36 @@ class ClientBehaviourRegressionTest {
             .createItemsPublicUrl(new DatasetListItemsOptions(), null, DownloadItemsFormat.CSV)
             .join();
     assertTrue(url.contains("format=csv"), url);
+  }
+
+  @Test
+  void createItemsPublicUrlRejectsAnInvalidExpiryBeforeAnyRequest() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"d1\"}}");
+    var dataset = client(backend).dataset("d1");
+    for (long expiresInSecs : new long[] {0L, -1L, Long.MAX_VALUE}) {
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> dataset.createItemsPublicUrl(new DatasetListItemsOptions(), expiresInSecs));
+      assertThrows(
+          IllegalArgumentException.class,
+          () ->
+              dataset.createItemsPublicUrl(
+                  new DatasetListItemsOptions(), expiresInSecs, DownloadItemsFormat.CSV));
+    }
+    assertEquals(0, backend.calls, "an invalid expiresInSecs must fail before any request");
+  }
+
+  @Test
+  void createItemsPublicUrlSignsAPrivateDatasetWithAPositiveExpiry() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200, "{\"data\":{\"id\":\"d1\",\"urlSigningSecretKey\":\"secret\"}}");
+    String url =
+        client(backend)
+            .dataset("d1")
+            .createItemsPublicUrl(new DatasetListItemsOptions(), 3600L)
+            .join();
+    assertTrue(url.contains("signature="), url);
   }
 
   @Test

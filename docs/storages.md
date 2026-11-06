@@ -55,7 +55,7 @@ any field not covered by a typed getter above is still available via the inherit
 | `streamItems(DownloadItemsFormat, DatasetDownloadOptions)` | As above, but resolves to a live `InputStream` over the export instead of fully buffering it, so a large export is processed in chunks. The caller closes the stream (or reads it to the end). Throws on any error response, including a 404. |
 | `pushItems(Object)` | Push a single item (a `Map`, a POJO, a `JsonNode` object, ...), a list/array of items, or a `String` that already is the JSON serialization of either (sent as it is). The API accepts only an object or an array of objects, so anything else (a number, a plain string, an array of strings) throws `IllegalArgumentException` before a request is sent. A push that times out is not retried, so items cannot be stored twice. Completes with no value (`CompletableFuture<Void>`). |
 | `getStatistics()` | Dataset statistics. Completes with `JsonNode`; throws `NotFoundError` if the dataset is gone (no separate "statistics absent" state). |
-| `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL, served as `json`. Completes with `String`. |
+| `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL, served as `json`. `expiresInSecs` must be positive when set. Completes with `String`. |
 | `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs, DownloadItemsFormat format)` | As above, with the URL's serialization `format` set explicitly. |
 
 > **Server-side item filters, `unwind`, and iteration.** The dataset-items endpoint applies
@@ -110,7 +110,9 @@ adds `attachment` (`Boolean`), `bom` (`Boolean`), `delimiter` (`String`), `skipH
 `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs[, DownloadItemsFormat format])`
 completes with a `String` URL. If the dataset is private, the client fetches it, reads its
 URL-signing secret, and appends an HMAC-SHA256 signature (bounded by `expiresInSecs`, or
-non-expiring when `null`); for public datasets the URL is unsigned. The optional `format` sets the
+non-expiring when `null`); for public datasets the URL is unsigned. `expiresInSecs` must be positive
+and at most `4611686018427387`, otherwise the method throws `IllegalArgumentException` before any
+request is sent. The expiry counts from the moment the URL is signed, after the dataset lookup. The optional `format` sets the
 serialization the URL serves items in (default `json` when omitted/`null`).
 
 > **Public-URL limitation (matches the JavaScript reference client).** The public-URL builders
@@ -143,7 +145,7 @@ datasets.
 | `setRecordJson(String key, Object value)` | Store JSON. Completes with no value. |
 | `deleteRecord(String key)` | Delete a record. Completes with no value. |
 | `getRecordPublicUrl(String key)` | A public (optionally signed) record URL. Completes with `String`. |
-| `createKeysPublicUrl(Long expiresInSecs)` | A public (optionally signed) key-list URL. Completes with `String`. |
+| `createKeysPublicUrl(Long expiresInSecs)` | A public (optionally signed) key-list URL. `expiresInSecs` must be positive when set. Completes with `String`. |
 | `createKeysPublicUrl(ListKeysOptions, Long expiresInSecs)` | As above, forwarding key-listing filters (`limit`, `prefix`, `collection`, `exclusiveStartKey`). |
 
 `ListKeysOptions` fields (all optional): `limit(Long)`, `exclusiveStartKey(String)`,
@@ -190,7 +192,8 @@ Both `getRecordPublicUrl` and `createKeysPublicUrl` complete with a `String` URL
 and unsigned for public ones. They differ because they sign different things: a single record URL
 signs the record key directly (there is no expiry to bound), while a key-list URL uses an
 expiry-aware storage-content signature — hence only `createKeysPublicUrl` takes an `expiresInSecs`
-(`null` = non-expiring).
+(`null` = non-expiring, otherwise positive and at most `4611686018427387`; anything else throws
+`IllegalArgumentException` before any request is sent).
 
 ## Request queues
 

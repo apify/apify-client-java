@@ -19,6 +19,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Updated to Apify OpenAPI specification `v2-2026-11-04T151257Z`.
 - `PaginationList.getCount()` of a dataset items page is the number of rows scanned, or the items returned if larger; offset iteration advances by it, and its `limit` counts rows.
+- `createItemsPublicUrl` and `createKeysPublicUrl` throw `IllegalArgumentException` before any request when `expiresInSecs` is not positive or exceeds 4611686018427387.
 - Documented that `DatasetClient.iterateItems(...)` without `chunkSize` loads the whole dataset in one response.
 - Documented the `.actor/`-relative Actor definition paths, the `ActorStandby` fields `tenancy`, `isConsoleAuthEnabled` and `isTokenlessEnabled`, and that a `TARBALL` source is a zip archive.
 

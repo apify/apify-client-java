@@ -319,7 +319,11 @@ public final class DatasetClient {
    * <p>It fetches the dataset, and if the dataset exposes a URL-signing secret key (i.e. it is
    * private), appends an HMAC-SHA256 signature so the URL grants access without an API token.
    * {@code expiresInSecs} optionally bounds the validity of a signed URL ({@code null} for
-   * non-expiring). The URL is built from the configured public base URL.
+   * non-expiring); it must be positive and at most 4611686018427387. The URL is built from the
+   * configured public base URL.
+   *
+   * @throws IllegalArgumentException before any request is sent, if {@code expiresInSecs} is not
+   *     {@code null} and is not positive or exceeds that maximum
    */
   public CompletableFuture<String> createItemsPublicUrl(
       DatasetListItemsOptions options, Long expiresInSecs) {
@@ -333,6 +337,7 @@ public final class DatasetClient {
    */
   public CompletableFuture<String> createItemsPublicUrl(
       DatasetListItemsOptions options, Long expiresInSecs, DownloadItemsFormat format) {
+    Signatures.requireValidExpiresInSecs(expiresInSecs);
     QueryParams params = new QueryParams();
     options.apply(params);
     if (format != null) {
