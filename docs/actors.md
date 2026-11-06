@@ -125,9 +125,9 @@ Actor's `standbyUrl` and `actorStandby` fields.
 | Method | Description |
 |---|---|
 | `request(String path, ActorServerRequestOptions)` | Send an HTTP request to the Actor's server. Completes with an `ApiResponse` (`statusCode()`, `headers()`, the buffered `body()` bytes, and the helpers `bodyAsString()` and `bodyAs(Class<T>)` that parse JSON). It completes with **any** response of the server, error statuses included, so check `statusCode()`. `request(String path)` sends a `GET`, `request()` a `GET` to the root. |
-| `requestStream(String path, ActorServerRequestOptions)` | As `request`, but completes as soon as the headers arrive with an `ActorServerStreamResponse` (`statusCode()`, `headers()`, an unread `body()` `InputStream`). Close it (it is `AutoCloseable`) when done. A single attempt, never retried. |
-| `getUrl()` | The URL of the Actor's server (its `standbyUrl`), fetched once and cached on the client. Use it to call the server with another HTTP client. Completes with `String`. |
-| `getOpenApiSpec()` | The Actor's web server OpenAPI specification, from the build that serves the server (`actorStandby.build`: a tag or a build number, `latest` by default). Completes with `Optional<JsonNode>` (empty when the Actor's definition has no web server schema). |
+| `requestStream(String path, ActorServerRequestOptions)` | As `request`, but completes as soon as the headers arrive with an `ActorServerStreamResponse` (`statusCode()`, `headers()`, an unread `body()` `InputStream`). Close it (it is `AutoCloseable`) when done. A `429`/`503` is retried like for `request`. |
+| `getUrl()` / `getUrl(Timeout)` | The URL of the Actor's server (its `standbyUrl`), fetched once and cached on the client. Use it to call the server with another HTTP client. Completes with `String`. The `Timeout` (`Timeout.SHORT` by default) is for the API request that fetches it. |
+| `getOpenApiSpec()` / `getOpenApiSpec(Timeout)` | The Actor's web server OpenAPI specification, from the build that serves the server (`actorStandby.build`: a tag or a build number, `latest` by default). Completes with `Optional<JsonNode>` (empty when the Actor's definition has no web server schema). The `Timeout` (`Timeout.SHORT` by default) is for each API request it makes. |
 
 `ActorServerRequestOptions` fields (all optional): `method(String)` (`GET` by default; also `HEAD`,
 `POST`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`, `PATCH`), `param(String, Object)`/`params(Map)` (query
@@ -178,7 +178,7 @@ How the request is sent, so that the token and the Actor's code stay apart:
   authentication. Headers you pass, `Authorization` included, reach the server as they are.
 - The `path` is always resolved against the server URL, so the request, and the token with it,
   cannot be sent to another host. A fragment (`#...`) is dropped, since it is never sent.
-- A `429` or `503` response is retried with the client's retry settings (the Actor's code can return
+- A `429` or `503` response, of `requestStream` too, is retried with the client's retry settings (the Actor's code can return
   these statuses too, and then it gets the request again), and the last one is returned once the
   retries run out. Other statuses are returned without a retry. A transport error, a timeout
   included, is not retried, since the Actor may have handled the request before it failed.

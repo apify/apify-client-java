@@ -849,11 +849,13 @@ public final class HttpClientCore {
   }
 
   /**
-   * Opens a live streaming response to a single request, as {@link #call(String, String, byte[],
-   * String, Map, Timeout, boolean, RequestPolicy)} would send it, but without a retry and without
-   * turning an error status into an exception: every response is handed back with its body unread,
-   * for the caller to inspect and close. The future completes exceptionally with an {@link
-   * ApifyTransportException} on a transport failure.
+   * Opens a live streaming response to a request, as {@link #call(String, String, byte[], String,
+   * Map, Timeout, boolean, RequestPolicy)} would send it, but without turning an error status into
+   * an exception: every response is handed back with its body unread, for the caller to inspect and
+   * close. A status the policy retries is retried with the client's retry settings, each discarded
+   * response closed, and the last one is handed back once the retries run out. A transport error is
+   * never retried. The future completes exceptionally with an {@link ApifyTransportException} on a
+   * transport failure.
    */
   public CompletableFuture<HttpResponse<InputStream>> streamRequest(
       String method,
@@ -869,6 +871,32 @@ public final class HttpClientCore {
     } catch (ApifyTransportException e) {
       return failedFuture(e);
     }
+    return streamAttempt(
+        method,
+        url,
+        prepared,
+        contentType,
+        resolveTimeout(timeout),
+        policy,
+        1,
+        retry.maxRetries + 1,
+        retry.minDelayBetweenRetries);
+  }
+
+  /**
+   * Opens one attempt of {@link #streamRequest} and, when the response has a status the policy
+   * retries and attempts are left, closes it and schedules the next attempt after a backoff delay.
+   */
+  private CompletableFuture<HttpResponse<InputStream>> streamAttempt(
+      String method,
+      String url,
+      PreparedBody prepared,
+      String contentType,
+      Duration baseTimeout,
+      RequestPolicy policy,
+      int attempt,
+      int maxAttempts,
+      Duration delay) {
     HttpRequest request =
         buildRequest(
             method,
@@ -876,9 +904,35 @@ public final class HttpClientCore {
             prepared.body(),
             contentType,
             prepared.headers(),
-            resolveTimeout(timeout),
+            attemptTimeout(baseTimeout, attempt),
             policy);
-    return openStream(request, policy.followRedirects());
+    return openStream(request, policy.followRedirects())
+        .thenCompose(
+            response -> {
+              boolean retryable =
+                  response.statusCode() >= MAX_SUCCESS_STATUS
+                      && isStatusRetryable(response.statusCode(), policy)
+                      && attempt < maxAttempts;
+              if (!retryable) {
+                return CompletableFuture.completedFuture(response);
+              }
+              closeQuietly(response.body());
+              Duration nextDelay =
+                  minDuration(delay.multipliedBy(BACKOFF_FACTOR), retry.maxDelayBetweenRetries);
+              return Async.delay(randomizedDelay(delay))
+                  .thenCompose(
+                      unused ->
+                          streamAttempt(
+                              method,
+                              url,
+                              prepared,
+                              contentType,
+                              baseTimeout,
+                              policy,
+                              attempt + 1,
+                              maxAttempts,
+                              nextDelay));
+            });
   }
 
   private CompletableFuture<HttpResponse<InputStream>> openStream(

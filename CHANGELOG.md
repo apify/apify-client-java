@@ -9,38 +9,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Server Actor support (formerly Actor Standby): `ActorClient.server()` returns an
-  `ActorServerClient` with `request(...)`, `requestStream(...)`, `getUrl()` and `getOpenApiSpec()`;
-  `ActorServerRequestOptions` sets the method, query parameters, headers, body, compression and
-  timeout. The token travels in the `X-Apify-Authorization` header, a `429` or `503` response is
-  retried, error responses and redirects are returned as they are, and a transport error is not
-  retried. `ActorClient.standby()` is a deprecated alias of `server()`.
-- `ServerActorException`, thrown for an Actor that is not a Server Actor or a build that does not
-  exist.
-- `HttpTransport.sendAsync(HttpRequest, boolean)` and `sendStreamingAsync(HttpRequest, boolean)`,
-  to send a request without following redirects. Their default implementations refuse such a
-  request, so a custom transport has to override them to serve Server Actor requests.
+- Server Actor support: `ActorClient.server()` returns an `ActorServerClient` (`request`, `requestStream`, `getUrl`, `getOpenApiSpec`) configured by `ActorServerRequestOptions`; `ActorClient.standby()` is a deprecated alias.
+- `ServerActorException` for an Actor that is not a Server Actor or a build that does not exist.
+- `HttpTransport.sendAsync(HttpRequest, boolean)` and `sendStreamingAsync(HttpRequest, boolean)` to send a request without following redirects.
 - `ApiResponse.bodyAsString()` and `ApiResponse.bodyAs(Class)`.
 - `Actor.getStandbyUrl()`, `ActorVersion.getActorPath()` and `BuildActVersion.getActorPath()`.
 
 ### Changed
 
 - Updated to Apify OpenAPI specification `v2-2026-11-04T151257Z`.
-- `PaginationList.getCount()` of a page from `DatasetClient.listItems(...)` is the number of dataset
-  rows the API scanned, or the number of items returned when that is larger, so filters can leave it
-  above the number of items. Offset iteration advances by it, capped at the rows requested, and a
-  page that scanned rows continues the iteration even when it returned no items. This also applies
-  to a list whose count the API reports above the items it returns, such as the Store list.
-- Documented that iterating `DatasetClient.iterateItems(...)` without `chunkSize` loads the whole
-  dataset, or all `limit` rows, in one response.
-- Documented the `.actor/`-relative paths of the Actor definition, the `ActorStandby` fields
-  `tenancy`, `isConsoleAuthEnabled` and `isTokenlessEnabled`, and that a `TARBALL` source is a zip
-  archive.
+- `PaginationList.getCount()` of a dataset items page is the number of rows scanned, or the items returned if larger; offset iteration advances by it, and its `limit` counts rows.
+- Documented that `DatasetClient.iterateItems(...)` without `chunkSize` loads the whole dataset in one response.
+- Documented the `.actor/`-relative Actor definition paths, the `ActorStandby` fields `tenancy`, `isConsoleAuthEnabled` and `isTokenlessEnabled`, and that a `TARBALL` source is a zip archive.
 
 ### Deprecated
 
-- `PaginationList.getScannedCount()` and `setScannedCount(...)`: `getCount()` reports the scanned
-  rows.
+- `PaginationList.getScannedCount()` and `setScannedCount(...)`, replaced by `getCount()`.
 
 ## [0.12.0] - 2026-10-30
 

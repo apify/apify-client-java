@@ -20,6 +20,7 @@ import com.apify.client.http.GzipHttpCompressor;
 import com.apify.client.http.HttpTransport;
 import com.apify.client.http.NotFoundError;
 import com.apify.client.http.ServerActorException;
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import java.io.ByteArrayInputStream;
@@ -326,6 +327,34 @@ class ActorServerClientTest {
   }
 
   @Test
+  void concurrentFirstCallsAllSeeTheErrorOfAFailedLookup() throws InterruptedException {
+    actor = null;
+    ActorServerClient serverClient = client().actor(ACTOR_ID).server();
+    int callers = 8;
+    List<Throwable> failures = Collections.synchronizedList(new ArrayList<>());
+    List<Thread> threads = new ArrayList<>();
+    for (int i = 0; i < callers; i++) {
+      Thread thread =
+          new Thread(
+              () -> {
+                try {
+                  serverClient.getUrl().join();
+                } catch (Throwable error) {
+                  failures.add(rootOf(error));
+                }
+              });
+      threads.add(thread);
+    }
+    threads.forEach(Thread::start);
+    for (Thread thread : threads) {
+      thread.join();
+    }
+
+    assertEquals(callers, failures.size());
+    failures.forEach(failure -> assertInstanceOf(NotFoundError.class, failure));
+  }
+
+  @Test
   void cancellingTheFutureOfGetUrlLeavesTheSharedLookupAlone() {
     ActorServerClient serverClient = client().actor(ACTOR_ID).server();
 
@@ -599,6 +628,34 @@ class ActorServerClientTest {
   }
 
   @Test
+  void requestStreamRetriesARateLimitAndServiceUnavailable() throws IOException {
+    flakyStatuses.addAll(List.of(429, 503));
+
+    try (ActorServerStreamResponse response =
+        client(2).actor(ACTOR_ID).server().requestStream("/flaky", null).join()) {
+      assertEquals(200, response.statusCode());
+      assertEquals(
+          Json.toTree(Map.of("ok", true)),
+          Json.parse(response.body().readAllBytes(), JsonNode.class));
+    }
+    assertEquals(3, serverRequests().size());
+  }
+
+  @Test
+  void requestStreamReturnsTheLastRetriedResponseOnceTheRetriesRunOut() throws IOException {
+    flakyStatuses.addAll(List.of(503, 503, 503));
+
+    try (ActorServerStreamResponse response =
+        client(1).actor(ACTOR_ID).server().requestStream("/flaky", null).join()) {
+      assertEquals(503, response.statusCode());
+      assertEquals(
+          "{\"error\":\"flaky\"}",
+          new String(response.body().readAllBytes(), StandardCharsets.UTF_8));
+    }
+    assertEquals(2, serverRequests().size());
+  }
+
+  @Test
   void requestStreamDoesNotFollowARedirect() throws IOException {
     try (TestHttpServer redirecting =
         new TestHttpServer(request -> TestHttpServer.Reply.redirect("http://127.0.0.1:1/"))) {
@@ -674,6 +731,40 @@ class ActorServerClientTest {
     assertEquals(
         "/v2/actor-builds/old-build-id",
         server.received().get(server.received().size() - 1).path());
+  }
+
+  @Test
+  void getUrlAndGetOpenApiSpecTakeTheTimeoutOfTheCaller() {
+    MockTransport backend =
+        MockTransport.ofRouter(
+            request -> {
+              String path = request.uri().getPath();
+              if (path.equals("/v2/actors/a")) {
+                return MockTransport.ok(
+                    200,
+                    "{\"data\":{\"id\":\"a\",\"standbyUrl\":\"https://a--b.apify.actor\","
+                        + "\"actorStandby\":{\"build\":\"0.0.1\"}}}");
+              }
+              if (path.equals("/v2/actors/a/builds")) {
+                return MockTransport.ok(
+                    200,
+                    "{\"data\":{\"total\":1,\"offset\":0,\"limit\":1,\"count\":1,"
+                        + "\"items\":[{\"id\":\"b1\",\"buildNumber\":\"0.0.1\"}]}}");
+              }
+              return MockTransport.ok(200, "{\"data\":{\"id\":\"b1\"}}");
+            });
+    ApifyClient client =
+        ApifyClient.builder().token(TOKEN).httpTransport(backend).maxRetries(0).build();
+    Timeout timeout = Timeout.ofSeconds(7);
+
+    client.actor("a").server().getOpenApiSpec(timeout).join();
+    assertEquals(3, backend.calls, "the Actor, the builds list and the build");
+    assertEquals(
+        List.of(Optional.of(Duration.ofSeconds(7))), backend.timeouts.stream().distinct().toList());
+
+    backend.timeouts.clear();
+    client.actor("a").server().getUrl(timeout).join();
+    assertEquals(List.of(Optional.of(Duration.ofSeconds(7))), backend.timeouts);
   }
 
   @Test

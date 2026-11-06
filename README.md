@@ -303,16 +303,16 @@ that the API token never follows a redirect to another host. Override both to su
 `false`, return a redirect response as it is. `DefaultHttpTransport` does, also when it wraps your own
 JDK `HttpClient` (it then copies the client's settings into one that does not follow redirects).
 
-Both methods perform exactly one network round-trip each — no retrying, no request mutation
-(retries, auth, and the `User-Agent` header are handled one layer up, by the client itself), and
-neither may block the calling thread waiting on the network. A non-2xx HTTP status is **not** a
+Every one of the four methods performs exactly one network round-trip — no retrying, no request
+mutation (retries, auth, and the `User-Agent` header are handled one layer up, by the client
+itself), and none may block the calling thread waiting on the network. A non-2xx HTTP status is **not** a
 transport-level error: complete the future normally with it, as a normal `HttpResponse` carrying its
 actual status code. Only fail the future for a genuine transport failure — connection refused, DNS
 resolution failure, or a timeout. Any exception the future is completed exceptionally with is
 translated by the client into an `ApifyTransportException`; complete exceptionally with
 `com.apify.client.http.HttpTimeoutException` specifically for a timeout so
-`ApifyTransportException.isTimeout()` reports it correctly. `DefaultHttpTransport` implements both
-methods directly on top of the JDK `HttpClient`'s own `sendAsync`.
+`ApifyTransportException.isTimeout()` reports it correctly. `DefaultHttpTransport` implements all
+four directly on top of the JDK `HttpClient`'s own `sendAsync`.
 
 ## Fetching single resources
 

@@ -1,13 +1,11 @@
 package com.apify.client.actor;
 
-import com.apify.client.ListOptions;
 import com.apify.client.build.Build;
-import com.apify.client.build.BuildClient;
-import com.apify.client.build.BuildCollectionClient;
 import com.apify.client.http.ApiResponse;
 import com.apify.client.http.ServerActorException;
 import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
+import com.apify.client.internal.CancellableFuture;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
@@ -16,7 +14,6 @@ import com.apify.client.internal.ResourceContext;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import tools.jackson.databind.JsonNode;
@@ -44,6 +41,9 @@ public final class ActorServerClient {
 
   /** A build number like {@code 0.1.23}: the version {@code 0.1} and the sequence number 23. */
   private static final Pattern BUILD_NUMBER_PATTERN = Pattern.compile("^(\\d+)\\.(\\d+)\\.(\\d+)$");
+
+  /** The path of an Actor's builds, relative to the Actor. */
+  private static final String BUILDS_PATH = "builds";
 
   /** The path of a request that names none: the root of the server. */
   private static final String ROOT_PATH = "/";
@@ -75,35 +75,47 @@ public final class ActorServerClient {
    * <p>The URL is the Actor's {@code standbyUrl}, fetched from the API by the first call of this
    * method or {@link #getOpenApiSpec()} and reused by later calls on this client. Use it to call
    * the server with another HTTP client, for example one generated from the server's OpenAPI
-   * specification.
+   * specification. The API request takes the {@link Timeout#SHORT} timeout.
    *
    * @return the URL of the Actor's server; fails with a {@link ServerActorException} when the Actor
    *     is not a Server Actor, and with a {@link com.apify.client.http.NotFoundError} when the
    *     Actor does not exist
    */
   public CompletableFuture<String> getUrl() {
-    CompletableFuture<String> shared = url.get();
-    if (shared == null) {
-      CompletableFuture<String> lookup = new CompletableFuture<>();
+    return getUrl(Timeout.SHORT);
+  }
+
+  /**
+   * As {@link #getUrl()}, with {@code timeout} for the API request that fetches the URL. It is not
+   * used when the URL is already cached.
+   */
+  public CompletableFuture<String> getUrl(Timeout timeout) {
+    // A copy, so that cancelling the returned future leaves the shared lookup alone.
+    return sharedUrl(timeout).copy();
+  }
+
+  /** The cached lookup of the server URL, started if there is none. */
+  private CompletableFuture<String> sharedUrl(Timeout timeout) {
+    while (true) {
+      CompletableFuture<String> cached = url.get();
+      if (cached != null) {
+        return cached;
+      }
+      CancellableFuture<String> lookup = new CancellableFuture<>();
       if (url.compareAndSet(null, lookup)) {
-        shared = lookup;
-        fetchServerActor()
+        fetchServerActor(timeout)
             .whenComplete(
                 (actor, error) -> {
                   if (error == null) {
                     lookup.complete(actor.getStandbyUrl());
                   } else {
-                    // A failed lookup is not kept, so the next call tries again.
                     url.compareAndSet(lookup, null);
                     lookup.completeExceptionally(HttpClientCore.unwrapCompletion(error));
                   }
                 });
-      } else {
-        shared = url.get();
+        return lookup;
       }
     }
-    // A dependent copy, so that cancelling the returned future leaves the shared lookup alone.
-    return shared.thenApply(Function.identity());
   }
 
   /**
@@ -123,7 +135,12 @@ public final class ActorServerClient {
    *     server schema</a>
    */
   public CompletableFuture<Optional<JsonNode>> getOpenApiSpec() {
-    return fetchServerActor()
+    return getOpenApiSpec(Timeout.SHORT);
+  }
+
+  /** As {@link #getOpenApiSpec()}, with {@code timeout} for each API request it makes. */
+  public CompletableFuture<Optional<JsonNode>> getOpenApiSpec(Timeout timeout) {
+    return fetchServerActor(timeout)
         .thenCompose(
             actor -> {
               url.set(CompletableFuture.completedFuture(actor.getStandbyUrl()));
@@ -134,8 +151,8 @@ public final class ActorServerClient {
                       ? CompletableFuture.completedFuture(taggedBuildId)
                       // Not a tag, so look `buildRef` up as a build number, which the API cannot
                       // resolve directly.
-                      : findBuildIdByNumber(buildRef);
-              return buildId.thenCompose(found -> fetchBuild(found, buildRef));
+                      : findBuildIdByNumber(buildRef, timeout);
+              return buildId.thenCompose(found -> fetchBuild(found, buildRef, timeout));
             })
         .thenApply(
             build ->
@@ -203,8 +220,10 @@ public final class ActorServerClient {
    * As {@link #request}, but completes with the response as soon as its headers arrive, with the
    * body unread. A response whose body is large, or never ends, can be processed in chunks this
    * way. The body holds its connection open until it is read to the end or closed, so close the
-   * returned {@link ActorServerStreamResponse}. This is a single attempt: a stream is not retried.
-   * {@link ActorServerRequestOptions#timeout} bounds the wait for the server to start responding.
+   * returned {@link ActorServerStreamResponse}. A rate-limit (429) or Service Unavailable (503)
+   * response is retried like for {@link #request}, with the discarded responses closed; a transport
+   * error is not. {@link ActorServerRequestOptions#timeout} bounds the wait for the server to start
+   * responding.
    */
   public CompletableFuture<ActorServerStreamResponse> requestStream(
       String path, ActorServerRequestOptions options) {
@@ -228,8 +247,8 @@ public final class ActorServerClient {
   }
 
   /** Fetches the Actor and checks that it is a Server Actor. */
-  private CompletableFuture<Actor> fetchServerActor() {
-    return ctx.getResourceRequired("", new QueryParams(), Actor.class, Timeout.SHORT)
+  private CompletableFuture<Actor> fetchServerActor(Timeout timeout) {
+    return ctx.getResourceRequired("", new QueryParams(), Actor.class, timeout)
         .thenApply(
             actor -> {
               String standbyUrl = actor == null ? null : actor.getStandbyUrl();
@@ -261,19 +280,21 @@ public final class ActorServerClient {
    * sequence numbers within a version grow over time, so meeting an older build of the same version
    * means the build does not exist. Completes with empty for anything that is not a build number.
    */
-  private CompletableFuture<Optional<String>> findBuildIdByNumber(String buildNumber) {
+  private CompletableFuture<Optional<String>> findBuildIdByNumber(
+      String buildNumber, Timeout timeout) {
     Optional<int[]> target = parseBuildNumber(buildNumber);
     if (target.isEmpty()) {
       return CompletableFuture.completedFuture(Optional.empty());
     }
-    BuildCollectionClient builds = new BuildCollectionClient(http, ctx.subUrl(""), "builds");
-    return findBuildIdByNumber(builds, buildNumber, target.get(), 0);
+    ResourceContext builds = ResourceContext.collection(http, ctx.subUrl(""), BUILDS_PATH);
+    return findBuildIdByNumber(builds, buildNumber, target.get(), 0, timeout);
   }
 
   private CompletableFuture<Optional<String>> findBuildIdByNumber(
-      BuildCollectionClient builds, String buildNumber, int[] target, long offset) {
+      ResourceContext builds, String buildNumber, int[] target, long offset, Timeout timeout) {
+    QueryParams params = new QueryParams().addBool("desc", true).addLong("offset", offset);
     return builds
-        .list(new ListOptions().desc(true).offset(offset))
+        .listResource("", params, Build.class, timeout)
         .thenCompose(
             page -> {
               for (Build build : page.getItems()) {
@@ -288,23 +309,18 @@ public final class ActorServerClient {
                 return CompletableFuture.completedFuture(Optional.<String>empty());
               }
               return findBuildIdByNumber(
-                  builds, buildNumber, target, offset + page.getItems().size());
+                  builds, buildNumber, target, offset + page.getItems().size(), timeout);
             });
   }
 
-  private CompletableFuture<Build> fetchBuild(Optional<String> buildId, String buildRef) {
+  private CompletableFuture<Build> fetchBuild(
+      Optional<String> buildId, String buildRef, Timeout timeout) {
     if (buildId.isEmpty()) {
       return CompletableFuture.failedFuture(buildDoesNotExist(buildRef));
     }
-    return new BuildClient(http, baseUrl, buildId.get())
-        .get()
-        .thenApply(
-            build -> {
-              if (build.isEmpty()) {
-                throw buildDoesNotExist(buildRef);
-              }
-              return build.get();
-            });
+    return ResourceContext.single(http, baseUrl, ApiPaths.ACTOR_BUILDS, buildId.get())
+        .getResource("", new QueryParams(), Build.class, timeout)
+        .thenApply(build -> build.orElseThrow(() -> buildDoesNotExist(buildRef)));
   }
 
   private ServerActorException buildDoesNotExist(String buildRef) {

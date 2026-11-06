@@ -76,17 +76,38 @@ class DatasetItemsIteratorTest {
   }
 
   @Test
-  void totalCapTrimsDatasetItems() {
-    // The cap wins even though the server would return more; only the first page is requested.
+  void limitCapsTheRowsReadNotTheItemsReturned() {
+    // The page returns more items than the 2 rows asked for, as an unwound page does: all of them
+    // are yielded, and no further page is requested since the 2 rows were read.
     MockTransport backend = MockTransport.ofConstant(200, "[{\"n\":1},{\"n\":2},{\"n\":3}]");
     List<JsonNode> seen =
         collect(
             client(backend)
                 .dataset("d1")
                 .iterateItems(new DatasetListItemsOptions().limit(2L), 5L));
-    List<Integer> ns = seen.stream().map(n -> n.get("n").asInt()).toList();
-    assertEquals(List.of(1, 2), ns, "limit caps the total items yielded");
+    assertEquals(3, seen.size());
     assertEquals(1, backend.calls);
+  }
+
+  @Test
+  void limitCountsTheRowsAFilterDropped() {
+    // With limit 4 and chunk 2, the two pages cover 4 rows although a filter left one item: the
+    // iteration must stop there instead of reading on until it has yielded 4 items.
+    MockTransport backend =
+        new MockTransport(
+            List.of(
+                MockTransport.ok(200, "[{\"n\":1}]", Map.of("X-Apify-Pagination-Count", "2")),
+                MockTransport.ok(200, "[]", Map.of("X-Apify-Pagination-Count", "2")),
+                MockTransport.ok(200, "[{\"n\":9}]", Map.of("X-Apify-Pagination-Count", "2"))));
+    List<JsonNode> seen =
+        collect(
+            client(backend)
+                .dataset("d1")
+                .iterateItems(new DatasetListItemsOptions().clean(true).limit(4L), 2L));
+    assertEquals(List.of(1), seen.stream().map(n -> n.get("n").asInt()).toList());
+    assertEquals(2, backend.calls, "rows 0-3 were read, so there is no third page");
+    assertTrue(backend.urls.get(1).contains("offset=2"), backend.urls.get(1));
+    assertTrue(backend.urls.get(1).contains("limit=2"), backend.urls.get(1));
   }
 
   /** A typed item for {@link #decodesIntoRequestedType()}. */

@@ -40,7 +40,14 @@ public record RequestPolicy(
 
   /** A call to the Apify API. */
   public static final RequestPolicy API =
-      new RequestPolicy(HttpHeaders.AUTHORIZATION, true, null, true, true, true, null);
+      new RequestPolicy(
+          /* authorizationHeader= */ HttpHeaders.AUTHORIZATION,
+          /* throwOnErrorStatus= */ true,
+          /* retryableStatus= */ null,
+          /* retryTransportErrors= */ true,
+          /* followRedirects= */ true,
+          /* compress= */ true,
+          /* compressor= */ null);
 
   /**
    * A request to an Actor's server. The token travels in the {@code X-Apify-Authorization} header,
@@ -56,12 +63,12 @@ public record RequestPolicy(
    */
   public static RequestPolicy server(HttpCompressor compressor) {
     return new RequestPolicy(
-        HttpHeaders.X_APIFY_AUTHORIZATION,
-        false,
-        SERVER_RETRY_STATUS_CODES::contains,
-        false,
-        false,
-        compressor != null,
-        compressor);
+        /* authorizationHeader= */ HttpHeaders.X_APIFY_AUTHORIZATION,
+        /* throwOnErrorStatus= */ false,
+        /* retryableStatus= */ SERVER_RETRY_STATUS_CODES::contains,
+        /* retryTransportErrors= */ false,
+        /* followRedirects= */ false,
+        /* compress= */ compressor != null,
+        /* compressor= */ compressor);
   }
 }

@@ -18,6 +18,7 @@ import com.apify.client.run.RunCollectionClient;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
@@ -30,6 +31,9 @@ import tools.jackson.databind.JsonNode;
  */
 public final class ActorClient {
   private static final Logger LOG = LoggerFactory.getLogger(ActorClient.class);
+
+  /** Set once the deprecation of {@link #standby()} was logged, which is done once per process. */
+  private static final AtomicBoolean STANDBY_DEPRECATION_LOGGED = new AtomicBoolean();
 
   private final ApifyClient root;
   private final HttpClientCore http;
@@ -224,9 +228,11 @@ public final class ActorClient {
    */
   @Deprecated
   public ActorServerClient standby() {
-    LOG.warn(
-        "`standby()` is deprecated and will be removed in a future major version. Use"
-            + " `server()` instead.");
+    if (STANDBY_DEPRECATION_LOGGED.compareAndSet(false, true)) {
+      LOG.warn(
+          "`standby()` is deprecated and will be removed in a future major version. Use"
+              + " `server()` instead.");
+    }
     return server();
   }
 
