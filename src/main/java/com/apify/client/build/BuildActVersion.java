@@ -12,6 +12,7 @@ public final class BuildActVersion extends ApifyResource {
   private String versionNumber;
   private String gitRepoUrl;
   private List<SourceCodeFile> sourceFiles;
+  private String actorPath;
 
   /**
    * How the version's source was provided (e.g. {@code "SOURCE_FILES"}, {@code "GIT_REPO"}, {@code
@@ -46,5 +47,14 @@ public final class BuildActVersion extends ApifyResource {
    */
   public List<SourceCodeFile> getSourceFiles() {
     return sourceFiles == null ? List.of() : Collections.unmodifiableList(sourceFiles);
+  }
+
+  /**
+   * The Actor's directory inside the uploaded source, present when the version sets it. It applies
+   * when the source type is {@code SOURCE_FILES} or {@code TARBALL}. On a {@code TARBALL} version,
+   * only users with write access to the Actor get it.
+   */
+  public String getActorPath() {
+    return actorPath;
   }
 }

@@ -382,7 +382,11 @@ public final class KeyValueStoreClient {
   /**
    * Builds a public URL for listing this store's keys. As with {@link #getRecordPublicUrl}, a
    * signature is appended for private stores. {@code expiresInSecs} optionally bounds the validity
-   * of a signed URL ({@code null} for non-expiring).
+   * of a signed URL ({@code null} for non-expiring); it must be positive and at most
+   * 4611686018427387.
+   *
+   * @throws IllegalArgumentException before any request is sent, if {@code expiresInSecs} is not
+   *     {@code null} and is not positive or exceeds that maximum
    */
   public CompletableFuture<String> createKeysPublicUrl(Long expiresInSecs) {
     return createKeysPublicUrl(new ListKeysOptions(), expiresInSecs);
@@ -393,10 +397,14 @@ public final class KeyValueStoreClient {
    * ({@code limit}, {@code prefix}, {@code collection}, {@code exclusiveStartKey}) into the URL. As
    * with {@link #getRecordPublicUrl}, a signature is appended for private stores unless the caller
    * already supplied one. {@code expiresInSecs} optionally bounds the validity of a signed URL
-   * ({@code null} for non-expiring).
+   * ({@code null} for non-expiring); it must be positive and at most 4611686018427387.
+   *
+   * @throws IllegalArgumentException before any request is sent, if {@code expiresInSecs} is not
+   *     {@code null} and is not positive or exceeds that maximum
    */
   public CompletableFuture<String> createKeysPublicUrl(
       ListKeysOptions options, Long expiresInSecs) {
+    Signatures.requireValidExpiresInSecs(expiresInSecs);
     QueryParams params = new QueryParams();
     options.apply(params);
     if (options.signatureValue() != null) {

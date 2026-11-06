@@ -778,9 +778,9 @@ public final class RequestQueueClient {
         buffer = page.getItems();
         pos = 0;
         nextCursor = page.getNextCursor();
-        // Defensively trim to the cap in case the server returned more than requested, matching
-        // AsyncPaginatedPublisher's same guard, so a subscriber never sees more than `totalLimit`
-        // items even if the server ignores (or overshoots) the requested per-page `limit`.
+        // Defensively trim to the cap in case the server returned more than requested, so a
+        // subscriber never sees more than `totalLimit` items even if the server ignores (or
+        // overshoots) the requested per-page `limit`.
         if (capRemaining != null && buffer.size() > capRemaining) {
           buffer = buffer.subList(0, capRemaining.intValue());
         }

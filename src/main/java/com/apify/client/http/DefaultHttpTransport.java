@@ -13,8 +13,9 @@ import java.util.concurrent.CompletionException;
  * native non-blocking {@code sendAsync}.
  *
  * <p>The per-attempt timeout is applied to each {@link HttpRequest} by the orchestrating client, so
- * this transport sets only a connection timeout of its own. It follows normal redirects and reuses
- * connections from the underlying client's pool.
+ * this transport sets only a connection timeout of its own. It follows normal redirects, except for
+ * a request that asks not to (see {@link HttpTransport#sendAsync(HttpRequest, boolean)}), and
+ * reuses connections from the underlying client's pool.
  */
 public final class DefaultHttpTransport implements HttpTransport {
 
@@ -27,6 +28,12 @@ public final class DefaultHttpTransport implements HttpTransport {
   public static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
 
   private final HttpClient client;
+
+  /**
+   * The client that serves a request which must not follow redirects: {@link #client} itself when
+   * it never follows them, otherwise a copy of it that does not. Created on first use.
+   */
+  private volatile HttpClient noRedirectClient;
 
   /** Creates a transport with the {@link #DEFAULT_CONNECT_TIMEOUT}. */
   public DefaultHttpTransport() {
@@ -60,6 +67,62 @@ public final class DefaultHttpTransport implements HttpTransport {
   @Override
   public CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request) {
     return unwrapTimeout(client.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()));
+  }
+
+  @Override
+  public CompletableFuture<HttpResponse<byte[]>> sendAsync(
+      HttpRequest request, boolean followRedirects) {
+    return followRedirects
+        ? sendAsync(request)
+        : unwrapTimeout(
+            clientWithoutRedirects().sendAsync(request, HttpResponse.BodyHandlers.ofByteArray()));
+  }
+
+  @Override
+  public CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(
+      HttpRequest request, boolean followRedirects) {
+    return followRedirects
+        ? sendStreamingAsync(request)
+        : unwrapTimeout(
+            clientWithoutRedirects().sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()));
+  }
+
+  /**
+   * The JDK client's redirect policy is fixed when it is built, so a request that must not follow
+   * redirects goes through a client that was built without that policy. A client wrapped by {@link
+   * #DefaultHttpTransport(HttpClient)} is copied with the settings the JDK exposes (it does not
+   * share the original's connection pool).
+   */
+  private HttpClient clientWithoutRedirects() {
+    HttpClient result = noRedirectClient;
+    if (result == null) {
+      synchronized (this) {
+        result = noRedirectClient;
+        if (result == null) {
+          result = copyWithoutRedirects(client);
+          noRedirectClient = result;
+        }
+      }
+    }
+    return result;
+  }
+
+  private static HttpClient copyWithoutRedirects(HttpClient source) {
+    if (source.followRedirects() == HttpClient.Redirect.NEVER) {
+      return source;
+    }
+    HttpClient.Builder builder =
+        HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NEVER)
+            .version(source.version())
+            .sslContext(source.sslContext())
+            .sslParameters(source.sslParameters());
+    source.connectTimeout().ifPresent(builder::connectTimeout);
+    source.proxy().ifPresent(builder::proxy);
+    source.authenticator().ifPresent(builder::authenticator);
+    source.cookieHandler().ifPresent(builder::cookieHandler);
+    source.executor().ifPresent(builder::executor);
+    return builder.build();
   }
 
   /**

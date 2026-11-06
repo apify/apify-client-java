@@ -49,24 +49,28 @@ any field not covered by a typed getter above is still available via the inherit
 | `get()` / `update(Object)` / `delete()` | Metadata CRUD. On a client reached through a run/task with no dataset id of its own (e.g. `run.dataset()`), a 404 is ambiguous (parent vs. sub-resource gone) and throws `NotFoundError` instead of resolving to empty/no-op — see [Fetching single resources](../README.md#fetching-single-resources). |
 | `listItems(DatasetListItemsOptions)` | List items. Completes with `PaginationList<JsonNode>`. |
 | `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. Completes with `PaginationList<T>`. |
-| `iterateItems(DatasetListItemsOptions)` / `iterateItems(DatasetListItemsOptions, Long chunkSize)` | A lazy `Flow.Publisher<JsonNode>` over all items; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), the optional `chunkSize` sets the per-request page size (omitted/`null` = server default). |
-| `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Flow.Publisher<T>`. For typed iteration at the server-default page size, pass a `null` chunk size: `iterateItems(opts, null, T.class)`. |
+| `iterateItems(DatasetListItemsOptions)` / `iterateItems(DatasetListItemsOptions, Long chunkSize)` | A lazy `Flow.Publisher<JsonNode>` over all items; the options' `limit` caps the dataset *rows* read (`null`/unset or non-positive = all), the optional `chunkSize` sets the per-request page size. Dataset items have no default page limit, so without `chunkSize` the whole dataset (or all `limit` rows) is loaded in one response: pass `chunkSize` to iterate a large dataset. |
+| `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Flow.Publisher<T>`. For typed iteration in one response, pass a `null` chunk size: `iterateItems(opts, null, T.class)`. |
 | `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes. `DownloadItemsFormat` is one of `JSON`, `JSONL`, `CSV`, `XLSX`, `XML`, `RSS`, `HTML`. Completes with `byte[]`. |
 | `streamItems(DownloadItemsFormat, DatasetDownloadOptions)` | As above, but resolves to a live `InputStream` over the export instead of fully buffering it, so a large export is processed in chunks. The caller closes the stream (or reads it to the end). Throws on any error response, including a 404. |
 | `pushItems(Object)` | Push a single item (a `Map`, a POJO, a `JsonNode` object, ...), a list/array of items, or a `String` that already is the JSON serialization of either (sent as it is). The API accepts only an object or an array of objects, so anything else (a number, a plain string, an array of strings) throws `IllegalArgumentException` before a request is sent. A push that times out is not retried, so items cannot be stored twice. Completes with no value (`CompletableFuture<Void>`). |
 | `getStatistics()` | Dataset statistics. Completes with `JsonNode`; throws `NotFoundError` if the dataset is gone (no separate "statistics absent" state). |
-| `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL, served as `json`. Completes with `String`. |
+| `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL, served as `json`. `expiresInSecs` must be positive and at most `4611686018427387` when set. Completes with `String`. |
 | `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs, DownloadItemsFormat format)` | As above, with the URL's serialization `format` set explicitly. |
 
 > **Server-side item filters, `unwind`, and iteration.** The dataset-items endpoint applies
 > `offset`/`limit` to the raw rows and then transforms them: a filter (`skipEmpty`, `skipHidden`,
 > `clean`, `simplified`) can drop rows (fewer items returned than scanned), and `unwind` can split a
-> row's array field into several items (more items returned than scanned). Where the API reports the
-> number of rows it scanned (`X-Apify-Pagination-Count`), `iterateItems` advances by that number
-> rather than by the number of items returned, so neither case repeats already-seen items, skips
-> rows, nor ends iteration early. (A reported `0` is trusted only when the page also returned
-> nothing, since scanning zero rows can never produce items; any other combination falls back to the
-> returned count, as if the header were absent.)
+> row's array field into several items (more items returned than scanned). On a page from
+> `listItems`, `PaginationList.getCount()` is the number of rows the API scanned for it
+> (`X-Apify-Pagination-Count`), or the number of items returned when that is larger, since the header
+> is derived from the dataset's item count, which lags a fresh push. `iterateItems` advances by that
+> count, capped at the rows the request asked for, rather than by the number of items returned, so
+> neither case repeats already-seen items, skips rows, nor ends iteration early. The `limit` counts
+> rows too: a filter can leave fewer items than `limit`, and `unwind` more. To page through a
+> filtered dataset by hand, advance `offset` by `min(count, limit)`; the cap matters only with
+> `unwind`. `PaginationList.getScannedCount()` still returns the raw header value, and is
+> deprecated in favor of `getCount()`.
 
 ```java
 Dataset ds = client.datasets().getOrCreate("my-dataset").join();
@@ -106,8 +110,11 @@ adds `attachment` (`Boolean`), `bom` (`Boolean`), `delimiter` (`String`), `skipH
 `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs[, DownloadItemsFormat format])`
 completes with a `String` URL. If the dataset is private, the client fetches it, reads its
 URL-signing secret, and appends an HMAC-SHA256 signature (bounded by `expiresInSecs`, or
-non-expiring when `null`); for public datasets the URL is unsigned. The optional `format` sets the
-serialization the URL serves items in (default `json` when omitted/`null`).
+non-expiring when `null`); for public datasets the URL is unsigned. `expiresInSecs` must be positive
+and at most `4611686018427387`, otherwise the method throws `IllegalArgumentException` before any
+request is sent. The expiry counts from the moment the URL is signed, after the dataset lookup. The
+optional `format` sets the serialization the URL serves items in (default `json` when
+omitted/`null`).
 
 > **Public-URL limitation (matches the JavaScript reference client).** The public-URL builders
 > (`createItemsPublicUrl`, and the key-value-store `getRecordPublicUrl` / `createKeysPublicUrl`)
@@ -139,7 +146,7 @@ datasets.
 | `setRecordJson(String key, Object value)` | Store JSON. Completes with no value. |
 | `deleteRecord(String key)` | Delete a record. Completes with no value. |
 | `getRecordPublicUrl(String key)` | A public (optionally signed) record URL. Completes with `String`. |
-| `createKeysPublicUrl(Long expiresInSecs)` | A public (optionally signed) key-list URL. Completes with `String`. |
+| `createKeysPublicUrl(Long expiresInSecs)` | A public (optionally signed) key-list URL. `expiresInSecs` must be positive and at most `4611686018427387` when set. Completes with `String`. |
 | `createKeysPublicUrl(ListKeysOptions, Long expiresInSecs)` | As above, forwarding key-listing filters (`limit`, `prefix`, `collection`, `exclusiveStartKey`). |
 
 `ListKeysOptions` fields (all optional): `limit(Long)`, `exclusiveStartKey(String)`,
@@ -186,7 +193,8 @@ Both `getRecordPublicUrl` and `createKeysPublicUrl` complete with a `String` URL
 and unsigned for public ones. They differ because they sign different things: a single record URL
 signs the record key directly (there is no expiry to bound), while a key-list URL uses an
 expiry-aware storage-content signature — hence only `createKeysPublicUrl` takes an `expiresInSecs`
-(`null` = non-expiring).
+(`null` = non-expiring, otherwise positive and at most `4611686018427387`; anything else throws
+`IllegalArgumentException` before any request is sent).
 
 ## Request queues
 

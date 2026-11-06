@@ -7,7 +7,7 @@ Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollec
 | Method | Description |
 |---|---|
 | `list(StoreListOptions)` | A page of Store Actors. Completes with `PaginationList<ActorStoreListItem>`. |
-| `iterate(StoreListOptions, Long chunkSize)` | A lazy `Flow.Publisher<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of Actors yielded (`null`/unset or non-positive = all); `chunkSize` is the per-request page size (`null` = server default). |
+| `iterate(StoreListOptions, Long chunkSize)` | A lazy `Flow.Publisher<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of rows read, which are the Actors yielded unless the API drops entries after counting them (`null`/unset or non-positive = all); `chunkSize` is the per-request page size (`null` = server default). |
 
 `StoreListOptions` fields: `offset` (number of Actors to skip), `limit` (maximum number of Actors to
 return), `search` (full-text search query), `sortBy` (the sort field, e.g. `popularity`, `newest`),

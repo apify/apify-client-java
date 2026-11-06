@@ -20,6 +20,9 @@ import org.junit.jupiter.api.Test;
  */
 class AsyncPaginatedPublisherTest {
 
+  /** The fetches recorded by the tests that script their own page fetcher. */
+  private final List<long[]> fetches = new ArrayList<>();
+
   /**
    * A fake paginated endpoint over integers {@code [0, available)}. Like the real API, it clamps a
    * requested page size (or an unset one) to {@code maxPageSize} ({@code 0} = no clamp).
@@ -120,19 +123,23 @@ class AsyncPaginatedPublisherTest {
   }
 
   @Test
-  void trimsOverReturnedPageToCap() {
-    // A misbehaving server that returns more items than requested must not make the publisher
-    // overshoot the caller's total cap.
+  void capCountsTheRowsRequestedNotTheItemsAPageReturns() {
+    // A page can return more items than the rows it covers (dataset items with unwind), and all of
+    // its items are yielded. The cap counts rows, capped at the page limit that was requested, so
+    // the next page starts right after the rows asked for and asks only for what is left.
     AsyncPaginatedPublisher.PageFetcher<Integer> overReturning =
         (offset, limit) -> {
+          fetches.add(new long[] {offset, limit});
           PaginationList<Integer> page = new PaginationList<>();
           page.setItems(List.of(1, 2, 3, 4, 5)); // ignores the requested limit
-          page.setTotal(5);
           page.setCount(5);
           return CompletableFuture.completedFuture(page);
         };
     List<Integer> got = drain(new AsyncPaginatedPublisher<>(3L, 2L, null, overReturning));
-    assertEquals(List.of(1, 2, 3), got, "the last page is trimmed to the cap");
+    assertEquals(10, got.size(), "every item of the pages read is yielded");
+    assertEquals(2, fetches.size());
+    assertEquals(List.of(0L, 2L), List.of(fetches.get(0)[0], fetches.get(1)[0]));
+    assertEquals(List.of(2L, 1L), List.of(fetches.get(0)[1], fetches.get(1)[1]));
   }
 
   @Test

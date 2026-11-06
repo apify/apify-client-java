@@ -56,6 +56,8 @@ Actor created = client.actors().create(Map.of(
 | `builds()` / `runs()` / `versions()` | Nested collection clients. |
 | `webhooks()` | Read-only nested webhook collection (`NestedWebhookCollectionClient`, `list` + `iterate`, no `create`). |
 | `version(String)` | An `ActorVersionClient`. |
+| `server()` | The `ActorServerClient` for the Actor's web server (a Server Actor, formerly Actor Standby); the same instance on every call. See [Server Actors](#server-actors). |
+| `standby()` | Deprecated alias of `server()` that logs a warning; will be removed in a future major version. |
 
 `ActorStartOptions` fields (all optional): `build(String)` (the tag or number of the build to run,
 e.g. `latest`, `0.1.2`), `memoryMbytes(Long)` (memory in megabytes allocated for the run),
@@ -104,11 +106,96 @@ System.out.println(run.getStatus());
 (`ActorDefaultRunOptions` — `getBuild()`, `getTimeoutSecs()`/`getMemoryMbytes()` as `Long`,
 `getRestartOnError()` as `Boolean`), `getTaggedBuilds()` (`JsonNode`; dynamic tag-name keys),
 `getIsDeprecated()` (`Boolean`), `getDeploymentKey()`, `getSeoTitle()`, `getSeoDescription()`,
-`getCategories()` (`List<String>`), `getActorStandby()` (`ActorStandby`, from
+`getCategories()` (`List<String>`), `getStandbyUrl()` (the URL of the Actor's server, `null` unless
+Standby mode is enabled), `getActorStandby()` (`ActorStandby`, from
 `com.apify.client.actor`, nullable — see [Tasks](tasks.md) for its field list; only on `Actor` does
 it additionally expose
 `getIsEnabled()`), `getActorPermissionLevel()` (e.g. `"OWNER"`), plus `getExtra()` for any
 unmodelled fields.
+
+## Server Actors
+
+A [Server Actor](https://docs.apify.com/platform/actors/running/standby) (formerly Actor Standby)
+runs a web server. You call it over HTTP, and the platform keeps a run ready to answer, so each
+call skips the run startup. `client.actor(id).server()` returns an `ActorServerClient` that sends
+requests to the Actor's server with your token, and returns the server's URL and OpenAPI
+specification. The platform and the API still use the name Actor Standby, for example in the
+Actor's `standbyUrl` and `actorStandby` fields.
+
+| Method | Description |
+|---|---|
+| `request(String path, ActorServerRequestOptions)` | Send an HTTP request to the Actor's server. Completes with an `ApiResponse` (`statusCode()`, `headers()`, the buffered `body()` bytes, and the helpers `bodyAsString()` and `bodyAs(Class<T>)` that parse JSON). It completes with **any** response of the server, error statuses included, so check `statusCode()`. `request(String path)` sends a `GET`, `request()` a `GET` to the root. |
+| `requestStream(String path, ActorServerRequestOptions)` | As `request`, but completes as soon as the headers arrive with an `ActorServerStreamResponse` (`statusCode()`, `headers()`, an unread `body()` `InputStream`). Close it (it is `AutoCloseable`) when done. A `429`/`503` is retried like for `request`. |
+| `getUrl()` / `getUrl(Timeout)` | The URL of the Actor's server (its `standbyUrl`), fetched once and cached on the client. Use it to call the server with another HTTP client. Completes with `String`. The `Timeout` (`Timeout.SHORT` by default) is for the API request that fetches it. |
+| `getOpenApiSpec()` / `getOpenApiSpec(Timeout)` | The Actor's web server OpenAPI specification, from the build that serves the server (`actorStandby.build`: a tag or a build number, `latest` by default). Completes with `Optional<JsonNode>` (empty when the Actor's definition has no web server schema). The `Timeout` (`Timeout.SHORT` by default) is for each API request it makes. |
+
+`ActorServerRequestOptions` fields (all optional): `method(String)` (`GET` by default; also `HEAD`,
+`POST`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`, `PATCH`), `param(String, Object)`/`params(Map)` (query
+parameters, converted as for API calls: `null` is left out, a boolean is sent as `1`/`0`, a
+collection comma-joined), `header(String, String)`/`headers(Map)`, `body(Object)` (a `byte[]` or
+`String` is sent as it is; anything else is serialized to JSON and sent as `application/json`
+unless you set a `Content-Type` header), `compression(HttpCompressor)` and `timeout(Timeout)`
+(`Timeout.LONG` by default, since the first request to an idle Actor waits for the platform to
+start a server run).
+
+```java
+ActorServerClient server = client.actor("username/actor-name").server();
+
+// Send a GET request to the /search endpoint of the Actor's server.
+// The future completes with error responses too, so check the status first.
+ApiResponse search =
+    server.request("/search", new ActorServerRequestOptions().param("q", "apify")).join();
+if (search.statusCode() != 200) {
+  throw new IllegalStateException("Search failed with status " + search.statusCode());
+}
+System.out.println(search.bodyAsString());
+
+// Send a POST request with a JSON body.
+ApiResponse created =
+    server
+        .request(
+            "/items",
+            new ActorServerRequestOptions().method("POST").body(Map.of("url", "https://apify.com")))
+        .join();
+System.out.println(created.statusCode());
+```
+
+```java
+ActorServerClient server = client.actor("username/actor-name").server();
+
+// Get the URL of the Actor's server.
+System.out.println(server.getUrl().join());
+
+// Get the OpenAPI specification and list the server's endpoints.
+Optional<JsonNode> spec = server.getOpenApiSpec().join();
+spec.ifPresent(openApi -> openApi.get("paths").propertyNames().forEach(System.out::println));
+```
+
+How the request is sent, so that the token and the Actor's code stay apart:
+
+- The token travels in the `X-Apify-Authorization` header, which the platform consumes before the
+  request reaches the Actor, so the `Authorization` header stays free for the Actor's own
+  authentication. Headers you pass, `Authorization` included, reach the server as they are.
+- The `path` is always resolved against the server URL, so the request, and the token with it,
+  cannot be sent to another host. A fragment (`#...`) is dropped, since it is never sent.
+- A `429` or `503` response, of `requestStream` too, is retried with the client's retry settings (the Actor's code can return
+  these statuses too, and then it gets the request again), and the last one is returned once the
+  retries run out. Other statuses are returned without a retry. A transport error, a timeout
+  included, is not retried, since the Actor may have handled the request before it failed.
+- A redirect is returned as it is, since following it would send the token to a host the Actor's
+  code picked. A custom `HttpTransport` has to support that (see the
+  [transport contract](../README.md#httptransport-contract)): a transport that does not fails such a
+  request instead of risking the token.
+- The body is sent uncompressed unless you set `compression(...)`, since the Actor's server may not
+  decode a compressed body.
+- An Actor that is not a Server Actor fails the call with a `ServerActorException`, and an Actor
+  that does not exist with a `NotFoundError`.
+
+`Actor` versions with `SOURCE_FILES` or `TARBALL` sources can set an `actorPath`, the Actor's
+directory inside the uploaded source (for example `actors/typescript-actor` in a monorepo), when
+you create or update them; `ActorVersion.getActorPath()` and `BuildActVersion.getActorPath()` read
+it. An update that sends `sourceType`, `sourceFiles` or `tarballUrl` without `actorPath` removes the
+stored one, so send it again with every upload.
 
 ## `ActorVersionClient` and `ActorVersionCollectionClient`
 

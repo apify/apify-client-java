@@ -67,8 +67,8 @@ final class RunDatasetItems<T> {
   }
 
   /**
-   * Reads the next page. Completes with a page whose scanned count is non-zero while there may be
-   * more rows, and with an empty page that scanned nothing once iteration is over.
+   * Reads the next page. Completes with a page whose count is non-zero while there may be more
+   * rows, and with an empty page of count zero once iteration is over.
    */
   CompletableFuture<PaginationList<T>> next() {
     switch (phase) {
@@ -131,17 +131,16 @@ final class RunDatasetItems<T> {
     return page(position, limit)
         .thenCompose(
             page -> {
-              Long scanned = page.getScannedCount();
-              boolean empty = page.getItems().isEmpty() && (scanned == null || scanned == 0);
-              if (!empty) {
+              // Only a page that covered no rows marks the end, as filters can shorten a full one.
+              if (page.getCount() > 0) {
                 return CompletableFuture.completedFuture(advance(page, limit));
               }
               if (!access.dropsRows(options)) {
                 return finish();
               }
-              // A page that clean, skipEmpty or unwind emptied past a lagging itemCount reports no
-              // scanned rows either, so a read of the next row without those filters (they would
-              // empty it again) tells whether any rows are left.
+              // A page that clean, skipEmpty or unwind emptied past a lagging itemCount covers no
+              // rows either, so a read of the next row without those filters (they would empty it
+              // again) tells whether any rows are left.
               return dataset
                   .listItems(access.plainPage(position, 1L), JsonNode.class)
                   .thenCompose(
@@ -165,20 +164,20 @@ final class RunDatasetItems<T> {
     return dataset.listItems(access.page(options, offset, limit), itemClass);
   }
 
-  /** Moves past the {@code limit} rows a page covered and marks it as having scanned them. */
+  /** Moves past the {@code limit} rows a page covered and marks it as having covered them. */
   private PaginationList<T> advance(PaginationList<T> page, long limit) {
     position += limit;
     if (end != null && position >= end && phase == Phase.TAIL) {
       phase = Phase.DONE;
     }
-    page.setScannedCount(Math.max(limit, 1));
+    page.setCount(Math.max(limit, 1));
     return page;
   }
 
   private PaginationList<T> endOfData() {
     PaginationList<T> page = new PaginationList<>();
     page.setItems(List.of());
-    page.setScannedCount(0L);
+    page.setCount(0);
     return page;
   }
 }

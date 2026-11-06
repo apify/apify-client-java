@@ -77,17 +77,26 @@ public final class ActorDefinition extends ApifyResource {
         : Collections.unmodifiableMap(environmentVariables);
   }
 
-  /** The path to the Dockerfile used for building the Actor on the platform. */
+  /**
+   * The path to the Dockerfile used for building the Actor on the platform, relative to the {@code
+   * .actor/} directory.
+   */
   public String getDockerfile() {
     return dockerfile;
   }
 
-  /** The path to the directory used as the Docker context when building the Actor. */
+  /**
+   * The path to the directory used as the Docker context when building the Actor, relative to the
+   * {@code .actor/} directory.
+   */
   public String getDockerContextDir() {
     return dockerContextDir;
   }
 
-  /** The path to the README file for the Actor; {@code null} if there is none. */
+  /**
+   * The path to the README file for the Actor, relative to the {@code .actor/} directory; {@code
+   * null} if there is none.
+   */
   public String getReadme() {
     return readme;
   }
@@ -102,7 +111,10 @@ public final class ActorDefinition extends ApifyResource {
     return output;
   }
 
-  /** The path to the CHANGELOG file shown in the Actor's information tab; may be {@code null}. */
+  /**
+   * The path to the CHANGELOG file shown in the Actor's information tab, relative to the {@code
+   * .actor/} directory; may be {@code null}.
+   */
   public String getChangelog() {
     return changelog;
   }

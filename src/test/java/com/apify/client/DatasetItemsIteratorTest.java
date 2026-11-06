@@ -76,31 +76,71 @@ class DatasetItemsIteratorTest {
   }
 
   @Test
-  void totalCapTrimsDatasetItems() {
-    // The cap wins even though the server would return more; only the first page is requested.
+  void limitCapsTheRowsReadNotTheItemsReturned() {
+    // The page returns more items than the 2 rows asked for, as an unwound page does: all of them
+    // are yielded, and no further page is requested since the 2 rows were read.
     MockTransport backend = MockTransport.ofConstant(200, "[{\"n\":1},{\"n\":2},{\"n\":3}]");
     List<JsonNode> seen =
         collect(
             client(backend)
                 .dataset("d1")
                 .iterateItems(new DatasetListItemsOptions().limit(2L), 5L));
-    List<Integer> ns = seen.stream().map(n -> n.get("n").asInt()).toList();
-    assertEquals(List.of(1, 2), ns, "limit caps the total items yielded");
+    assertEquals(3, seen.size());
     assertEquals(1, backend.calls);
+  }
+
+  @Test
+  void limitCountsTheRowsAFilterDropped() {
+    // With limit 4 and chunk 2, the two pages cover 4 rows although a filter left one item: the
+    // iteration must stop there instead of reading on until it has yielded 4 items.
+    MockTransport backend =
+        new MockTransport(
+            List.of(
+                MockTransport.ok(200, "[{\"n\":1}]", Map.of("X-Apify-Pagination-Count", "2")),
+                MockTransport.ok(200, "[]", Map.of("X-Apify-Pagination-Count", "2")),
+                MockTransport.ok(200, "[{\"n\":9}]", Map.of("X-Apify-Pagination-Count", "2"))));
+    List<JsonNode> seen =
+        collect(
+            client(backend)
+                .dataset("d1")
+                .iterateItems(new DatasetListItemsOptions().clean(true).limit(4L), 2L));
+    assertEquals(List.of(1), seen.stream().map(n -> n.get("n").asInt()).toList());
+    assertEquals(2, backend.calls, "rows 0-3 were read, so there is no third page");
+    assertTrue(backend.urls.get(1).contains("offset=2"), backend.urls.get(1));
+    assertTrue(backend.urls.get(1).contains("limit=2"), backend.urls.get(1));
   }
 
   /** A typed item for {@link #decodesIntoRequestedType()}. */
   public record Item(int n) {}
 
   @Test
-  void listItemsExposesScannedCountFromHeader() {
+  void listItemsCountIsTheScannedRowsWhenFiltersDroppedItems() {
     MockTransport backend =
         new MockTransport(
             List.of(MockTransport.ok(200, "[{\"n\":1}]", Map.of("X-Apify-Pagination-Count", "5"))));
     PaginationList<JsonNode> page =
         client(backend).dataset("d1").listItems(new DatasetListItemsOptions()).join();
-    assertEquals(1, page.getCount(), "count stays the number of items actually returned");
-    assertEquals(5L, page.getScannedCount(), "scannedCount comes from X-Apify-Pagination-Count");
+    assertEquals(5, page.getCount(), "count is the rows scanned, which filters leave above items");
+    assertEquals(1, page.getItems().size());
+    assertEquals(5L, page.getScannedCount(), "the raw header value stays available");
+  }
+
+  @Test
+  void listItemsCountIsTheLargerOfTheScannedRowsAndTheItemsReturned() {
+    // The header is derived from the dataset's item count, which lags a fresh push, and an unwound
+    // page returns more items than the rows it scanned.
+    assertEquals(3L, listedCount("[{\"n\":1}]", "3"), "filtered page");
+    assertEquals(2L, listedCount("[{\"n\":1},{\"n\":2}]", "0"), "lagging header");
+    assertEquals(2L, listedCount("[{\"n\":1},{\"n\":2}]", "1"), "unwound page");
+    assertEquals(1L, listedCount("[{\"n\":1}]", null), "missing header");
+    assertEquals(1L, listedCount("[]", "1"), "an emptied page still covered a row");
+  }
+
+  private static long listedCount(String body, String scannedHeader) {
+    Map<String, String> headers =
+        scannedHeader == null ? Map.of() : Map.of("X-Apify-Pagination-Count", scannedHeader);
+    MockTransport backend = new MockTransport(List.of(MockTransport.ok(200, body, headers)));
+    return client(backend).dataset("d1").listItems(new DatasetListItemsOptions()).join().getCount();
   }
 
   @Test
@@ -177,6 +217,26 @@ class DatasetItemsIteratorTest {
     // picks the wrong (larger) value.
     assertTrue(backend.urls.get(1).contains("offset=2"), backend.urls.get(1));
     assertFalse(backend.urls.get(1).contains("offset=4"), backend.urls.get(1));
+  }
+
+  @Test
+  void capsTheStepAtTheRequestedLimitWhenTheHeaderLags() {
+    // An unwound page returns more items than the rows it scanned and the lagging header reads 0,
+    // so the count is the items returned. The next page must still start right after the 2 rows
+    // the request asked for, not after the 4 items returned, or the rows between are never read.
+    MockTransport backend =
+        new MockTransport(
+            List.of(
+                MockTransport.ok(
+                    200,
+                    "[{\"n\":1},{\"n\":2},{\"n\":3},{\"n\":4}]",
+                    Map.of("X-Apify-Pagination-Count", "0")),
+                MockTransport.ok(200, "[]", Map.of("X-Apify-Pagination-Count", "0"))));
+    collect(
+        client(backend)
+            .dataset("d1")
+            .iterateItems(new DatasetListItemsOptions().unwind(List.of("arr")), 2L));
+    assertTrue(backend.urls.get(1).contains("offset=2"), backend.urls.get(1));
   }
 
   @Test

@@ -5,6 +5,28 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-11-06
+
+### Added
+
+- Server Actor support: `ActorClient.server()` returns an `ActorServerClient` (`request`, `requestStream`, `getUrl`, `getOpenApiSpec`) configured by `ActorServerRequestOptions`; `ActorClient.standby()` is a deprecated alias.
+- `ServerActorException` for an Actor that is not a Server Actor or a build that does not exist.
+- `HttpTransport.sendAsync(HttpRequest, boolean)` and `sendStreamingAsync(HttpRequest, boolean)` to send a request without following redirects.
+- `ApiResponse.bodyAsString()` and `ApiResponse.bodyAs(Class)`.
+- `Actor.getStandbyUrl()`, `ActorVersion.getActorPath()` and `BuildActVersion.getActorPath()`.
+
+### Changed
+
+- Updated to Apify OpenAPI specification `v2-2026-11-04T151257Z`.
+- `PaginationList.getCount()` of a dataset items page is the number of rows scanned, or the items returned if larger; offset iteration advances by it, and its `limit` counts rows.
+- `createItemsPublicUrl` and `createKeysPublicUrl` throw `IllegalArgumentException` before any request when `expiresInSecs` is not positive or exceeds 4611686018427387.
+- Documented that `DatasetClient.iterateItems(...)` without `chunkSize` loads the whole dataset in one response.
+- Documented the `.actor/`-relative Actor definition paths, the `ActorStandby` fields `tenancy`, `isConsoleAuthEnabled` and `isTokenlessEnabled`, and that a `TARBALL` source is a zip archive.
+
+### Deprecated
+
+- `PaginationList.getScannedCount()` and `setScannedCount(...)`, replaced by `getCount()`.
+
 ## [0.12.0] - 2026-10-30
 
 ### Added

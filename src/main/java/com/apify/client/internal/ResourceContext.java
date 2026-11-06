@@ -323,8 +323,8 @@ public final class ResourceContext {
    * Builds a lazy, backpressure-aware {@link Flow.Publisher} over an offset/limit-paginated
    * endpoint. {@code applyFilters} adds the per-endpoint filter params (everything except {@code
    * offset}/{@code limit}, which the publisher drives per page). {@code totalLimit} caps the total
-   * items yielded; {@code chunkSize} is the page size (both {@code null} meaning "unbounded" /
-   * "server default").
+   * rows read (see {@link AsyncPaginatedPublisher}); {@code chunkSize} is the page size (both
+   * {@code null} meaning "unbounded" / "server default").
    */
   public <T> Flow.Publisher<T> iterateResource(
       String subPath,
