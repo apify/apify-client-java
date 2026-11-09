@@ -28,6 +28,7 @@ public final class Actor extends ApifyResource {
   private String seoDescription;
   private List<String> categories = List.of();
   private ActorStandby actorStandby;
+  private String standbyUrl;
   private String actorPermissionLevel;
 
   /** The unique Actor ID. */
@@ -140,6 +141,14 @@ public final class Actor extends ApifyResource {
   /** Standby-mode configuration for this Actor, if standby mode has ever been configured. */
   public ActorStandby getActorStandby() {
     return actorStandby;
+  }
+
+  /**
+   * The URL for sending requests to the Actor in Standby mode; {@code null} if Standby mode is not
+   * enabled. See {@link ActorClient#server()} for sending them.
+   */
+  public String getStandbyUrl() {
+    return standbyUrl;
   }
 
   /** The permission level of the Actor on the Apify platform (e.g. {@code "OWNER"}). */

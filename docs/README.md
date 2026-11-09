@@ -173,7 +173,11 @@ PaginationList<Build> builds = client.builds().list(new ListOptions().limit(50L)
 ## Pagination — `PaginationList<T>`
 
 `list` methods return a `PaginationList<T>` page with `getTotal()`, `getOffset()`, `getLimit()`,
-`getCount()`, `isDesc()` and `getItems()`. Within-storage listers (`listKeys`, `listHead`) return
+`getCount()`, `isDesc()` and `getItems()`. `getCount()` is the number of entries on the page. On a
+page of dataset items it is the number of dataset rows the API scanned for it, or the number of items
+returned when that is larger, which filters (`clean`, `skipEmpty`) can leave above `getItems().size()`.
+The next page starts at `offset + Math.min(count, limit)`; the cap matters only with `unwind`, which
+can return more items than the rows scanned. Within-storage listers (`listKeys`, `listHead`) return
 their own page/head containers instead.
 
 ## Iteration — `iterate` / `iterateItems` / `iterateKeys`
@@ -182,10 +186,13 @@ Each paginated collection also offers a lazy `Flow.Publisher` (`java.util.concur
 the JDK's built-in Reactive Streams type) that fetches pages only as the subscriber signals demand:
 `iterate(...)` on the collection clients, `DatasetClient.iterateItems(...)`, and
 `KeyValueStoreClient.iterateKeys(...)` (request-queue requests use
-`RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the **total** number of items
-yielded; `null`/unset — or a non-positive value such as `0` — means no cap, so every item is
-yielded. (This differs from `list(...)`, which sends `limit=0` to the server verbatim rather than
-treating it as unbounded — the iteration behavior matches the reference JS client.) The per-request
+`RequestQueueClient.paginateRequests(...)`). The options' `limit` caps the **total** number of rows read,
+that is the rows each page covers (`PaginationList.getCount()`, capped at the page limit that was
+requested). That is the number of items yielded, unless a page's count differs from its items:
+filtered or unwound dataset items, or a Store list that drops entries after counting them.
+`null`/unset — or a non-positive value such as `0` — means no cap, so every item is yielded. (This
+differs from `list(...)`, which sends `limit=0` to the server verbatim rather than treating it as
+unbounded — the iteration behavior matches the reference JS client.) The per-request
 page size is an optional trailing `chunkSize` argument: the per-resource tables below show the
 `chunkSize` form, and each publisher also has an overload that omits it (using the server's default
 page size). The page size does not change which items a collection publisher yields; note the one
@@ -203,7 +210,7 @@ List<Actor> actors = Publishers.collect(client.actors().iterate(new ActorListOpt
 
 ## Resource pages
 
-- [Actors, versions & environment variables](actors.md)
+- [Actors, versions, environment variables & Server Actors](actors.md)
 - [Builds](builds.md)
 - [Runs](runs.md)
 - [Storages (datasets, key-value stores, request queues)](storages.md)

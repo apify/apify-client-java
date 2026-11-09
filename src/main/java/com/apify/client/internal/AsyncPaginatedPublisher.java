@@ -24,20 +24,22 @@ import java.util.concurrent.atomic.AtomicLong;
  * list()}:
  *
  * <ul>
- *   <li>{@code totalLimit} caps the <em>total</em> number of items yielded across all pages ({@code
- *       null} = yield everything).
+ *   <li>{@code totalLimit} caps the <em>total</em> number of rows read across all pages ({@code
+ *       null} = read everything). A row is an item unless a page's {@link PaginationList#getCount()
+ *       count} differs from the items it returns; all returned items are yielded.
  *   <li>{@code chunkSize} is the per-request page size ({@code null} = let the API choose). Each
- *       page requests {@code min(remaining-under-cap, chunkSize)} items so the cap is never
+ *       page requests {@code min(remaining-under-cap, chunkSize)} rows so the cap is never
  *       overshot.
  * </ul>
  *
- * <p>Each page advances the offset by the number of items actually returned, and iteration stops
- * only when the cap is reached or the API returns an empty page. It deliberately does <em>not</em>
- * stop on a short page or a reported {@code total}: the API clamps an over-large requested page
- * size to its own maximum (so a "short" page is common mid-collection), and some endpoints report a
- * {@code total} of {@code 0} or a value that lags right after a write (e.g. dataset items) — either
- * signal would truncate iteration. Terminating on an empty page costs one extra request at the end
- * but yields the complete result in every case.
+ * <p>Each page advances the offset by the rows it covered, as {@link PaginationList#getCount()}
+ * defines them, capped at the page limit that was requested. Iteration stops only when the cap is
+ * reached or a page covers no rows. It deliberately does <em>not</em> stop on a short page or a
+ * reported {@code total}: the API clamps an over-large requested page size to its own maximum (so a
+ * "short" page is common mid-collection), and some endpoints report a {@code total} of {@code 0} or
+ * a value that lags right after a write (e.g. dataset items) — either signal would truncate
+ * iteration. Terminating on an empty page costs one extra request at the end but yields the
+ * complete result in every case.
  *
  * <p>Supports a single subscriber (as permitted by the Reactive Streams specification); subscribing
  * twice completes the second subscriber's subscription with an error instead of sharing state
@@ -109,9 +111,10 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
     private List<T> buffer = List.of();
     private int pos;
     private long offset;
-    private long yielded;
+    private long rowsRead;
     private boolean exhausted;
     private boolean fetchInFlight;
+    private Long requestedLimit;
     private volatile CompletableFuture<?> inFlight;
 
     Session(Flow.Subscriber<? super T> subscriber) {
@@ -207,8 +210,9 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
 
     private void fetchNextPage() {
       fetchInFlight = true;
-      Long capRemaining = totalLimit != null ? totalLimit - yielded : null;
+      Long capRemaining = totalLimit != null ? totalLimit - rowsRead : null;
       Long pageLimit = minForLimit(capRemaining, chunkSize);
+      requestedLimit = pageLimit;
       CompletableFuture<PaginationList<T>> fetch = fetcher.fetch(offset, pageLimit);
       inFlight = fetch;
       fetch.whenComplete(
@@ -231,39 +235,19 @@ public final class AsyncPaginatedPublisher<T> implements Flow.Publisher<T> {
       buffer = page.getItems();
       pos = 0;
       int count = buffer.size();
-      // Advance the offset (and decide exhaustion) by the number of rows the API scanned, not the
-      // number of items it returned: an endpoint with item-level filtering (dataset items' clean /
-      // skipEmpty / skipHidden) can scan up to the requested page size while returning fewer rows,
-      // or none at all. Using the returned count here would re-scan (and re-yield) already-seen
-      // rows, or stop iteration early on a page that filtered out everything but still had more
-      // data ahead.
-      //
-      // getScannedCount() is null on every endpoint that does not report the header at all
-      // (everything but dataset items). Where it is reported, a *nonzero* value is always trusted:
-      // the returned count can legitimately fall on either side of it (a filter drops rows, so
-      // returned < scanned; unwind splits one scanned row's array field into several output items,
-      // so returned > scanned), and the scanned count is what offset must advance by in both cases.
-      // A reported *zero* is trusted only when the page also returned nothing: scanning zero rows
-      // can never produce items, so "0 scanned, N>0 returned" is not a real answer the API can give
-      // - it means the header is not actually populated for this request yet (observed in practice
-      // as a flat 0 on every page of an unfiltered, non-unwound live-API request that did return
-      // real items), and falling back to the returned count there keeps this exactly as safe as
-      // before the header existed.
-      Long reported = page.getScannedCount();
-      long scanned = reported != null && (reported > 0 || count == 0) ? reported : count;
-      offset += scanned;
-      yielded += count;
-      // Defensively trim the last page to the cap in case the server returned more than requested,
-      // so the subscriber never sees more than `totalLimit` items.
-      if (totalLimit != null && yielded > totalLimit) {
-        buffer = buffer.subList(0, count - (int) (yielded - totalLimit));
-        yielded = totalLimit;
+      // The rows the page covered, which are not the items it returned: see
+      // PaginationList#getCount. Capped at the rows requested, so an unwound page does not advance
+      // past rows the next request would never read.
+      long scanned = Math.max(page.getCount(), count);
+      if (requestedLimit != null) {
+        scanned = Math.min(scanned, requestedLimit);
       }
-      // Stop on the cap or a page that scanned nothing (the source is exhausted); never on a short
+      offset += scanned;
+      rowsRead += scanned;
+      // Stop on the cap or a page that covered nothing (the source is exhausted); never on a short
       // *returned* page (the API clamps large page sizes, and filtering can legitimately return
-      // fewer items than were scanned) or the reported total (unreliable on some endpoints — see
-      // class doc).
-      if (scanned == 0 || (totalLimit != null && yielded >= totalLimit)) {
+      // fewer items than the rows covered) or the reported total (unreliable on some endpoints).
+      if (scanned == 0 || (totalLimit != null && rowsRead >= totalLimit)) {
         exhausted = true;
       }
     }

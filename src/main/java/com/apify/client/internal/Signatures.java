@@ -26,6 +26,15 @@ public final class Signatures {
 
   private static final BigInteger BASE62 = BigInteger.valueOf(BASE62_ALPHABET.length());
 
+  private static final long MILLIS_PER_SECOND = 1000L;
+
+  /**
+   * Longest validity of a signed URL in seconds ({@code 4611686018427387}, about 146 million
+   * years). It is half of what fits in milliseconds in a {@code long}, so the current time plus the
+   * validity cannot overflow.
+   */
+  public static final long MAX_EXPIRES_IN_SECS = Long.MAX_VALUE / MILLIS_PER_SECOND / 2;
+
   private Signatures() {}
 
   /**
@@ -68,11 +77,17 @@ public final class Signatures {
    * #createHmacSignature}, then returns the base64url (no padding) encoding of {@code
    * "{version}.{expiresAtMillis}.{hmac}"}.
    *
+   * <p>The expiry counts from this call, so call it after the storage lookup; otherwise the lookup
+   * time comes off the validity.
+   *
    * @param expiresInSecs optional expiry in seconds ({@code null} for a non-expiring URL)
+   * @throws IllegalArgumentException if {@code expiresInSecs} fails {@link
+   *     #requireValidExpiresInSecs}
    */
   public static String signStorageContent(String secretKey, String resourceId, Long expiresInSecs) {
+    requireValidExpiresInSecs(expiresInSecs);
     long expiresAtMillis =
-        expiresInSecs != null ? System.currentTimeMillis() + expiresInSecs * 1000L : 0L;
+        expiresInSecs != null ? System.currentTimeMillis() + expiresInSecs * MILLIS_PER_SECOND : 0L;
     String version = STORAGE_CONTENT_SIGNATURE_VERSION;
     String message = version + "." + expiresAtMillis + "." + resourceId;
     String hmac = createHmacSignature(secretKey, message);
@@ -80,6 +95,29 @@ public final class Signatures {
     return Base64.getUrlEncoder()
         .withoutPadding()
         .encodeToString(envelope.getBytes(StandardCharsets.UTF_8));
+  }
+
+  /**
+   * Checks the validity of a signed URL. {@code null} is a URL that does not expire. A value must
+   * be positive, because {@code 0} or a negative value would sign a URL that has already expired,
+   * and at most {@link #MAX_EXPIRES_IN_SECS}.
+   *
+   * @throws IllegalArgumentException if the value is out of range
+   */
+  public static void requireValidExpiresInSecs(Long expiresInSecs) {
+    if (expiresInSecs == null) {
+      return;
+    }
+    if (expiresInSecs <= 0) {
+      throw new IllegalArgumentException(
+          "expiresInSecs must be positive, got "
+              + expiresInSecs
+              + "; use null for a URL that does not expire");
+    }
+    if (expiresInSecs > MAX_EXPIRES_IN_SECS) {
+      throw new IllegalArgumentException(
+          "expiresInSecs must be at most " + MAX_EXPIRES_IN_SECS + ", got " + expiresInSecs);
+    }
   }
 
   private static byte[] hmacSha256(String secretKey, String message) {

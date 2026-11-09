@@ -13,6 +13,13 @@ public final class HttpHeaders {
   /** The bearer-token authentication header name. */
   public static final String AUTHORIZATION = "Authorization";
 
+  /**
+   * The header that carries the client's token on a request to an Actor's server. The platform
+   * consumes it before the request reaches the Actor's code, which keeps {@link #AUTHORIZATION}
+   * free for the Actor's own authentication.
+   */
+  public static final String X_APIFY_AUTHORIZATION = "X-Apify-Authorization";
+
   /** The request/response body media-type header name. */
   public static final String CONTENT_TYPE = "Content-Type";
 

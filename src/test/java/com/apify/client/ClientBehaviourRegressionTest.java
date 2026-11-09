@@ -33,14 +33,17 @@ import com.apify.client.store.ActorStoreListItem;
 import com.apify.client.store.StoreListOptions;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
 import com.apify.client.webhook.Webhook;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -286,6 +289,28 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void createKeysPublicUrlRejectsAnInvalidExpiryBeforeAnyRequest() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"store1\"}}");
+    var store = client(backend).keyValueStore("store1");
+    for (long expiresInSecs : new long[] {0L, -1L, Long.MAX_VALUE}) {
+      assertThrows(IllegalArgumentException.class, () -> store.createKeysPublicUrl(expiresInSecs));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> store.createKeysPublicUrl(new ListKeysOptions(), expiresInSecs));
+    }
+    assertEquals(0, backend.calls, "an invalid expiresInSecs must fail before any request");
+  }
+
+  @Test
+  void createKeysPublicUrlSignsAPrivateStoreWithAPositiveExpiry() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200, "{\"data\":{\"id\":\"store1\",\"urlSigningSecretKey\":\"secret\"}}");
+    String url = client(backend).keyValueStore("store1").createKeysPublicUrl(3600L).join();
+    assertTrue(url.contains("signature="), url);
+  }
+
+  @Test
   void downloadItemsForwardsItemSelectionParams() {
     MockTransport backend = MockTransport.ofConstant(200, "col1,col2\n");
     client(backend)
@@ -362,7 +387,7 @@ class ClientBehaviourRegressionTest {
   void paginateRequestsTrimsPageToTotalLimitWhenServerOvershoots() {
     // If the server ignores (or overshoots) the requested per-page `limit` and returns more items
     // than the caller's totalLimit cap allows, the publisher must still yield exactly totalLimit
-    // items, mirroring AsyncPaginatedPublisher's own defensive trim.
+    // items.
     MockTransport backend =
         MockTransport.ofConstant(
             200,
@@ -474,6 +499,34 @@ class ClientBehaviourRegressionTest {
         Publishers.collect(client(backend).store().iterate(new StoreListOptions(), 2L)).join();
     assertEquals(3, items.size(), "iteration should walk across both non-empty pages");
     assertEquals(3, backend.calls, "two data pages plus the terminating empty page");
+  }
+
+  @Test
+  void storeIterateSkipsEntriesTheApiDroppedAfterCountingThem() {
+    // The Store list can drop entries after counting them: a page that counted 2 rows returns 1
+    // item. The next page must start after both rows, or it would read the dropped one again, and
+    // a page that counted rows but returned none must not end the iteration.
+    MockTransport backend =
+        new MockTransport(
+            List.of(
+                MockTransport.ok(
+                    200,
+                    "{\"data\":{\"items\":[{}],\"total\":5,\"offset\":0,\"limit\":2,\"count\":2}}"),
+                MockTransport.ok(
+                    200,
+                    "{\"data\":{\"items\":[],\"total\":5,\"offset\":2,\"limit\":2,\"count\":2}}"),
+                MockTransport.ok(
+                    200,
+                    "{\"data\":{\"items\":[{}],\"total\":5,\"offset\":4,\"limit\":2,\"count\":1}}"),
+                MockTransport.ok(
+                    200,
+                    "{\"data\":{\"items\":[],\"total\":5,\"offset\":5,\"limit\":2,\"count\":0}}")));
+    List<ActorStoreListItem> items =
+        Publishers.collect(client(backend).store().iterate(new StoreListOptions(), 2L)).join();
+    assertEquals(2, items.size());
+    assertEquals(4, backend.calls, "a page that counted rows continues even without items");
+    assertTrue(backend.urls.get(1).contains("offset=2"), backend.urls.get(1));
+    assertTrue(backend.urls.get(2).contains("offset=4"), backend.urls.get(2));
   }
 
   @Test
@@ -915,6 +968,62 @@ class ClientBehaviourRegressionTest {
             .createItemsPublicUrl(new DatasetListItemsOptions(), null, DownloadItemsFormat.CSV)
             .join();
     assertTrue(url.contains("format=csv"), url);
+  }
+
+  @Test
+  void createItemsPublicUrlRejectsAnInvalidExpiryBeforeAnyRequest() {
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"d1\"}}");
+    var dataset = client(backend).dataset("d1");
+    for (long expiresInSecs : new long[] {0L, -1L, Long.MAX_VALUE}) {
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> dataset.createItemsPublicUrl(new DatasetListItemsOptions(), expiresInSecs));
+      assertThrows(
+          IllegalArgumentException.class,
+          () ->
+              dataset.createItemsPublicUrl(
+                  new DatasetListItemsOptions(), expiresInSecs, DownloadItemsFormat.CSV));
+    }
+    assertEquals(0, backend.calls, "an invalid expiresInSecs must fail before any request");
+  }
+
+  @Test
+  void createItemsPublicUrlSignsAPrivateDatasetWithAPositiveExpiry() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200, "{\"data\":{\"id\":\"d1\",\"urlSigningSecretKey\":\"secret\"}}");
+    String url =
+        client(backend)
+            .dataset("d1")
+            .createItemsPublicUrl(new DatasetListItemsOptions(), 3600L)
+            .join();
+    assertTrue(url.contains("signature="), url);
+  }
+
+  @Test
+  void createItemsPublicUrlCountsTheValidityFromAfterTheLookup() {
+    AtomicLong lookupDoneAt = new AtomicLong();
+    MockTransport backend =
+        MockTransport.ofRouter(
+            request -> {
+              try {
+                Thread.sleep(300);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              lookupDoneAt.set(System.currentTimeMillis());
+              return new MockTransport.Scripted(
+                  200, "{\"data\":{\"id\":\"d1\",\"urlSigningSecretKey\":\"secret\"}}", null);
+            });
+    String url =
+        client(backend)
+            .dataset("d1")
+            .createItemsPublicUrl(new DatasetListItemsOptions(), 60L)
+            .join();
+    String signature = url.substring(url.indexOf("signature=") + "signature=".length());
+    String decoded = new String(Base64.getUrlDecoder().decode(signature), StandardCharsets.UTF_8);
+    long expiresAt = Long.parseLong(decoded.split("\\.")[1]);
+    assertTrue(expiresAt >= lookupDoneAt.get() + 60_000L, decoded + " signed before the lookup");
   }
 
   @Test

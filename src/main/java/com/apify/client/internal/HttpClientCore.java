@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -297,7 +298,7 @@ public final class HttpClientCore {
     return call(method, url, body, contentType, extraHeaders, timeout, false);
   }
 
-  /** The canonical overload every other {@code call} convenience overload delegates to. */
+  /** As the canonical overload, for a call to the Apify API. */
   public CompletableFuture<ApiResponse> call(
       String method,
       String url,
@@ -306,22 +307,39 @@ public final class HttpClientCore {
       Map<String, String> extraHeaders,
       Timeout timeout,
       boolean doNotRetryTimeouts) {
+    return call(
+        method,
+        url,
+        body,
+        contentType,
+        extraHeaders,
+        timeout,
+        doNotRetryTimeouts,
+        RequestPolicy.API);
+  }
+
+  /**
+   * The canonical overload every other {@code call} convenience overload delegates to. {@code
+   * policy} says how this request differs from a call to the Apify API.
+   */
+  public CompletableFuture<ApiResponse> call(
+      String method,
+      String url,
+      byte[] body,
+      String contentType,
+      Map<String, String> extraHeaders,
+      Timeout timeout,
+      boolean doNotRetryTimeouts,
+      RequestPolicy policy) {
 
     Duration baseTimeout = resolveTimeout(timeout);
 
     // Compress the body once, up front, so every retry reuses the same encoded payload.
-    byte[] requestBody = body;
-    Map<String, String> headers = extraHeaders;
-    if (shouldCompress(requestBody, contentType, extraHeaders)) {
-      try {
-        requestBody = compressor.compress(requestBody);
-      } catch (Exception | LinkageError e) {
-        // No fallback to another coding: the configured compressor is the only one that runs. A
-        // LinkageError is what a native codec that fails to load raises.
-        return failedFuture(new ApifyTransportException(e));
-      }
-      headers = new LinkedHashMap<>(extraHeaders == null ? Map.of() : extraHeaders);
-      headers.put(HttpHeaders.CONTENT_ENCODING, compressor.contentEncoding());
+    PreparedBody prepared;
+    try {
+      prepared = prepareBody(body, contentType, extraHeaders, policy);
+    } catch (ApifyTransportException e) {
+      return failedFuture(e);
     }
 
     String path = extractPath(url);
@@ -329,15 +347,46 @@ public final class HttpClientCore {
     return attemptWithRetry(
         method,
         url,
-        requestBody,
+        prepared.body(),
         contentType,
-        headers,
+        prepared.headers(),
         baseTimeout,
         doNotRetryTimeouts,
+        policy,
         path,
         1,
         maxAttempts,
         retry.minDelayBetweenRetries);
+  }
+
+  /** A request body, as it is sent, with the headers that go with it. */
+  private record PreparedBody(byte[] body, Map<String, String> headers) {}
+
+  /**
+   * Compresses {@code body} when the policy and the body call for it, and adds the matching {@code
+   * Content-Encoding} header.
+   *
+   * @throws ApifyTransportException if the compressor fails
+   */
+  private PreparedBody prepareBody(
+      byte[] body, String contentType, Map<String, String> extraHeaders, RequestPolicy policy) {
+    HttpCompressor requestCompressor =
+        policy.compressor() != null ? policy.compressor() : compressor;
+    if (!policy.compress() || !shouldCompress(body, contentType, extraHeaders)) {
+      return new PreparedBody(body, extraHeaders);
+    }
+    byte[] compressed;
+    try {
+      compressed = requestCompressor.compress(body);
+    } catch (Exception | LinkageError e) {
+      // No fallback to another coding: the configured compressor is the only one that runs. A
+      // LinkageError is what a native codec that fails to load raises.
+      throw new ApifyTransportException(e);
+    }
+    Map<String, String> headers =
+        new LinkedHashMap<>(extraHeaders == null ? Map.of() : extraHeaders);
+    headers.put(HttpHeaders.CONTENT_ENCODING, requestCompressor.contentEncoding());
+    return new PreparedBody(compressed, headers);
   }
 
   /**
@@ -354,13 +403,24 @@ public final class HttpClientCore {
       Map<String, String> headers,
       Duration baseTimeout,
       boolean doNotRetryTimeouts,
+      RequestPolicy policy,
       String path,
       int attempt,
       int maxAttempts,
       Duration delay) {
     Duration timeout = attemptTimeout(baseTimeout, attempt);
     return attempt(
-            method, url, body, contentType, headers, timeout, doNotRetryTimeouts, attempt, path)
+            method,
+            url,
+            body,
+            contentType,
+            headers,
+            timeout,
+            doNotRetryTimeouts,
+            policy,
+            attempt,
+            attempt == maxAttempts,
+            path)
         .thenCompose(
             outcome -> {
               if (outcome.success()) {
@@ -383,6 +443,7 @@ public final class HttpClientCore {
                               headers,
                               baseTimeout,
                               doNotRetryTimeouts,
+                              policy,
                               path,
                               attempt + 1,
                               maxAttempts,
@@ -403,19 +464,26 @@ public final class HttpClientCore {
       Map<String, String> extraHeaders,
       Duration timeout,
       boolean doNotRetryTimeouts,
+      RequestPolicy policy,
       int attemptNum,
+      boolean lastAttempt,
       String path) {
-    return doAttempt(method, url, body, contentType, extraHeaders, timeout)
+    return doAttempt(method, url, body, contentType, extraHeaders, timeout, policy)
         .handle(
             (resp, err) -> {
               if (err == null) {
                 if (resp.statusCode() < MAX_SUCCESS_STATUS) {
                   return new AttemptOutcome(resp, true, false, null);
                 }
+                boolean retryable = isStatusRetryable(resp.statusCode(), policy);
+                // A request that does not throw hands the error response back once no retry
+                // follows.
+                if (!policy.throwOnErrorStatus() && (!retryable || lastAttempt)) {
+                  return new AttemptOutcome(resp, true, false, null);
+                }
                 RuntimeException apiError =
                     buildApiError(resp.statusCode(), resp.body(), attemptNum, method, path);
-                return new AttemptOutcome(
-                    null, false, isStatusRetryable(resp.statusCode()), apiError);
+                return new AttemptOutcome(null, false, retryable, apiError);
               }
               Throwable cause = unwrapCompletion(err);
               if (cause instanceof CancellationException cancellation) {
@@ -427,8 +495,10 @@ public final class HttpClientCore {
                       ? apifyTransportException
                       : new ApifyTransportException(cause);
               // Network/timeout failures are retryable, unless the caller opted out of retrying
-              // timeouts.
-              boolean retryable = !(doNotRetryTimeouts && transportError.isTimeout());
+              // timeouts or the request retries no transport errors at all.
+              boolean retryable =
+                  policy.retryTransportErrors()
+                      && !(doNotRetryTimeouts && transportError.isTimeout());
               return new AttemptOutcome(null, false, retryable, transportError);
             });
   }
@@ -443,6 +513,21 @@ public final class HttpClientCore {
       String contentType,
       Map<String, String> extraHeaders,
       Duration timeout) {
+    return buildRequest(method, url, body, contentType, extraHeaders, timeout, RequestPolicy.API);
+  }
+
+  /**
+   * As {@link #buildRequest(String, String, byte[], String, Map, Duration)}, with the token in the
+   * header the {@code policy} names.
+   */
+  private HttpRequest buildRequest(
+      String method,
+      String url,
+      byte[] body,
+      String contentType,
+      Map<String, String> extraHeaders,
+      Duration timeout,
+      RequestPolicy policy) {
     HttpRequest.BodyPublisher publisher =
         body != null
             ? HttpRequest.BodyPublishers.ofByteArray(body)
@@ -451,20 +536,38 @@ public final class HttpClientCore {
     if (timeout != null) {
       b.timeout(timeout);
     }
-    b.header(HttpHeaders.USER_AGENT, userAgent);
+    // Header names are case-insensitive, so a default header wins over the built-in one of the same
+    // name whatever its case, and a header of the request itself wins over both.
+    Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    headers.put(HttpHeaders.USER_AGENT, userAgent);
     if (token != null && !token.isEmpty()) {
-      b.header(HttpHeaders.AUTHORIZATION, AUTH_BEARER_PREFIX + token);
+      headers.put(HttpHeaders.AUTHORIZATION, AUTH_BEARER_PREFIX + token);
     }
     if (contentType != null && !contentType.isEmpty()) {
-      b.header(HttpHeaders.CONTENT_TYPE, contentType);
+      headers.put(HttpHeaders.CONTENT_TYPE, contentType);
     }
-    // setHeader replaces what is already set, so a default header wins over the built-in ones and
-    // a header of the request itself wins over both.
-    defaultHeaders.forEach(b::setHeader);
+    headers.putAll(defaultHeaders);
+    moveAuthorization(headers, policy.authorizationHeader());
     if (extraHeaders != null) {
-      extraHeaders.forEach(b::setHeader);
+      headers.putAll(extraHeaders);
     }
+    headers.forEach(b::setHeader);
     return b.build();
+  }
+
+  /**
+   * Moves the {@code Authorization} header of {@code headers}, the client's token or the default
+   * header that replaces it, to the header named {@code name}. Leaves the headers as they are when
+   * {@code name} is {@code Authorization} or there is no such header.
+   */
+  private static void moveAuthorization(Map<String, String> headers, String name) {
+    if (HttpHeaders.AUTHORIZATION.equalsIgnoreCase(name)) {
+      return;
+    }
+    String authorization = headers.remove(HttpHeaders.AUTHORIZATION);
+    if (authorization != null) {
+      headers.put(name, authorization);
+    }
   }
 
   private CompletableFuture<ApiResponse> doAttempt(
@@ -473,9 +576,11 @@ public final class HttpClientCore {
       byte[] body,
       String contentType,
       Map<String, String> extraHeaders,
-      Duration timeout) {
-    HttpRequest request = buildRequest(method, url, body, contentType, extraHeaders, timeout);
-    return CancellableFuture.wrap(transport.sendAsync(request))
+      Duration timeout,
+      RequestPolicy policy) {
+    HttpRequest request =
+        buildRequest(method, url, body, contentType, extraHeaders, timeout, policy);
+    return CancellableFuture.wrap(transport.sendAsync(request, policy.followRedirects()))
         .thenApply(resp -> new ApiResponse(resp.statusCode(), resp.headers(), resp.body()));
   }
 
@@ -613,7 +718,10 @@ public final class HttpClientCore {
     return true;
   }
 
-  private static boolean isStatusRetryable(int status) {
+  private static boolean isStatusRetryable(int status, RequestPolicy policy) {
+    if (policy.retryableStatus() != null) {
+      return policy.retryableStatus().test(status);
+    }
     return status == RATE_LIMIT_EXCEEDED || status >= MIN_SERVER_ERROR;
   }
 
@@ -632,8 +740,8 @@ public final class HttpClientCore {
     return a.compareTo(b) < 0 ? a : b;
   }
 
-  private static CompletableFuture<ApiResponse> failedFuture(RuntimeException error) {
-    CompletableFuture<ApiResponse> future = new CompletableFuture<>();
+  private static <T> CompletableFuture<T> failedFuture(RuntimeException error) {
+    CompletableFuture<T> future = new CompletableFuture<>();
     future.completeExceptionally(error);
     return future;
   }
@@ -737,8 +845,99 @@ public final class HttpClientCore {
    */
   public CompletableFuture<HttpResponse<InputStream>> streamAsync(String url) {
     HttpRequest request = buildRequest("GET", url, null, null, null, resolveTimeout(Timeout.LONG));
+    return openStream(request, true);
+  }
+
+  /**
+   * Opens a live streaming response to a request, as {@link #call(String, String, byte[], String,
+   * Map, Timeout, boolean, RequestPolicy)} would send it, but without turning an error status into
+   * an exception: every response is handed back with its body unread, for the caller to inspect and
+   * close. A status the policy retries is retried with the client's retry settings, each discarded
+   * response closed, and the last one is handed back once the retries run out. A transport error is
+   * never retried. The future completes exceptionally with an {@link ApifyTransportException} on a
+   * transport failure.
+   */
+  public CompletableFuture<HttpResponse<InputStream>> streamRequest(
+      String method,
+      String url,
+      byte[] body,
+      String contentType,
+      Map<String, String> extraHeaders,
+      Timeout timeout,
+      RequestPolicy policy) {
+    PreparedBody prepared;
+    try {
+      prepared = prepareBody(body, contentType, extraHeaders, policy);
+    } catch (ApifyTransportException e) {
+      return failedFuture(e);
+    }
+    return streamAttempt(
+        method,
+        url,
+        prepared,
+        contentType,
+        resolveTimeout(timeout),
+        policy,
+        1,
+        retry.maxRetries + 1,
+        retry.minDelayBetweenRetries);
+  }
+
+  /**
+   * Opens one attempt of {@link #streamRequest} and, when the response has a status the policy
+   * retries and attempts are left, closes it and schedules the next attempt after a backoff delay.
+   */
+  private CompletableFuture<HttpResponse<InputStream>> streamAttempt(
+      String method,
+      String url,
+      PreparedBody prepared,
+      String contentType,
+      Duration baseTimeout,
+      RequestPolicy policy,
+      int attempt,
+      int maxAttempts,
+      Duration delay) {
+    HttpRequest request =
+        buildRequest(
+            method,
+            url,
+            prepared.body(),
+            contentType,
+            prepared.headers(),
+            attemptTimeout(baseTimeout, attempt),
+            policy);
+    return openStream(request, policy.followRedirects())
+        .thenCompose(
+            response -> {
+              boolean retryable =
+                  isStatusRetryable(response.statusCode(), policy) && attempt < maxAttempts;
+              if (!retryable) {
+                return CompletableFuture.completedFuture(response);
+              }
+              closeQuietly(response.body());
+              Duration nextDelay =
+                  minDuration(delay.multipliedBy(BACKOFF_FACTOR), retry.maxDelayBetweenRetries);
+              return Async.delay(randomizedDelay(delay))
+                  .thenCompose(
+                      unused ->
+                          streamAttempt(
+                              method,
+                              url,
+                              prepared,
+                              contentType,
+                              baseTimeout,
+                              policy,
+                              attempt + 1,
+                              maxAttempts,
+                              nextDelay));
+            });
+  }
+
+  private CompletableFuture<HttpResponse<InputStream>> openStream(
+      HttpRequest request, boolean followRedirects) {
     CancellableFuture<HttpResponse<InputStream>> result = new CancellableFuture<>();
-    CompletableFuture<HttpResponse<InputStream>> exchange = transport.sendStreamingAsync(request);
+    CompletableFuture<HttpResponse<InputStream>> exchange =
+        transport.sendStreamingAsync(request, followRedirects);
     // Cancelling the returned future aborts the exchange.
     result.link(exchange);
     exchange.whenComplete(

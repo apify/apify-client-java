@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.12.0</version>
+  <version>0.13.0</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.12.0'
+  implementation 'com.apify:apify-client:0.13.0'
 }
 ```
 
@@ -285,8 +285,8 @@ exponential backoff and jitter on `429`, `5xx` and network errors.
 
 #### `HttpTransport` contract
 
-A custom implementation (`com.apify.client.http.HttpTransport`) must provide both methods, both
-non-blocking. `HttpRequest` and `HttpResponse<T>` below are the JDK's `java.net.http.HttpRequest`/
+A custom implementation (`com.apify.client.http.HttpTransport`) must provide the two methods below,
+both non-blocking. `HttpRequest` and `HttpResponse<T>` below are the JDK's `java.net.http.HttpRequest`/
 `java.net.http.HttpResponse<T>` (not custom client types) — same as `Duration` above:
 
 | Method | Signature | Contract |
@@ -294,16 +294,25 @@ non-blocking. `HttpRequest` and `HttpResponse<T>` below are the JDK's `java.net.
 | `sendAsync` | `CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request)` | Sends the single, fully-prepared request (auth, `User-Agent` and any other headers are already set by the client) and completes the future with the response with its body fully buffered as `byte[]`. Used for every non-streaming call. |
 | `sendStreamingAsync` | `CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request)` | Sends the request and completes the future with the response body as a live `InputStream` for incremental consumption, used by log streaming (`LogClient.stream(...)`) and dataset export streaming (`DatasetClient.streamItems(...)`). The *caller* (the client) is responsible for closing the returned stream; an implementation must not close it itself before completing the future. |
 
-Both methods perform exactly one network round-trip each — no retrying, no request mutation
-(retries, auth, and the `User-Agent` header are handled one layer up, by the client itself), and
-neither may block the calling thread waiting on the network. A non-2xx HTTP status is **not** a
+Two further methods, `sendAsync(HttpRequest, boolean followRedirects)` and
+`sendStreamingAsync(HttpRequest, boolean followRedirects)`, have default implementations that send
+the request through the methods above when `followRedirects` is `true` and **fail** the future with an
+`UnsupportedOperationException` when it is `false`. A request to an Actor's server (see
+[Server Actors](docs/actors.md#server-actors)) is sent with `followRedirects` set to `false`, so
+that the API token never follows a redirect to another host. Override both to support it: with
+`false`, return a redirect response as it is. `DefaultHttpTransport` does, also when it wraps your own
+JDK `HttpClient` (it then copies the client's settings into one that does not follow redirects).
+
+Every one of the four methods performs exactly one network round-trip — no retrying, no request
+mutation (retries, auth, and the `User-Agent` header are handled one layer up, by the client
+itself), and none may block the calling thread waiting on the network. A non-2xx HTTP status is **not** a
 transport-level error: complete the future normally with it, as a normal `HttpResponse` carrying its
 actual status code. Only fail the future for a genuine transport failure — connection refused, DNS
 resolution failure, or a timeout. Any exception the future is completed exceptionally with is
 translated by the client into an `ApifyTransportException`; complete exceptionally with
 `com.apify.client.http.HttpTimeoutException` specifically for a timeout so
-`ApifyTransportException.isTimeout()` reports it correctly. `DefaultHttpTransport` implements both
-methods directly on top of the JDK `HttpClient`'s own `sendAsync`.
+`ApifyTransportException.isTimeout()` reports it correctly. `DefaultHttpTransport` implements all
+four directly on top of the JDK `HttpClient`'s own `sendAsync`.
 
 ## Fetching single resources
 
@@ -337,7 +346,7 @@ try {
 ## Error handling
 
 Every exception this client throws for a request/transport failure is an unchecked
-`com.apify.client.http.ApifyClientException`. It has two concrete subtypes, both also in
+`com.apify.client.http.ApifyClientException`. It has three concrete subtypes, all also in
 `com.apify.client.http`. Since every network-calling method is asynchronous (see
 [Asynchronous API](#asynchronous-api) above), these exceptions arrive as the returned
 `CompletableFuture`'s exceptional completion rather than a direct `throw`; `.join()` re-throws the
@@ -362,7 +371,11 @@ to it without unwrapping at all:
   `DefaultHttpTransport` catches internally and translates into this one) — use an explicit,
   fully-qualified import or a clear alias if a file needs both.
 
-Catch `ApifyClientException` to handle both failure modes uniformly, or catch a specific subtype to
+- `ServerActorException` — a call to an Actor's server (see [Server Actors](docs/actors.md#server-actors))
+  cannot be made, since the Actor is not a Server Actor, or since the build that serves its server
+  interface does not exist. The API was reached, but it has nothing to send the call to.
+
+Catch `ApifyClientException` to handle all the failure modes uniformly, or catch a specific subtype to
 handle one of them differently. `ApifyApiException` is imported from `com.apify.client.http`:
 
 A few methods validate their own preconditions synchronously, before ever building a request or
@@ -407,10 +420,10 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.12.0`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.13.0`).
 - `Version.API_SPEC_VERSION` — the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters and models were last generated
-  and checked against (`v2-2026-10-29T100357Z`). It is a snapshot, not a live compatibility
+  and checked against (`v2-2026-11-04T151257Z`). It is a snapshot, not a live compatibility
   guarantee: the client keeps working against newer, backward-compatible spec revisions, but a
   feature added to the API after this snapshot has no corresponding method here yet.
 
