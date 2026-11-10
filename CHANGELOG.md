@@ -15,7 +15,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - `StreamedLog.stop()` and `close()` no longer interrupt the reader thread, so a log consumer that is running or blocked is not interrupted and does not lose its message.
-- `StreamedLog.close()` called from the log consumer no longer deadlocks while another thread is stopping the same `StreamedLog`.
+- `StreamedLog.close()` called from the log consumer no longer deadlocks while another thread is stopping the same `StreamedLog`, and `stop()` or `close()` from an interrupted thread still ends the reader.
 
 ### Changed
 

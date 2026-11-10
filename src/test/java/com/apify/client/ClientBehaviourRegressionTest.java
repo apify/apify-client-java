@@ -656,8 +656,7 @@ class ClientBehaviourRegressionTest {
   void batchAddRequestsNeverThrowsOnPersistentTransportFailure() {
     // Sibling of `batchAddRequestsNeverThrowsOnNonRetryableClientError`: a transport-level failure
     // (ApifyTransportException, e.g. connection refused or timeout, so the request never reached
-    // the
-    // API) must be treated the same as an API-level failure (ApifyApiException). Both are
+    // the API) must be treated the same as an API-level failure (ApifyApiException). Both are
     // ApifyClientException subtypes, and batchAddRequests' never-throws contract must hold across
     // both. Sequential path (single chunk, default maxParallel).
     MockTransport backend = new MockTransport(List.of(MockTransport.networkError()));
@@ -678,9 +677,8 @@ class ClientBehaviourRegressionTest {
   @Test
   void batchAddRequestsNeverThrowsOnPersistentTransportFailureWithParallelChunks() {
     // Same as above but exercising the `maxParallel > 1` path, where each chunk fails
-    // independently.
-    // The never-throws contract must hold there too, and every request across every chunk must
-    // come back via getUnprocessedRequests().
+    // independently. The never-throws contract must hold there too, and every request across every
+    // chunk must come back via getUnprocessedRequests().
     MockTransport backend = new MockTransport(List.of(MockTransport.networkError()));
     List<RequestQueueRequest> requests = new ArrayList<>();
     for (int i = 0; i < 60; i++) {

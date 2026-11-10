@@ -82,6 +82,12 @@ A run that has not logged anything yet (e.g. still queued for resources, see
 rather than silently giving up. If `stop()`/`close()` is called before that happens, it fetches the
 log in one plain request instead, so whatever was logged by then is still delivered.
 
+The `toLog` consumer runs on the background reader thread, one message at a time. `stop()` and
+`close()` wait up to 1 second for a message in flight, deliver the last message, and then return.
+Calling `close()` from inside the consumer is supported: it signals the stop and returns without
+waiting, and the reader ends once the consumer returns. Before calling `start()` again, call
+`close()` from another thread.
+
 ```java
 RunClient runClient = client.run("RUN_ID");
 List<String> collected = new ArrayList<>();

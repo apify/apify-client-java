@@ -68,7 +68,8 @@ All public client types live under `com.apify.client`, split by resource into su
 enumerates the model/option-type packages. The Quick start example above is a complete, runnable
 program (imports, class, `main`); every other snippet in this file, from here on, is a fragment
 that assumes a configured `client` and the correct imports for the types it uses, not a complete
-program. The [resource pages](docs/README.md) show the same kind of fragment per method. Reading items from a run's default dataset, chaining the two asynchronous calls:
+program. The [resource pages](docs/README.md) show the same kind of fragment per method. Reading
+items from a run's default dataset, chaining the two asynchronous calls:
 
 ```java
 client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L)

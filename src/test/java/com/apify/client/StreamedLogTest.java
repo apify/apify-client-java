@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Timeout;
  * timestamped messages to the destination, drop messages older than the relevancy limit when {@code
  * fromStart} is false, flush a final unterminated line, and enforce its start/stop lifecycle.
  */
+@Timeout(30)
 class StreamedLogTest {
 
   /** Poll interval used while waiting for a background reader to redirect expected messages. */
@@ -260,7 +261,6 @@ class StreamedLogTest {
   }
 
   @Test
-  @Timeout(30)
   void closeFromInsideTheConsumerWhileAnotherThreadClosesDoesNotDeadlock() {
     MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(
@@ -292,7 +292,75 @@ class StreamedLogTest {
   }
 
   @Test
-  @Timeout(30)
+  void closeFromAnInterruptedThreadStillEndsTheReader() {
+    BlockingStream stream = new BlockingStream("2999-01-01T00:00:00.000Z a\n");
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(200, stream);
+    List<String> collected = new CopyOnWriteArrayList<>();
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(new StreamedLogOptions().toLog(collected::add))
+            .join();
+    streamedLog.start().join();
+    assertTrue(pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, stream::isBlocked));
+
+    Thread.currentThread().interrupt();
+    streamedLog.close();
+    // Clear the flag that close() restores, so it does not fail the polling below.
+    assertTrue(Thread.interrupted());
+
+    assertTrue(
+        pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, stream::isClosed),
+        "close() must end the live stream even when its join is interrupted");
+    assertTrue(
+        pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, () -> collected.size() == 1),
+        "the retained last message must still be flushed");
+  }
+
+  @Test
+  void startAfterAStopFromInsideTheConsumerIsRejectedUntilTheReaderHasStopped()
+      throws InterruptedException {
+    BlockingStream stream =
+        new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n");
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(200, stream);
+    CountDownLatch consumerStopped = new CountDownLatch(1);
+    CountDownLatch releaseConsumer = new CountDownLatch(1);
+    List<String> collected = new CopyOnWriteArrayList<>();
+    AtomicReference<StreamedLog> streamedLog = new AtomicReference<>();
+    streamedLog.set(
+        client(backend)
+            .run("run123")
+            .getStreamedLog(
+                new StreamedLogOptions()
+                    .toLog(
+                        message -> {
+                          collected.add(message.substring(message.length() - 1));
+                          if (message.endsWith(" a")) {
+                            streamedLog.get().close();
+                            consumerStopped.countDown();
+                            try {
+                              releaseConsumer.await();
+                            } catch (InterruptedException e) {
+                              Thread.currentThread().interrupt();
+                            }
+                          }
+                        }))
+            .join());
+    streamedLog.get().start().join();
+    assertTrue(consumerStopped.await(5, TimeUnit.SECONDS));
+
+    // The reader is still inside the consumer: a start() now would reset the stop flag under it.
+    assertThrows(IllegalStateException.class, () -> streamedLog.get().start());
+    releaseConsumer.countDown();
+    streamedLog.get().close();
+
+    assertEquals(List.of("a", "b"), collected, "the retained message is flushed after the stop");
+    assertTrue(stream.isClosed());
+  }
+
+  @Test
   void stopFromAnotherThreadDoesNotInterruptAConsumerThatIsBlocked() throws InterruptedException {
     BlockingStream stream =
         new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n");
@@ -361,9 +429,8 @@ class StreamedLogTest {
 
   @Test
   void concurrentCloseNeverThrowsWhileStopRaces() throws InterruptedException {
-    // A stop() and a close() fire simultaneously. close() checks and stops under the monitor, so it
-    // must never throw. stop() may throw when it loses the race, so only close() is asserted. Many
-    // rounds make the interleaving likely.
+    // A stop() and a close() fire simultaneously. close() never throws; stop() may throw when it
+    // loses the race, so only close() is asserted. Many rounds make the interleaving likely.
     for (int round = 0; round < 50; round++) {
       MockTransport backend = MockTransport.ofConstant(200, "");
       backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
@@ -433,11 +500,10 @@ class StreamedLogTest {
   @Test
   void stopFromInsideConsumerDoesNotDeadlock() {
     // The destination consumer runs on the background reader thread. A user may stop redirection
-    // from inside it ("stop once I see line X"). Because that calls stopStreaming() on the reader
-    // thread itself, an unguarded streamingThread.join() would join the thread on itself and hang
-    // forever - and, since stop() is synchronized, hold the monitor so every later start/stop/close
-    // deadlocks too. The self-join guard must let the call return so the reader breaks its loop and
-    // flushes the retained message. If it deadlocked, "b" would never be flushed and the poll below
+    // from inside it ("stop once I see line X"). Because that call runs on the reader thread
+    // itself, an unguarded join would wait for the thread on itself and hang forever. The self-join
+    // guard must let the call return so the reader breaks its loop and flushes the retained
+    // message. If it deadlocked, "b" would never be flushed and the poll below
     // would time out with only "a" collected. A blocking stream is required: a finite one would end
     // on its own and mask the hang.
     MockTransport backend = MockTransport.ofConstant(200, "");
@@ -472,8 +538,8 @@ class StreamedLogTest {
 
   @Test
   void closeFromInsideConsumerDoesNotDeadlock() {
-    // Same self-join hazard as stopFromInsideConsumerDoesNotDeadlock, via close() (which routes
-    // through the same stopStreaming()). close() is idempotent, so the consumer can call it on
+    // Same self-join hazard as stopFromInsideConsumerDoesNotDeadlock, via close(). close() is
+    // idempotent, so the consumer can call it on
     // every message without guarding.
     MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(
@@ -594,6 +660,10 @@ class StreamedLogTest {
 
     boolean isBlocked() {
       return blocked;
+    }
+
+    boolean isClosed() {
+      return closed.getCount() == 0;
     }
 
     @Override

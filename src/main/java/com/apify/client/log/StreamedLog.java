@@ -180,8 +180,8 @@ public final class StreamedLog implements AutoCloseable {
    * Stops log redirection, waiting for the background reader thread to finish.
    *
    * <p>Called from inside the destination consumer, which runs on the reader thread, it cannot join
-   * itself: it only signals the stop and returns. Prefer {@link #close()} there, because a second
-   * {@code stop()} throws and {@code close()} does not.
+   * itself: it only signals the stop and returns. Prefer {@link #close()} there, because a {@code
+   * stop()} after redirection has stopped throws and {@code close()} does not.
    *
    * @throws IllegalStateException if redirection is not running
    */
@@ -219,9 +219,11 @@ public final class StreamedLog implements AutoCloseable {
   }
 
   /**
-   * The reader thread being stopped and the timer that closes its stream after the grace window.
+   * The reader thread being stopped, its stream, and the timer that closes the stream after the
+   * grace window.
    */
-  private record StopHandle(Thread thread, CompletableFuture<Void> graceTimer) {}
+  private record StopHandle(
+      Thread thread, InputStream stream, CompletableFuture<Void> graceTimer) {}
 
   /**
    * Signals the reader to stop. The caller holds the monitor and has checked that a thread is
@@ -238,26 +240,35 @@ public final class StreamedLog implements AutoCloseable {
     // Wakes the reader if it is backing off before reopening an empty stream. Not an interrupt:
     // that would reach a consumer that is running or blocked in its own call.
     LockSupport.unpark(streamingThread);
-    return new StopHandle(streamingThread, graceTimer);
+    return new StopHandle(streamingThread, streamToForceClose, graceTimer);
   }
 
-  /** Joins the stopped reader, unless called from the reader itself, and clears the state. */
+  /**
+   * Joins the stopped reader and clears the state. The consumer runs on the reader thread, so a
+   * stop from the consumer neither joins nor clears: the reader is still running, and {@link
+   * #start()} stays rejected until a later {@code stop()} or {@code close()} has joined it.
+   */
   private void awaitStopped(StopHandle handle) {
-    // The consumer runs on the reader thread. Joining it from there would block forever, so a
-    // self-stop skips the join; stopLogging unwinds the reader anyway.
-    if (Thread.currentThread() != handle.thread()) {
-      try {
-        handle.thread().join();
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      }
+    if (Thread.currentThread() == handle.thread()) {
+      return;
+    }
+    boolean joined = true;
+    try {
+      handle.thread().join();
+    } catch (InterruptedException e) {
+      joined = false;
+      Thread.currentThread().interrupt();
+      // The grace window cannot be waited out, so end the reader now instead of leaving it blocked.
+      closeQuietly(handle.stream());
     }
     // Cancelling ends the grace window early and keeps a late timer from closing a stream that a
     // later start() opened.
     handle.graceTimer().cancel(false);
-    synchronized (this) {
-      if (streamingThread == handle.thread()) {
-        streamingThread = null;
+    if (joined) {
+      synchronized (this) {
+        if (streamingThread == handle.thread()) {
+          streamingThread = null;
+        }
       }
     }
   }
@@ -379,8 +390,7 @@ public final class StreamedLog implements AutoCloseable {
         }
         throw new IOException("failed to reopen log stream", cause);
       }
-      // A plain volatile write: a synchronized publish could deadlock against stop() or close(),
-      // which hold the monitor while joining this thread.
+      // A plain volatile write, so the reader never waits for the monitor here.
       activeStream = stream;
       // A stop during the reopen closed the previous stream, not this one, so close it here.
       if (stopLogging) {
