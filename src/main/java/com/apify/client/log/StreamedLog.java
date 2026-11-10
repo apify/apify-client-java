@@ -201,9 +201,9 @@ public final class StreamedLog implements AutoCloseable {
   /**
    * Stops redirection if it is still running; a no-op otherwise. If {@link #start()} is still
    * opening the log stream, the stream is closed as soon as it opens, no reader is launched and the
-   * future {@code start()} returned is cancelled. Handles an interrupted caller and a call from the
-   * consumer the same way as {@link #stop()}. Idempotent and safe to call concurrently with {@code
-   * stop()}; unlike it, never throws.
+   * future {@code start()} returned is cancelled. Waits for the reader thread like {@link #stop()}
+   * does, and handles an interrupted caller and a call from the consumer the same way. Idempotent
+   * and safe to call concurrently with {@code stop()}; unlike it, never throws.
    */
   @Override
   public void close() {
