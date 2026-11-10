@@ -63,9 +63,8 @@ public final class HttpClientCore {
   private static final int BACKOFF_FACTOR = 2;
 
   /**
-   * Request bodies at or above this size (in bytes) are compressed before being sent. Small bodies
-   * are left uncompressed because the CPU cost outweighs the transfer saving. Matches the reference
-   * JS client's 1024-byte threshold.
+   * Request bodies of at least this many bytes are compressed. Smaller bodies are not worth the CPU
+   * cost.
    */
   private static final int MIN_COMPRESS_BYTES = 1024;
 
@@ -585,12 +584,9 @@ public final class HttpClientCore {
   }
 
   /**
-   * Returns {@code min(configured, base * 2^(attempt-1))}: the per-attempt socket timeout. The
-   * first attempt uses the per-call base timeout; each retry doubles it (so a slow-but-progressing
-   * connection gets more time) while never exceeding the configured maximum. This mirrors the
-   * reference client's per-try timeout model ({@code Math.min(timeoutMillis, base *
-   * 2**(attempt-1))}). Note this bounds each individual attempt, not the cumulative wall-clock time
-   * across all retries.
+   * Returns {@code min(configured, base * 2^(attempt-1))}, the timeout of one attempt: the first
+   * attempt uses the base timeout and each retry doubles it, up to the configured maximum. It
+   * bounds each attempt, not the total time across retries.
    */
   private Duration attemptTimeout(Duration base, int attempt) {
     if (base == null) {
@@ -679,12 +675,10 @@ public final class HttpClientCore {
 
   /**
    * Reports whether a request body with the given {@code Content-Type} is worth compressing.
-   * Images, audio, video and archives already carry their own compression: running them through
-   * brotli or gzip burns CPU, holds a second full copy of the body in memory, and usually produces
-   * output slightly larger than the input. A content type that is raw despite such a media type
-   * (e.g. {@code image/bmp}, {@code audio/wav}) is still compressed, as is a structured-syntax type
-   * ending in {@code +json}/{@code +xml} (e.g. {@code image/svg+xml}). A missing content type is
-   * assumed compressible. Matches the reference JS client's {@code isCompressibleContentType}.
+   * Images, audio, video and archives are already compressed, so compressing them again wastes CPU
+   * and memory. Raw types under those prefixes (such as {@code image/bmp} or {@code audio/wav}) and
+   * types ending in {@code +json} or {@code +xml} are still compressed, and so is a missing content
+   * type.
    *
    * <p>Public so {@code CompressionTest}, outside this non-exported package, can exercise the
    * classification directly.

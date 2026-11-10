@@ -134,7 +134,10 @@ Actor's `standbyUrl` and `actorStandby` fields.
 parameters, converted as for API calls: `null` is left out, a boolean is sent as `1`/`0`, a
 collection comma-joined), `header(String, String)`/`headers(Map)`, `body(Object)` (a `byte[]` or
 `String` is sent as it is; anything else is serialized to JSON and sent as `application/json`
-unless you set a `Content-Type` header), `compression(HttpCompressor)` and `timeout(Timeout)`
+unless you set a `Content-Type` header), `parentRequestId(String)` (the `X-Actor-Request-ID` header of
+the request your multi-tenant Server Actor is handling, sent on as the same header so the called
+Actor charges at that request's pricing tier; use a client created with the run's `APIFY_TOKEN`),
+`compression(HttpCompressor)` and `timeout(Timeout)`
 (`Timeout.LONG` by default, since the first request to an idle Actor waits for the platform to
 start a server run).
 

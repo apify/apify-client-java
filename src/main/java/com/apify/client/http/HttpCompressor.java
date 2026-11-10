@@ -8,10 +8,11 @@ import java.io.IOException;
  * its own; the configured compressor then encodes it and its {@link #contentEncoding()} is sent as
  * the {@code Content-Encoding} header. Streams are never compressed.
  *
- * <p>Use {@link BrotliHttpCompressor} (the default, where its native library is available) or
- * {@link GzipHttpCompressor}, or implement this interface for another coding. Configure it with
- * {@link com.apify.client.ApifyClientBuilder#compression(HttpCompressor)}. Implementations must be
- * safe for concurrent use.
+ * <p>Use {@link BrotliHttpCompressor} (the default, where its native library is available), {@link
+ * GzipHttpCompressor} or {@link ZstdHttpCompressor}, or implement this interface for another
+ * coding. Configure it with {@link
+ * com.apify.client.ApifyClientBuilder#compression(HttpCompressor)}. Implementations must be safe
+ * for concurrent use.
  */
 public interface HttpCompressor {
 

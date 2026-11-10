@@ -30,29 +30,16 @@ public final class RequestQueueClient {
   /** The API limit on requests per batch call; larger inputs are split into chunks of this size. */
   private static final int MAX_REQUESTS_PER_BATCH = 25;
 
-  /**
-   * The API's request-body payload-size limit for a batch-add call, in bytes (9 MiB), matching the
-   * reference JS client's {@code MAX_PAYLOAD_SIZE_BYTES}. A batch of up to {@link
-   * #MAX_REQUESTS_PER_BATCH} requests can still exceed this if the requests are individually large
-   * (e.g. sizeable {@code userData}), so {@link #batchAddRequests(List, boolean,
-   * BatchAddRequestsOptions)} additionally splits chunks by cumulative JSON-encoded byte size to
-   * avoid a 413 (Payload Too Large).
-   */
+  /** The API's payload-size limit for a batch-add call, in bytes (9 MiB). */
   private static final long MAX_PAYLOAD_SIZE_BYTES = 9L * 1024 * 1024;
 
-  /**
-   * Safety margin subtracted from {@link #MAX_PAYLOAD_SIZE_BYTES} before slicing by byte size, so a
-   * chunk sized right at the boundary is not rejected due to minor framing overhead. Matches the
-   * reference client's {@code SAFETY_BUFFER_PERCENT}.
-   */
+  /** Fraction of {@link #MAX_PAYLOAD_SIZE_BYTES} kept free for framing overhead. */
   private static final double PAYLOAD_SAFETY_BUFFER_PERCENT = 0.01 / 100;
 
   /** The two bytes of an empty JSON array ({@code []}), the baseline for a byte-size chunk. */
   private static final int EMPTY_JSON_ARRAY_BYTES = 2;
 
-  /**
-   * Upper bound on the unprocessed-requests backoff exponent, so {@code 2^attempt} cannot blow up.
-   */
+  /** Upper bound on the backoff exponent for unprocessed requests. */
   private static final int MAX_BACKOFF_EXPONENT = 10;
 
   private final HttpClientCore http;
@@ -221,30 +208,20 @@ public final class RequestQueueClient {
   /**
    * Adds multiple requests to the queue. If {@code forefront} is true, they are added to the front.
    *
-   * <p>The input is automatically split into chunks of at most 25 requests (the API count limit)
-   * that additionally respect the API's ~9 MiB request-body payload-size limit ({@link
-   * #MAX_PAYLOAD_SIZE_BYTES}): a chunk of up to 25 requests is further split by cumulative
-   * JSON-encoded byte size, so a batch of individually large requests (e.g. sizeable {@code
-   * userData}) cannot 413. Chunks are sent using up to {@link BatchAddRequestsOptions#maxParallel}
-   * concurrently in-flight chunk requests, and any requests the API leaves unprocessed (typically
-   * rate-limited) are retried with exponential backoff up to {@link
-   * BatchAddRequestsOptions#maxUnprocessedRequestsRetries} times. The per-chunk results are merged
-   * into a single {@link BatchAddResult}.
+   * <p>The input is split into chunks of at most 25 requests (the API limit) and of at most {@link
+   * #MAX_PAYLOAD_SIZE_BYTES} of JSON, with up to {@link BatchAddRequestsOptions#maxParallel} chunks
+   * in flight. Requests the API leaves unprocessed are retried with exponential backoff up to
+   * {@link BatchAddRequestsOptions#maxUnprocessedRequestsRetries} times. The chunk results are
+   * merged into one {@link BatchAddResult}.
    *
-   * <p>This method's returned future never completes exceptionally due to an API/transport failure,
-   * matching the reference client's contract: any request that could not be confirmed processed —
-   * whether due to persistent rate-limiting, server errors, or a non-retryable client error (e.g.
-   * an invalid token or insufficient permissions) — is returned in {@link
-   * BatchAddResult#getUnprocessedRequests()} instead. A single request whose own JSON encoding
-   * already exceeds the payload-size limit is rejected up front with {@link
-   * IllegalArgumentException}, since no chunk size could ever fit it.
+   * <p>The future does not fail on an API or transport error: a request that could not be confirmed
+   * as processed is returned in {@link BatchAddResult#getUnprocessedRequests()}. A single request
+   * whose JSON exceeds the payload limit is rejected up front with {@link
+   * IllegalArgumentException}.
    *
-   * <p><b>Caveat:</b> processed-vs-unprocessed reconciliation after a retry matches requests by
-   * {@link RequestQueueRequest#getUniqueKey()}. If a request omits {@code uniqueKey} (it is
-   * nullable), a request that actually succeeded server-side on an earlier attempt can still be
-   * reported in {@link BatchAddResult#getUnprocessedRequests()} after retries, because there is no
-   * caller-supplied key to match it back against the API's per-attempt response. Callers that rely
-   * on {@code batchAddRequests}' return value should set {@code uniqueKey} explicitly.
+   * <p>Retries match requests by {@link RequestQueueRequest#getUniqueKey()}. Set {@code uniqueKey}
+   * explicitly: without it, a request that succeeded on an earlier attempt can still be reported as
+   * unprocessed.
    */
   public CompletableFuture<BatchAddResult> batchAddRequests(
       List<RequestQueueRequest> requests, boolean forefront, BatchAddRequestsOptions options) {
@@ -293,11 +270,9 @@ public final class RequestQueueClient {
   }
 
   /**
-   * One "worker": repeatedly claims the next not-yet-started chunk (via {@code nextChunkIndex}) and
-   * processes it, until every chunk has been claimed. Running {@code workerCount} of these
-   * concurrently bounds how many chunk requests (including their own retries) are in flight at
-   * once, matching {@link BatchAddRequestsOptions#maxParallel} without needing a thread pool - each
-   * worker is a chain of async continuations, not a blocked thread.
+   * One worker: claims the next unstarted chunk through {@code nextChunkIndex} and processes it,
+   * until all chunks are claimed. Running {@code workerCount} workers bounds the chunk requests in
+   * flight to {@link BatchAddRequestsOptions#maxParallel}, without a thread pool.
    */
   private CompletableFuture<Void> runBatchAddWorker(
       List<List<SerializedRequest>> chunks,
@@ -320,9 +295,8 @@ public final class RequestQueueClient {
   /**
    * Returns the longest leading run of {@code requests} whose combined JSON payload stays under
    * {@code maxByteLength}, always keeping at least one request so the caller's chunking loop makes
-   * forward progress. Ports the reference client's {@code sliceArrayByByteLength}. {@code
-   * startIndex} is the position of {@code requests.get(0)} in the caller's full input list, used
-   * only to report which request is oversized.
+   * forward progress. {@code startIndex} is the position of {@code requests.get(0)} in the caller's
+   * full input list, used only to report which request is oversized.
    *
    * @throws IllegalArgumentException if any individual request's own JSON encoding already exceeds
    *     {@code maxByteLength} (no chunk size could ever fit it)
@@ -394,13 +368,9 @@ public final class RequestQueueClient {
 
   /**
    * Adds one chunk (already sized to the API limit), retrying requests the API leaves unprocessed
-   * with exponential backoff (a scheduled delay, not a blocked thread; see {@link Async}). The
-   * returned future never completes exceptionally, matching the reference client's {@code
-   * _batchAddRequestsWithRetries}: on any failure — a non-retryable 4xx/5xx API response, or a
-   * transport-level failure (connection error, timeout) that never produced a response at all — the
-   * remaining requests in the chunk are simply reported as unprocessed rather than surfaced as an
-   * exception, so the method keeps a single, uniform never-fails contract across both {@link
-   * ApifyApiException} and {@link com.apify.client.http.ApifyTransportException}.
+   * with exponential backoff (see {@link Async}). The returned future never completes
+   * exceptionally: after a non-retryable API error or a transport failure, the remaining requests
+   * of the chunk are reported as unprocessed.
    */
   private CompletableFuture<BatchAddResult> batchAddChunkWithRetries(
       List<SerializedRequest> chunk, boolean forefront, BatchAddRequestsOptions options) {
@@ -440,10 +410,8 @@ public final class RequestQueueClient {
                 processed.addAll(response.getProcessedRequests());
               }
               List<SerializedRequest> stillRemaining = requestsNotYetProcessed(chunk, processed);
-              // Any client-level failure (response == null, i.e. the batchAddChunk call above
-              // failed) stops retrying this chunk immediately; whatever has not been confirmed
-              // processed is reported as unprocessed below, never thrown - matching the reference
-              // client's contract.
+              // response == null means the batchAddChunk call failed: stop retrying this chunk and
+              // report what is not confirmed as unprocessed.
               boolean stop = response == null || stillRemaining.isEmpty() || attempt >= maxRetries;
               if (stop) {
                 return CompletableFuture.completedFuture(finish(chunk, processed));
@@ -494,9 +462,8 @@ public final class RequestQueueClient {
   }
 
   /**
-   * {@code (1 + random) * 2^attempt * minDelay} — exponential backoff with jitter, matching the
-   * reference. The exponent is capped so a pathologically large retry count cannot overflow the
-   * delay into an absurd (or negative) duration.
+   * {@code (1 + random) * 2^attempt * minDelay}: exponential backoff with jitter. The exponent is
+   * capped so the delay cannot overflow.
    */
   private static Duration backoffDelay(int attempt, long minDelayMillis) {
     if (minDelayMillis <= 0) {
@@ -592,26 +559,22 @@ public final class RequestQueueClient {
   }
 
   /**
-   * Returns a lazy, backpressure-aware publisher over all requests in the queue, fetching pages of
-   * up to {@code pageLimit} requests at a time ({@code null} for the server default). Equivalent to
-   * {@link #paginateRequests(Long, Long, List) paginateRequests(null, pageLimit, null)} (no total
-   * cap, no state filter).
+   * Returns a lazy publisher over all requests in the queue, with pages of up to {@code pageLimit}
+   * requests ({@code null} for the server default). Equivalent to {@link #paginateRequests(Long,
+   * Long, List) paginateRequests(null, pageLimit, null)}.
    */
   public Flow.Publisher<RequestQueueRequest> paginateRequests(Long pageLimit) {
     return paginateRequests(null, pageLimit, null);
   }
 
   /**
-   * Returns a lazy, backpressure-aware publisher over the queue's requests via the cursor-based
-   * listing endpoint. {@code totalLimit} caps the total number of requests yielded across all pages
-   * ({@code null}/non-positive = unbounded); {@code chunkSize} is the per-request page size ({@code
-   * null} = server default); {@code filter} restricts to requests in the given states ({@link
-   * ListRequestsOptions#FILTER_LOCKED}/{@link ListRequestsOptions#FILTER_PENDING}, {@code null} =
-   * no filter), matching {@link #listRequests(ListRequestsOptions)}'s filter.
+   * Returns a lazy publisher over the queue's requests, starting from the beginning of the queue.
    *
-   * <p>Always starts from the beginning of the queue; resuming from an explicit {@code
-   * exclusiveStartId}/{@code cursor} is not supported here (use {@link
-   * #listRequests(ListRequestsOptions)} directly for that single-page use case).
+   * @param totalLimit the maximum number of requests yielded, or {@code null} or non-positive for
+   *     all
+   * @param chunkSize the page size, or {@code null} for the server default
+   * @param filter the request states to include ({@link ListRequestsOptions#FILTER_LOCKED}, {@link
+   *     ListRequestsOptions#FILTER_PENDING}), or {@code null} for all
    */
   public Flow.Publisher<RequestQueueRequest> paginateRequests(
       Long totalLimit, Long chunkSize, List<String> filter) {
@@ -619,11 +582,9 @@ public final class RequestQueueClient {
   }
 
   /**
-   * Lazily publishes a request queue's requests via the cursor-based listing endpoint, fetching a
-   * page only once the subscriber has signalled demand. Supports a single subscriber, like {@link
-   * com.apify.client.internal.AsyncPaginatedPublisher}, whose draining design this mirrors (cursor
-   * pagination instead of offset/limit, plus the "not yet started" distinction the cursor-based
-   * termination check needs, are the only real differences).
+   * Publishes the queue's requests page by page through the cursor-based listing endpoint, as the
+   * subscriber signals demand. Like {@link com.apify.client.internal.AsyncPaginatedPublisher}, it
+   * supports a single subscriber.
    */
   private final class RequestsPublisher implements Flow.Publisher<RequestQueueRequest> {
     private final Long totalLimit;

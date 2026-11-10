@@ -355,11 +355,9 @@ public final class DatasetClient {
                   params.addString("signature", sig);
                 }
               }
-              // Mirror the JS reference: the public URL is this client's resource path plus the
-              // signature (over the resolved concrete dataset id) and the explicit options — the
-              // seeded status/origin filters are deliberately not carried. On a last-run-nested
-              // client this keeps the unpinned ".../runs/last/dataset" path; see docs/storages.md
-              // for that limitation.
+              // The public URL is the resource path, the explicit options and the signature of the
+              // resolved dataset id. Seeded filters are not carried, so a last-run client keeps the
+              // unpinned ".../runs/last/dataset" path; see docs/storages.md.
               return params.applyToUrl(ctx.publicUrl("items"));
             });
   }

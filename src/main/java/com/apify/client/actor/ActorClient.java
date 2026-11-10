@@ -91,7 +91,7 @@ public final class ActorClient {
    * still-running run if the wait budget was exhausted).
    *
    * <p>This overload does not stream the run's log; use {@link #call(Object, ActorCallOptions,
-   * Long)} for that (matching the reference client's default {@code call} behavior).
+   * Long)} for that.
    */
   public CompletableFuture<ActorRun> call(Object input, ActorStartOptions options, Long waitSecs) {
     return RunStartSupport.call(
@@ -106,10 +106,9 @@ public final class ActorClient {
 
   /**
    * Starts the Actor and waits (non-blocking, polling) for it to finish, additionally streaming the
-   * run's log for the duration of the wait — matching the reference client's {@code call}, whose
-   * {@code options.log} defaults to {@code 'default'}. {@code waitSecs} bounds the wait; {@code
-   * null} waits indefinitely. Completes with the finished run (or the still-running run if the wait
-   * budget was exhausted).
+   * run's log for the duration of the wait. {@code waitSecs} bounds the wait; {@code null} waits
+   * indefinitely. Completes with the finished run (or the still-running run if the wait budget was
+   * exhausted).
    *
    * <p>Log streaming is best-effort: if starting it fails (e.g. the log is not yet available), the
    * run still starts and is still waited for, just without redirected log output. Use {@link

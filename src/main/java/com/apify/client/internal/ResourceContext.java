@@ -17,13 +17,11 @@ import java.util.function.Predicate;
 import tools.jackson.databind.JavaType;
 
 /**
- * The resolved context for a resource client: its base URL and the shared HTTP client. The methods
- * here implement the CRUD primitives once, so each resource client stays small and consistent
- * (DRY). Internal to the client.
+ * The resolved context for a resource client: its base URL and the shared HTTP client. It
+ * implements the CRUD primitives the resource clients share.
  *
- * <p>Every primitive is non-blocking: it returns a {@link CompletableFuture} (or, for a paginated
- * collection's lazy iteration, a {@link Flow.Publisher}) rather than blocking the calling thread on
- * the underlying HTTP exchange.
+ * <p>Every primitive is non-blocking and returns a {@link CompletableFuture} or, for lazy
+ * iteration, a {@link Flow.Publisher}.
  */
 public final class ResourceContext {
 
@@ -36,22 +34,15 @@ public final class ResourceContext {
   /** Server-side waitForFinish chunk size (the API caps server waiting at 60 seconds). */
   private static final long WAIT_REQUEST_SECS = 60;
 
-  /**
-   * Finite upper bound used when the caller asks to wait "indefinitely" ({@code waitSecs == null}).
-   * The API will not accept "Infinity", and an unbounded loop can spin forever on a transient 404;
-   * 999999s (~11.5 days) is effectively indefinite while guaranteeing termination. Mirrors the
-   * reference client's MAX_WAIT_FOR_FINISH.
-   */
+  /** The wait for {@code waitSecs == null}: about 11.5 days, since the API rejects "Infinity". */
   private static final long MAX_WAIT_FOR_FINISH_SECS = 999999;
 
   private static final int NOT_FOUND = 404;
 
   /**
-   * Upper bound on how long {@link #waitForFinish} keeps polling a resource that keeps answering
-   * 404, before giving up and throwing that {@link ApifyApiException}. A resource that was just
-   * created can 404 briefly (database-replica lag), which this bound rides out; anything longer
-   * means the id most likely never existed, so polling for the rest of a long (or indefinite) wait
-   * budget would only delay reporting that. Mirrors the reference client.
+   * How long {@link #waitForFinish} keeps polling a resource that answers 404 before throwing. A
+   * just-created resource can 404 briefly because of replica lag; a longer 404 means it most likely
+   * never existed.
    */
   private static final long MAX_WAIT_FOR_MISSING_RESOURCE_MILLIS = 3000;
 
@@ -296,9 +287,8 @@ public final class ResourceContext {
   }
 
   /**
-   * Like {@link #deleteResource}, but - mirroring {@link #getResourceUnlessAmbiguous} - a 404 is
-   * only treated as a successful no-op when this context addresses its resource by an explicit id.
-   * Otherwise it is rethrown, since it may mean the parent (not the sub-resource) is gone.
+   * Like {@link #deleteResource}, but a 404 is a successful no-op only when this context addresses
+   * its resource by an explicit id. Otherwise it is rethrown, since the parent may be gone.
    */
   public CompletableFuture<Void> deleteResourceUnlessAmbiguous(String subPath) {
     if (ownId) {
@@ -370,7 +360,7 @@ public final class ResourceContext {
    * into the {@code {"schema": ...}} request body shape every storage collection's {@code
    * getOrCreate(name, schema)} sends (a {@code null} schema sends no body, same as {@link
    * #getOrCreateNamed(String, Class)}). Shared by {@code DatasetCollectionClient}/{@code
-   * KeyValueStoreCollectionClient} so neither duplicates the wrapping (DRY).
+   * KeyValueStoreCollectionClient} so neither duplicates the wrapping.
    */
   public <T> CompletableFuture<T> getOrCreateNamedWithSchema(
       String name, Object schema, Class<T> dataClass) {
@@ -380,7 +370,7 @@ public final class ResourceContext {
 
   /**
    * POST that gets-or-creates a named resource, optionally sending a JSON request body (e.g. a
-   * storage {@code schema}). A {@code null} body sends no body, matching the plain get-or-create.
+   * storage {@code schema}). A {@code null} body sends no body.
    */
   public <T> CompletableFuture<T> getOrCreateNamed(String name, Object body, Class<T> dataClass) {
     QueryParams params = new QueryParams();
@@ -501,8 +491,8 @@ public final class ResourceContext {
   }
 
   /**
-   * Like {@link #getRaw}, but - mirroring {@link #getResourceUnlessAmbiguous} - a 404 is only
-   * swallowed to {@code null} when this context addresses its resource by an explicit id.
+   * Like {@link #getRaw}, but a 404 is swallowed to {@code null} only when this context addresses
+   * its resource by an explicit id.
    */
   public CompletableFuture<ApiResponse> getRawUnlessAmbiguous(
       String subPath, QueryParams params, Timeout timeout) {
@@ -536,8 +526,7 @@ public final class ResourceContext {
   /**
    * As {@link #putRaw(String, QueryParams, byte[], String)}, with an explicit per-request {@code
    * timeout} and control over whether transport timeouts are retried. Used by key-value-store
-   * record uploads that expose the reference client's {@code timeoutSecs}/{@code
-   * doNotRetryTimeouts} write options.
+   * record uploads.
    */
   public CompletableFuture<Void> putRaw(
       String subPath,
@@ -605,10 +594,8 @@ public final class ResourceContext {
   }
 
   /**
-   * The outcome of a single {@code waitForFinish} poll: either a usable fetched value, or "absent"
-   * - a 404 ({@code notFoundError} set), or a 200 whose {@code data} was {@code null} (tolerated
-   * the same as "not yet available", not a programming error, matching {@link #getResource}'s own
-   * null-tolerant handling of that case).
+   * The outcome of a single {@code waitForFinish} poll: a fetched value, or "absent" because of a
+   * 404 ({@code notFoundError} set) or a 200 with {@code null} data.
    */
   private record PollOutcome<T>(T value, ApifyApiException notFoundError) {
     static <T> PollOutcome<T> of(T value) {
@@ -742,12 +729,9 @@ public final class ResourceContext {
    * Percent-encodes a single URL path segment, so that values interpolated into the path (record
    * keys, request IDs) cannot break out of the segment.
    *
-   * <p>Rejects an empty string or a bare {@code "."}/{@code ".."} segment instead of encoding it: a
-   * URL parser (client-side, or a proxy/server in front of the API) resolves dot segments
-   * <em>after</em> percent-decoding, so an encoded {@code "%2E%2E"} would still collapse against
-   * its neighbours exactly like a literal {@code ".."} once decoded. Rejecting it outright - rather
-   * than silently encoding something that cannot safely address any record/request - mirrors the
-   * reference JS client's path-segment sanitization.
+   * <p>Rejects an empty string, {@code "."} and {@code ".."} instead of encoding them: a URL parser
+   * resolves dot segments after percent-decoding, so {@code "%2E%2E"} would collapse like a literal
+   * {@code ".."}.
    */
   public static String encodePathSegment(String input) {
     if (input == null || input.isEmpty() || ".".equals(input) || "..".equals(input)) {

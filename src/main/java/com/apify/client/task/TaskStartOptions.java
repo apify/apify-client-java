@@ -8,13 +8,11 @@ import java.util.List;
 /**
  * Configures starting a task run ({@link TaskClient#start}/{@link TaskClient#call}).
  *
- * <p>It mirrors {@link ActorStartOptions} but omits the fields the task run endpoint does not
- * accept (the Actor-only {@code contentType} and {@code forcePermissionLevel}), matching the
- * reference client.
+ * <p>It has the options of {@link ActorStartOptions} except the Actor-only {@code contentType} and
+ * {@code forcePermissionLevel}, which the task run endpoint does not accept.
  *
- * <p>{@link #apply}/{@link #contentTypeOrDefault}/{@link #waitForResourcesSecsValue} are
- * package-private on purpose — see {@link com.apify.client.internal.RunStartSupport}'s class
- * javadoc for why.
+ * <p>The package-private accessors are described in {@link
+ * com.apify.client.internal.RunStartSupport}.
  */
 public final class TaskStartOptions {
   private String build;

@@ -59,10 +59,8 @@ public final class LogClient {
   }
 
   /**
-   * As {@link #get()}, but resolves to the log's raw bytes instead of decoding them as text -
-   * mirroring the reference clients' {@code buffer}/{@code get_as_bytes} option. Useful when the
-   * log is not UTF-8 text, or the caller wants to avoid the decoding step. See {@link #get()} for
-   * 404 handling.
+   * As {@link #get()}, but resolves to the log's raw bytes instead of decoding them as text. See
+   * {@link #get()} for 404 handling.
    */
   public CompletableFuture<Optional<byte[]>> getAsBytes() {
     return getAsBytes(new LogOptions());

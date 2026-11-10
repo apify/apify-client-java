@@ -5,6 +5,18 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-11-10
+
+### Added
+
+- `ZstdHttpCompressor` (level 1-19, default 3) for `Content-Encoding: zstd` request bodies. It needs the optional `com.github.luben:zstd-jni` dependency; `ZstdHttpCompressor.isAvailable()` tells whether it loaded.
+- `ActorServerRequestOptions.parentRequestId(String)`, sent as the `X-Actor-Request-ID` header so a called multi-tenant Server Actor charges at the pricing tier of the incoming request.
+
+### Changed
+
+- Updated to Apify OpenAPI specification `v2-2026-11-09T143926Z`: `zstd` is an accepted `Content-Encoding`.
+- Documented that `RunChargeOptions.requestId` is ignored by runs of single-tenant Server Actors.
+
 ## [0.13.0] - 2026-11-06
 
 ### Added

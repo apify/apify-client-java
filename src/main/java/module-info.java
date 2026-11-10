@@ -20,6 +20,7 @@ module com.apify.client {
   requires tools.jackson.databind;
   requires org.slf4j;
   requires static com.aayushatharva.brotli4j;
+  requires static com.github.luben.zstd_jni;
 
   exports com.apify.client;
   exports com.apify.client.actor;

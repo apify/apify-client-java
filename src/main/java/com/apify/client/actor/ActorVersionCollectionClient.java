@@ -20,12 +20,9 @@ public final class ActorVersionCollectionClient {
   }
 
   /**
-   * Lists the Actor's versions. {@code options} is accepted only for signature consistency with
-   * every other collection's {@code list(ListOptions)} (matching the reference client, whose {@code
-   * list()} likewise accepts but never forwards an options argument here) — {@code GET
-   * .../versions} takes no query parameters at all, so nothing in {@code options} (including {@code
-   * offset}/{@code limit}/{@code desc}) is sent to the server. Pass {@code null} for the common
-   * case; use {@link #iterate(ListOptions)}'s {@code limit} to cap the number returned client-side.
+   * Lists the Actor's versions. The endpoint takes no query parameters, so {@code options} is
+   * accepted only for consistency with other collections and is never sent. Pass {@code null}; to
+   * cap the number returned, use the {@code limit} of {@link #iterate(ListOptions)}.
    */
   public CompletableFuture<PaginationList<ActorVersion>> list(ListOptions options) {
     return ctx.listResource("", new QueryParams(), ActorVersion.class, Timeout.SHORT);

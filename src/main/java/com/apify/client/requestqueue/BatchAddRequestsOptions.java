@@ -2,18 +2,18 @@ package com.apify.client.requestqueue;
 
 /**
  * Tuning options for {@link RequestQueueClient#batchAddRequests(java.util.List, boolean,
- * BatchAddRequestsOptions)}, mirroring the reference client. Requests the API reports as
- * unprocessed (typically due to rate limiting) are automatically retried with exponential backoff.
+ * BatchAddRequestsOptions)}. Requests the API reports as unprocessed (typically due to rate
+ * limiting) are automatically retried with exponential backoff.
  */
 public final class BatchAddRequestsOptions {
 
-  /** Default number of retry rounds for unprocessed requests (matches the reference client). */
+  /** Default number of retry rounds for unprocessed requests. */
   static final int DEFAULT_MAX_UNPROCESSED_RETRIES = 3;
 
-  /** Default maximum number of batch API calls made in parallel (matches the reference client). */
+  /** Default maximum number of batch API calls made in parallel. */
   static final int DEFAULT_MAX_PARALLEL = 5;
 
-  /** Default minimum delay before retrying unprocessed requests (matches the reference client). */
+  /** Default minimum delay before retrying unprocessed requests. */
   static final long DEFAULT_MIN_DELAY_BETWEEN_UNPROCESSED_RETRIES_MILLIS = 500;
 
   private int maxUnprocessedRequestsRetries = DEFAULT_MAX_UNPROCESSED_RETRIES;

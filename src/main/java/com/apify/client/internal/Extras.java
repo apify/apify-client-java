@@ -5,7 +5,7 @@ import java.util.Map;
 /**
  * Helpers for reading typed values out of a model's {@code extra} map ({@link
  * com.apify.client.ApifyResource#getExtra()}). Shared by every resource client that needs a field
- * the model does not (yet) expose as a typed getter (DRY).
+ * the model does not (yet) expose as a typed getter.
  */
 public final class Extras {
 

@@ -92,7 +92,7 @@ public final class TaskClient {
    * wait; {@code null} waits indefinitely.
    *
    * <p>This overload does not stream the run's log; use {@link #call(Object, TaskCallOptions,
-   * Long)} for that (matching the reference client's default {@code call} behavior).
+   * Long)} for that.
    */
   public CompletableFuture<ActorRun> call(Object input, TaskStartOptions options, Long waitSecs) {
     return RunStartSupport.call(
@@ -107,9 +107,8 @@ public final class TaskClient {
 
   /**
    * Starts the task and waits (non-blocking, polling) for it to finish, additionally streaming the
-   * run's log for the duration of the wait — matching the reference client's {@code call}, whose
-   * {@code options.log} defaults to {@code 'default'}. {@code waitSecs} bounds the wait; {@code
-   * null} waits indefinitely.
+   * run's log for the duration of the wait. {@code waitSecs} bounds the wait; {@code null} waits
+   * indefinitely.
    *
    * <p>Log streaming is best-effort: if starting it fails (e.g. the log is not yet available), the
    * run still starts and is still waited for, just without redirected log output. Use {@link

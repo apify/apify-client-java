@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.13.0</version>
+  <version>0.14.0</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.13.0'
+  implementation 'com.apify:apify-client:0.14.0'
 }
 ```
 
@@ -162,7 +162,7 @@ validated at call time (see below), not deferred to `build()`.
 | `timeoutMedium(Duration)` | `Duration` | `30s` | non-null, strictly `> 0` |
 | `timeoutLong(Duration)` | `Duration` | `360s` | non-null, strictly `> 0` |
 | `timeoutMax(Duration)` | `Duration` | `360s` | non-null, strictly `> 0` |
-| `compression(HttpCompressor)` | `HttpCompressor` | `BrotliHttpCompressor` (quality 6), or `GzipHttpCompressor` where the brotli native library is unavailable | non-null |
+| `compression(HttpCompressor)` | `HttpCompressor` | `BrotliHttpCompressor` (quality 6), or `GzipHttpCompressor` where the brotli native library is unavailable; `ZstdHttpCompressor` is opt-in | non-null |
 | `header(String, String)` | `String`, `String` | none | non-blank name, non-null value |
 | `userAgentSuffix(String)` | `String` | none (no suffix appended) | any string |
 | `httpTransport(HttpTransport)` | `HttpTransport` | `new DefaultHttpTransport()` | non-null |
@@ -242,8 +242,9 @@ already did: a started run keeps running (abort it with `RunClient.abort(...)`).
 
 Request bodies of at least 1 KiB with a compressible content type are compressed with the
 configured `HttpCompressor`: `BrotliHttpCompressor` (quality 0-11, default 6; used by default where
-its native library is available) or `GzipHttpCompressor` (level 1-9, default 6), or your own
-implementation of the interface. A failing compressor fails the request; the client does not fall
+its native library is available), `GzipHttpCompressor` (level 1-9, default 6) or
+`ZstdHttpCompressor` (level 1-19, default 3; needs the optional `com.github.luben:zstd-jni`
+dependency), or your own implementation of the interface. A failing compressor fails the request; the client does not fall
 back to another coding. A body that already carries a `Content-Encoding`, and already-compressed
 content types (images, archives, ...), are sent as they are.
 
@@ -420,10 +421,10 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.13.0`).
+- `Version.CLIENT_VERSION` — the semantic version of this client (`0.14.0`).
 - `Version.API_SPEC_VERSION` — the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters and models were last generated
-  and checked against (`v2-2026-11-04T151257Z`). It is a snapshot, not a live compatibility
+  and checked against (`v2-2026-11-09T143926Z`). It is a snapshot, not a live compatibility
   guarantee: the client keeps working against newer, backward-compatible spec revisions, but a
   feature added to the API after this snapshot has no corresponding method here yet.
 

@@ -60,12 +60,8 @@ public final class RunClient {
   }
 
   /**
-   * Builds a {@code RunClient} for a "last run" accessor ({@code runs/last}, nested under an Actor
-   * or task), with the {@code status}/{@code origin} filters from {@code options} pinned as query
-   * parameters inherited by every call on the returned client. Shared by {@code
-   * ActorClient#lastRun}/{@code TaskClient#lastRun} so the construction logic (and the once-off use
-   * of {@link ResourceContext#seedParams}, which returns a new, still-immutable context rather than
-   * mutating one in place) lives in a single place (DRY).
+   * Builds a {@code RunClient} for a {@code runs/last} accessor of an Actor or task, with the
+   * {@code status} and {@code origin} filters of {@code options} sent on every call.
    */
   public static RunClient lastRun(
       ApifyClient root, HttpClientCore http, String parentUrl, LastRunOptions options) {
@@ -120,11 +116,10 @@ public final class RunClient {
   }
 
   /**
-   * Transforms the run into a run of another Actor with a new input. {@code targetActorId} is the
-   * Actor to metamorph into ({@code username/actor-name} or the plain Actor id; normalized to the
-   * URL-safe {@code username~actor-name} form before sending, matching the reference client's
-   * {@code _toSafeId}); {@code input} is the new input: a JSON-serializable value, a {@code byte[]}
-   * or {@link String} that is sent as it is, or {@code null} for none.
+   * Transforms the run into a run of another Actor with a new input. {@code targetActorId} is
+   * {@code username/actor-name} or the plain Actor id; {@code username/actor-name} is sent as
+   * {@code username~actor-name}. {@code input} is a JSON-serializable value, a {@code byte[]} or
+   * {@link String} sent as it is, or {@code null} for none.
    */
   public CompletableFuture<ActorRun> metamorph(
       String targetActorId, Object input, MetamorphOptions options) {
@@ -166,8 +161,8 @@ public final class RunClient {
    * Charges for a pay-per-event Actor run: records occurrences of a named event. Only meaningful
    * for runs of pay-per-event Actors.
    *
-   * <p>An idempotency key is always sent (auto-generated if not provided), so a charge that is
-   * retried by the transport is applied at most once, matching the reference client.
+   * <p>An idempotency key is always sent (generated if not provided), so a retried charge is
+   * applied at most once.
    */
   public CompletableFuture<Void> charge(RunChargeOptions options) {
     String eventName = options.eventNameValue();
@@ -349,9 +344,8 @@ public final class RunClient {
   }
 
   /**
-   * Builds the per-run prefix used by the default redirection destination, mirroring the reference
-   * client: the Actor name (looked up from the run) and {@code runId:{id}}, joined with a space and
-   * followed by {@code " -> "}. Falls back to just the run id when the Actor name is unavailable.
+   * Builds the prefix of the default redirection destination: the Actor name, {@code runId:{id}},
+   * and {@code " -> "}. Falls back to the run id alone when the Actor name is unavailable.
    */
   private CompletableFuture<String> buildDefaultLogPrefix() {
     // Fall back to the field `id`: correct for a direct run client, but it is the literal string

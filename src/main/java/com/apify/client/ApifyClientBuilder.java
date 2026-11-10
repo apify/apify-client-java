@@ -164,8 +164,8 @@ public final class ApifyClientBuilder {
    * Sets how request bodies of at least 1 KiB are compressed (default {@link
    * com.apify.client.http.BrotliHttpCompressor} where its native library is available, {@link
    * com.apify.client.http.GzipHttpCompressor} elsewhere). Pass a configured {@code
-   * BrotliHttpCompressor}/{@code GzipHttpCompressor} to tune the quality, or your own {@link
-   * HttpCompressor}.
+   * BrotliHttpCompressor}, {@code GzipHttpCompressor} or {@code ZstdHttpCompressor} to tune the
+   * quality, or your own {@link HttpCompressor}.
    */
   public ApifyClientBuilder compression(HttpCompressor compression) {
     if (compression == null) {
@@ -295,9 +295,8 @@ public final class ApifyClientBuilder {
   }
 
   /**
-   * Reports whether the client is running on the Apify platform, by reading the {@code
-   * APIFY_IS_AT_HOME} environment variable (set to a non-empty value on the platform). Per the
-   * client requirements the flag is based solely on this variable, matching the JS reference.
+   * Reports whether the client is running on the Apify platform: the {@code APIFY_IS_AT_HOME}
+   * environment variable is set to a non-empty value.
    */
   static boolean defaultIsAtHome() {
     String v = System.getenv(ENV_IS_AT_HOME);
@@ -328,11 +327,9 @@ public final class ApifyClientBuilder {
   }
 
   /**
-   * Returns the short, lowercase OS token used in the {@code User-Agent}. It matches the
-   * identifiers emitted by the reference JS client's {@code os.platform()} (Node) — {@code linux},
-   * {@code darwin}, {@code win32}, {@code android}, etc. — so all Apify clients report the platform
-   * uniformly. Java's {@code os.name} system property returns human-readable names ({@code Linux},
-   * {@code Mac OS X}, {@code Windows 10}), so it is mapped to the aligned token here.
+   * Returns the short, lowercase OS token used in the {@code User-Agent}: {@code linux}, {@code
+   * darwin}, {@code win32}, {@code android}, and so on, as the other Apify clients report it. The
+   * {@code os.name} property ({@code Mac OS X}, {@code Windows 10}) is mapped to these tokens.
    */
   static String platformToken() {
     return platformToken(System.getProperty("os.name", ""), System.getProperty("java.vm.name", ""));

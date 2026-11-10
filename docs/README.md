@@ -41,7 +41,7 @@ option types, so import each resource you use from its own package:
 | Package | Contains |
 |---|---|
 | `com.apify.client` (root) | `ApifyClient`, `ApifyClientBuilder`, `Version`, `PaginationList<T>`, `ListOptions`, `StorageListOptions`, `ApifyResource` |
-| `com.apify.client.http` | `ApifyClientException`, `ApifyApiException`, `ApifyTransportException`, `HttpTransport`, `DefaultHttpTransport`, `HttpTimeoutException`, `Timeout`, `HttpCompressor`, `BrotliHttpCompressor`, `GzipHttpCompressor` |
+| `com.apify.client.http` | `ApifyClientException`, `ApifyApiException`, `ApifyTransportException`, `HttpTransport`, `DefaultHttpTransport`, `HttpTimeoutException`, `Timeout`, `HttpCompressor`, `BrotliHttpCompressor`, `GzipHttpCompressor`, `ZstdHttpCompressor` |
 | `com.apify.client.actor` | `Actor`, `ActorClient`, `ActorCollectionClient`, `ActorListOptions`, `ActorStartOptions`, `ActorCallOptions`, `ActorBuildOptions`, `ActorStandby`, `ActorVersion`, `SourceCodeFile`, `ActorVersionClient`, `ActorVersionCollectionClient`, `ActorEnvVar`, `ActorEnvVarClient`, `ActorEnvVarCollectionClient`, `ValidateInputOptions`, `ActorStats`, `ActorDefaultRunOptions` |
 | `com.apify.client.build` | `Build`, `BuildClient`, `BuildCollectionClient`, `BuildActVersion`, `ActorDefinition`, `ActorDefinitionMeta`, `ActorDefinitionStorages`, `BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage` |
 | `com.apify.client.run` | `ActorRun`, `ActorRunStats`, `ActorRunOptions`, `ActorRunMeta`, `ActorRunStandby`, `ActorRunUsage`, `RunClient`, `RunCollectionClient`, `RunListOptions`, `LastRunOptions`, `MetamorphOptions`, `RunChargeOptions`, `RunResurrectOptions`, `SetStatusMessageOptions` |
