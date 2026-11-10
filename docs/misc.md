@@ -71,7 +71,7 @@ as `List<ProxyGroup>`, each with `getName()`/`getDescription()`/`getAvailableCou
 `List<String>`, `getMaxActorCount()`/`getMaxActorTaskCount()`/`getDataRetentionDays()`/
 `getTeamAccountSeatCount()` as `Long`, `getAvailableProxyGroups()` as `JsonNode`,
 `getSupportLevel()`, `getAvailableAddOns()` as `List<JsonNode>`), `getEffectivePlatformFeatures()`
-(`JsonNode`), `getCreatedAt()` (`Instant`), `getIsPaying()` (`Boolean`). Plus `getExtra()`; a
+(`JsonNode`), `getCreatedAt()` (`Instant`), `getIsPaying()` (`Boolean`). Plus `getExtra()`, a
 `Map<String, Object>` carrying any account field not modelled directly.
 
 ## Logs: `client.log(id)`

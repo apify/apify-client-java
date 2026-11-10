@@ -17,8 +17,8 @@ import java.util.function.BooleanSupplier;
  * URL is taken from {@code APIFY_API_URL} (which includes the {@code /v2} suffix) and falls back to
  * {@code https://api.apify.com/v2}.
  *
- * <p>Tests are designed to run concurrently — including against the same test account from several
- * language clients at once — so every test creates uniquely-named resources and cleans them up.
+ * <p>Tests are designed to run concurrently, including against the same test account from several
+ * language clients at once, so every test creates uniquely-named resources and cleans them up.
  */
 public abstract class IntegrationBase {
 

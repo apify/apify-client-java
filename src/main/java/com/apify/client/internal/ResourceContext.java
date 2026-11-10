@@ -180,8 +180,8 @@ public final class ResourceContext {
 
   public <T> CompletableFuture<Optional<T>> getResource(
       String subPath, QueryParams params, JavaType dataType, Timeout timeout) {
-    // ofNullable, not of: an HTTP 200 with body {"data": null} unwraps to null, which is a valid
-    // "no resource" answer, not an NPE.
+    // {"data": null} in an HTTP 200 unwraps to null, a valid "no resource" answer, so ofNullable
+    // returns an empty Optional instead of throwing an NPE.
     // The explicit <T> is needed because the type cannot be inferred for a method-call receiver.
     return this.<T>getResourceRequired(subPath, params, dataType, timeout)
         .handle(

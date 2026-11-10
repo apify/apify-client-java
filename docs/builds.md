@@ -25,7 +25,7 @@ builds) and a single build with `client.build(id)`.
 `Build` fields: `getId()`, `getActId()`, `getUserId()`, `getStatus()`, `getStartedAt()`,
 `getFinishedAt()`, `getBuildNumber()`, `getActVersion()` (`BuildActVersion`: `getSourceType()`, `getBuildTag()`
 (nullable), `getVersionNumber()`, `getGitRepoUrl()`, `getSourceFiles()` (`List<SourceCodeFile>`: `getName()`,
-`getFormat()`, `getContent()`)), `getActorDefinition()` (`ActorDefinition`, nullable: the Actor's `.actor/actor.json` at build time:
+`getFormat()`, `getContent()`)), `getActorDefinition()` (`ActorDefinition`, nullable; the Actor's `.actor/actor.json` at build time:
 `getActorSpecification()`, `getName()`, `getTitle()`, `getDescription()`, `getVersion()`, `getBuildTag()`,
 `getMeta()` (`ActorDefinitionMeta`: `getTemplateId()`, `getGeneratedBy()`), `getEnvironmentVariables()`,
 `getDockerfile()`, `getDockerContextDir()`, `getReadme()`, `getInput()`/`getOutput()` (`JsonNode` schemas),

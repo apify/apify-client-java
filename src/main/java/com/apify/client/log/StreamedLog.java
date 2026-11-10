@@ -185,11 +185,15 @@ public final class StreamedLog implements AutoCloseable {
    *
    * @throws IllegalStateException if redirection is not running
    */
-  public synchronized void stop() {
-    if (streamingThread == null) {
-      throw new IllegalStateException("Streaming task is not active");
+  public void stop() {
+    StopHandle handle;
+    synchronized (this) {
+      if (streamingThread == null) {
+        throw new IllegalStateException("Streaming task is not active");
+      }
+      handle = signalStop();
     }
-    stopStreaming();
+    awaitStopped(handle);
   }
 
   /**
@@ -199,20 +203,32 @@ public final class StreamedLog implements AutoCloseable {
    * {@link #stop()}; unlike it, never throws.
    */
   @Override
-  public synchronized void close() {
-    if (starting) {
-      closeRequested = true;
+  public void close() {
+    StopHandle handle = null;
+    synchronized (this) {
+      if (starting) {
+        closeRequested = true;
+      }
+      if (streamingThread != null) {
+        handle = signalStop();
+      }
     }
-    if (streamingThread != null) {
-      stopStreaming();
+    if (handle != null) {
+      awaitStopped(handle);
     }
   }
 
   /**
-   * Signals the reader to stop and joins it, unless called from the reader thread itself. Callers
-   * must hold the monitor and have checked that a thread is running.
+   * The reader thread being stopped and the timer that closes its stream after the grace window.
    */
-  private void stopStreaming() {
+  private record StopHandle(Thread thread, CompletableFuture<Void> graceTimer) {}
+
+  /**
+   * Signals the reader to stop. The caller holds the monitor and has checked that a thread is
+   * running, and joins it with {@link #awaitStopped} after releasing the monitor: the consumer runs
+   * on the reader thread and may call {@link #close()}, which needs the monitor.
+   */
+  private StopHandle signalStop() {
     stopLogging = true;
     // Grace window before closing the stream, so the run's last line still arrives.
     InputStream streamToForceClose = activeStream;
@@ -222,19 +238,28 @@ public final class StreamedLog implements AutoCloseable {
     // Wakes the reader if it is backing off before reopening an empty stream. Not an interrupt:
     // that would reach a consumer that is running or blocked in its own call.
     LockSupport.unpark(streamingThread);
-    // The consumer runs on the streaming thread. Joining it from there would block forever while
-    // holding the monitor, so a self-stop skips the join; stopLogging unwinds the reader anyway.
-    if (Thread.currentThread() != streamingThread) {
+    return new StopHandle(streamingThread, graceTimer);
+  }
+
+  /** Joins the stopped reader, unless called from the reader itself, and clears the state. */
+  private void awaitStopped(StopHandle handle) {
+    // The consumer runs on the reader thread. Joining it from there would block forever, so a
+    // self-stop skips the join; stopLogging unwinds the reader anyway.
+    if (Thread.currentThread() != handle.thread()) {
       try {
-        streamingThread.join();
+        handle.thread().join();
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
     }
     // Cancelling ends the grace window early and keeps a late timer from closing a stream that a
     // later start() opened.
-    graceTimer.cancel(false);
-    streamingThread = null;
+    handle.graceTimer().cancel(false);
+    synchronized (this) {
+      if (streamingThread == handle.thread()) {
+        streamingThread = null;
+      }
+    }
   }
 
   /** Reads the live raw log stream and forwards complete messages to the destination. */
@@ -366,8 +391,7 @@ public final class StreamedLog implements AutoCloseable {
   }
 
   /**
-   * Sleeps for {@code millis}, waking early when {@link #stopStreaming()} sets {@link
-   * #stopLogging}.
+   * Sleeps for {@code millis}, waking early when {@link #signalStop()} sets {@link #stopLogging}.
    */
   private void sleepAsWakeableBackoff(long millis) {
     long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(millis);

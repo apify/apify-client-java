@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /**
  * Offline tests for the {@link StreamedLog} log-redirection helper: it must forward complete
@@ -40,9 +41,6 @@ class StreamedLogTest {
    * in this suite.
    */
   private static final int REDIRECT_POLL_ATTEMPTS = (int) (5_000 / REDIRECT_POLL_MILLIS);
-
-  /** How long a test waits for {@code stop()} to signal the reader. */
-  private static final long STOP_SIGNAL_SETTLE_MILLIS = 200;
 
   private static ApifyClient client(MockTransport backend) {
     return ApifyClient.builder().token("test-token").httpTransport(backend).maxRetries(0).build();
@@ -121,9 +119,9 @@ class StreamedLogTest {
   void throwingConsumerDoesNotKillDaemonThreadUncaught() throws InterruptedException {
     // The destination consumer runs on the background daemon reader thread. A user consumer that
     // throws must not escape as an uncaught exception that silently kills that thread (and, via the
-    // final flush, throws again). Redirection must degrade to a
-    // logged warning. We capture any exception that reaches the reader thread's uncaught handler
-    // and assert none does, while confirming the consumer was actually exercised.
+    // final flush, throws again). Redirection must degrade to a logged warning. We capture any
+    // exception that reaches the reader thread's uncaught handler and assert none does, while
+    // confirming the consumer was actually exercised.
     AtomicReference<Throwable> uncaught = new AtomicReference<>();
     Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
     Thread.setDefaultUncaughtExceptionHandler(
@@ -202,12 +200,12 @@ class StreamedLogTest {
 
   @Test
   void deliversLastMessageWhenStoppingLiveStream() {
-    // A live stream never reaches end-of-stream on its own. The reader
-    // buffers three complete lines (a, b, c): a and b are emitted immediately while c is retained
-    // as the possibly-still-growing last message. Then the read blocks. stop() closes the stream,
-    // which unblocks the read with an IOException; the retained last message (c) must still be
-    // flushed and delivered. A finite ByteArrayInputStream cannot exercise this because read()
-    // returns -1 by itself, so we drive a purpose-built blocking stream instead.
+    // A live stream never reaches end-of-stream on its own. The reader buffers three complete lines
+    // (a, b, c): a and b are emitted immediately while c is retained as the possibly-still-growing
+    // last message. Then the read blocks. stop() closes the stream, which unblocks the read with an
+    // IOException; the retained last message (c) must still be flushed and delivered. A finite
+    // ByteArrayInputStream cannot exercise this because read() returns -1 by itself, so we drive a
+    // purpose-built blocking stream instead.
     String body =
         "2999-01-01T00:00:00.000Z a\n"
             + "2999-01-01T00:00:01.000Z b\n"
@@ -262,7 +260,8 @@ class StreamedLogTest {
   }
 
   @Test
-  void closeFromInsideTheConsumerDoesNotInterruptTheMessagesAfterIt() {
+  @Timeout(30)
+  void closeFromInsideTheConsumerWhileAnotherThreadClosesDoesNotDeadlock() {
     MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(
         200,
@@ -293,6 +292,7 @@ class StreamedLogTest {
   }
 
   @Test
+  @Timeout(30)
   void stopFromAnotherThreadDoesNotInterruptAConsumerThatIsBlocked() throws InterruptedException {
     BlockingStream stream =
         new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n");
@@ -327,8 +327,12 @@ class StreamedLogTest {
     assertTrue(consumerEntered.await(5, TimeUnit.SECONDS));
     Thread stopper = new Thread(streamedLog::stop);
     stopper.start();
-    // Give stop() time to signal the reader while the consumer is blocked.
-    Thread.sleep(STOP_SIGNAL_SETTLE_MILLIS);
+    // stop() has signaled the reader once it waits for the reader thread to finish.
+    assertTrue(
+        pollUntil(
+            REDIRECT_POLL_ATTEMPTS,
+            REDIRECT_POLL_MILLIS,
+            () -> stopper.getState() == Thread.State.WAITING));
 
     releaseConsumer.countDown();
     stopper.join();

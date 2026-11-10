@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ZstdHttpCompressor` for `Content-Encoding: zstd` request bodies (optional `com.github.luben:zstd-jni` dependency).
 - `ActorServerRequestOptions.parentRequestId(String)`, sent as the `X-Actor-Request-ID` header so a called multi-tenant Server Actor charges at the pricing tier of the incoming request.
 
+### Fixed
+
+- `StreamedLog.stop()` and `close()` no longer interrupt the reader thread, so a log consumer that is running or blocked is not interrupted and does not lose its message.
+- `StreamedLog.close()` called from the log consumer no longer deadlocks while another thread is stopping the same `StreamedLog`.
+
 ### Changed
 
 - Updated to Apify OpenAPI specification `v2-2026-11-09T143926Z`: `zstd` is an accepted `Content-Encoding`.

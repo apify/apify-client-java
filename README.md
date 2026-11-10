@@ -67,9 +67,8 @@ All public client types live under `com.apify.client`, split by resource into su
 [Resources](#resources) below for the full list; [`docs/README.md`](docs/README.md#imports-and-dependencies)
 enumerates the model/option-type packages. The Quick start example above is a complete, runnable
 program (imports, class, `main`); every other snippet in this file, from here on, is a fragment
-that assumes a configured `client` and the correct imports for the types it uses, not, by itself,
-a complete program, the [resource pages](docs/README.md) show the same kind of fragment per
-method. Reading items from a run's default dataset, chaining the two asynchronous calls:
+that assumes a configured `client` and the correct imports for the types it uses, not a complete
+program. The [resource pages](docs/README.md) show the same kind of fragment per method. Reading items from a run's default dataset, chaining the two asynchronous calls:
 
 ```java
 client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L)
@@ -108,7 +107,7 @@ page's network round-trip.
   (`onSubscribe` → `request(n)` to pull `n` items, `onNext` per item, `onComplete`/`onError` to
   finish) for real backpressure, or with the small convenience bridge
   `com.apify.client.Publishers.collect(publisher)`, which subscribes with unbounded demand and
-  returns a `CompletableFuture<List<T>>`; useful when you just want "give me everything" and don't
+  returns a `CompletableFuture<List<T>>`: useful when you just want "give me everything" and don't
   need backpressure:
 
   ```java
@@ -270,7 +269,7 @@ header a request sets itself.
 
 `publicBaseUrl` does not affect ordinary API requests (those always use `baseUrl`); it only changes
 the origin embedded in the handful of public, directly-fetchable URLs the client builds without a
-request; `DatasetClient.createItemsPublicUrl(...)` and `KeyValueStoreClient.getRecordPublicUrl(...)`/
+request: `DatasetClient.createItemsPublicUrl(...)` and `KeyValueStoreClient.getRecordPublicUrl(...)`/
 `createKeysPublicUrl(...)` (see [Storages](docs/storages.md)). Set it when the API is reached
 through one origin (e.g. an internal proxy) but those public URLs must point at a different,
 externally-reachable one.
@@ -320,11 +319,11 @@ that the API token never follows a redirect to another host. Override both to su
 `false`, return a redirect response as it is. `DefaultHttpTransport` does, also when it wraps your own
 JDK `HttpClient` (it then copies the client's settings into one that does not follow redirects).
 
-Every one of the four methods performs exactly one network round-trip; no retrying, no request
+Every one of the four methods performs exactly one network round-trip: no retrying, no request
 mutation (retries, auth, and the `User-Agent` header are handled one layer up, by the client
 itself), and none may block the calling thread waiting on the network. A non-2xx HTTP status is **not** a
 transport-level error: complete the future normally with it, as a normal `HttpResponse` carrying its
-actual status code. Only fail the future for a genuine transport failure; connection refused, DNS
+actual status code. Only fail the future for a genuine transport failure: connection refused, DNS
 resolution failure, or a timeout. Any exception the future is completed exceptionally with is
 translated by the client into an `ApifyTransportException`; complete exceptionally with
 `com.apify.client.http.HttpTimeoutException` specifically for a timeout so

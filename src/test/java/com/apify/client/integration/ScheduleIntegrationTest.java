@@ -55,7 +55,7 @@ class ScheduleIntegrationTest extends IntegrationBase {
       // empty (not null/absent) list: the endpoint's "no entries" response must still decode
       // through the {"data": [...]} envelope rather than erroring or resolving to null. Decoding of
       // populated entries (message/level/createdAt) is covered against a real wire-format example
-      // in ClientBehaviourRegressionTest#scheduleGetLogDecodesEnvelopeArray — producing a non-empty
+      // in ClientBehaviourRegressionTest#scheduleGetLogDecodesEnvelopeArray. Producing a non-empty
       // log here would require waiting for an actual cron invocation, which isn't practical in a
       // short-lived integration test.
       assertEquals(List.of(), client.schedule(sch.getId()).getLog().join());

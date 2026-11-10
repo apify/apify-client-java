@@ -111,10 +111,10 @@ class IterationIntegrationTest extends IntegrationBase {
   /**
    * Like {@link #findsAll}, but tolerant of collection LIST-endpoint eventual consistency. A
    * resource created through a write endpoint is not always immediately reflected in its
-   * collection's LIST response — the write and the list index converge asynchronously on the
-   * server, so a create-then-iterate assertion that scans exactly once races that convergence and
-   * flakes when the just-created entity has not yet propagated. Delegates the retry/backoff shape
-   * to {@link IntegrationBase#pollUntil}, rebuilding a fresh publisher via {@code newPublisher} on
+   * collection's LIST response: the write and the list index converge asynchronously on the server,
+   * so a create-then-iterate assertion that scans exactly once races that convergence and flakes
+   * when the just-created entity has not yet propagated. Delegates the retry/backoff shape to
+   * {@link IntegrationBase#pollUntil}, rebuilding a fresh publisher via {@code newPublisher} on
    * every attempt (up to {@link #ITER_FIND_ATTEMPTS} times, sleeping {@link
    * #ITER_FIND_BACKOFF_MILLIS} between attempts) and returning as soon as every target id is seen.
    * An already-consistent account matches on the first pass with no sleeping.

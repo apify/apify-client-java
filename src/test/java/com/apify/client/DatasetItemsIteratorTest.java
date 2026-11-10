@@ -15,9 +15,8 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * Hermetic (token-free) tests for {@link DatasetClient#iterateItems} and its {@code fetchItemsPage}
- * helper — the distinct dataset-items path that parses a bare JSON array body (not a {@code data}
- * envelope) and terminates on an empty page. Driven by a {@link MockTransport}, no {@code
- * APIFY_TOKEN}.
+ * helper: the dataset-items path that parses a bare JSON array body (not a {@code data} envelope)
+ * and terminates on an empty page. Driven by a {@link MockTransport}, no {@code APIFY_TOKEN}.
  */
 class DatasetItemsIteratorTest {
 
@@ -55,7 +54,7 @@ class DatasetItemsIteratorTest {
   void typedIterateItemsAtDefaultPageSize() {
     // Typed iteration at the server-default page size uses the 3-arg form with a null chunkSize.
     // (No (options, Class<T>) overload exists: with a null second argument, the compiler could not
-    // tell it apart from the (options, Long chunkSize) overload — ambiguous overload resolution.)
+    // tell it apart from the (options, Long chunkSize) overload.)
     // Decodes each item into the requested type.
     MockTransport backend =
         new MockTransport(

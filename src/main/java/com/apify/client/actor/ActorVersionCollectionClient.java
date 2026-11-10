@@ -29,10 +29,10 @@ public final class ActorVersionCollectionClient {
   }
 
   /**
-   * Returns a publisher over the Actor's versions. The endpoint is not paginated, so the single
-   * request runs when {@code iterate} is called, not on first demand. The {@code limit} of {@code
-   * options} caps the number yielded ({@code null} or non-positive means all); {@code offset} has
-   * no effect.
+   * Returns a publisher over the Actor's versions. The endpoint is not paginated: one request, sent
+   * when {@code iterate} is called rather than on first demand, returns every version. The {@code
+   * limit} of {@code options} caps the number yielded ({@code null} or non-positive means all);
+   * {@code offset} has no effect.
    */
   public Flow.Publisher<ActorVersion> iterate(ListOptions options) {
     ListOptions opts = options != null ? options : new ListOptions();

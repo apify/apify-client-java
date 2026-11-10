@@ -147,6 +147,9 @@ class ClientBehaviourRegressionTest {
     assertEquals(0, backend.calls, "no request should be sent for an invalid charge");
   }
 
+  // The setStatusMessage success path with ACTOR_RUN_ID set is not tested: the JVM environment
+  // cannot be changed in-process without reflection into JDK internals, and a live test is not an
+  // Actor run. This test covers the unset case.
   @Test
   void setStatusMessageThrowsWhenActorRunIdUnset() {
     MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
@@ -156,9 +159,6 @@ class ClientBehaviourRegressionTest {
         () -> client.setStatusMessage("hello", new SetStatusMessageOptions()));
     assertEquals(0, backend.calls, "no request should be sent when ACTOR_RUN_ID is unset");
   }
-
-  // The success path with ACTOR_RUN_ID set is not tested: the JVM environment cannot be changed
-  // in-process without reflection into JDK internals, and a live test is not an Actor run.
 
   @Test
   void metamorphSendsTargetActorIdBuildAndInputBody() {
@@ -655,8 +655,9 @@ class ClientBehaviourRegressionTest {
   @Test
   void batchAddRequestsNeverThrowsOnPersistentTransportFailure() {
     // Sibling of `batchAddRequestsNeverThrowsOnNonRetryableClientError`: a transport-level failure
-    // (ApifyTransportException, e.g. connection refused/timeout — the request never reached the
-    // API at all) must be treated the same as an API-level failure (ApifyApiException). Both are
+    // (ApifyTransportException, e.g. connection refused or timeout, so the request never reached
+    // the
+    // API) must be treated the same as an API-level failure (ApifyApiException). Both are
     // ApifyClientException subtypes, and batchAddRequests' never-throws contract must hold across
     // both. Sequential path (single chunk, default maxParallel).
     MockTransport backend = new MockTransport(List.of(MockTransport.networkError()));
@@ -676,8 +677,9 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void batchAddRequestsNeverThrowsOnPersistentTransportFailureWithParallelChunks() {
-    // Same as above but exercising the `maxParallel > 1` path, where each chunk fails independently
-    // — the never-throws contract must hold there too, and every request across every chunk must
+    // Same as above but exercising the `maxParallel > 1` path, where each chunk fails
+    // independently.
+    // The never-throws contract must hold there too, and every request across every chunk must
     // come back via getUnprocessedRequests().
     MockTransport backend = new MockTransport(List.of(MockTransport.networkError()));
     List<RequestQueueRequest> requests = new ArrayList<>();

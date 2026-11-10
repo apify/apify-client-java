@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Hermetic (token-free) tests for the offset/limit async iteration engine. They drive {@link
  * AsyncPaginatedPublisher} with a stub page fetcher over a synthetic collection, pinning the
- * total-cap / chunk-size arithmetic, server-side page-size clamping, and termination — without any
+ * total-cap / chunk-size arithmetic, server-side page-size clamping, and termination, without any
  * network or {@code APIFY_TOKEN}.
  */
 class AsyncPaginatedPublisherTest {
