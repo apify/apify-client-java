@@ -503,9 +503,9 @@ class StreamedLogTest {
     // from inside it ("stop once I see line X"). Because that call runs on the reader thread
     // itself, an unguarded join would wait for the thread on itself and hang forever. The self-join
     // guard must let the call return so the reader breaks its loop and flushes the retained
-    // message. If it deadlocked, "b" would never be flushed and the poll below
-    // would time out with only "a" collected. A blocking stream is required: a finite one would end
-    // on its own and mask the hang.
+    // message. If it deadlocked, "b" would never be flushed and the poll below would time out with
+    // only "a" collected. A blocking stream is required: a finite one would end on its own and mask
+    // the hang.
     MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(
         200, new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n"));
@@ -520,8 +520,7 @@ class StreamedLogTest {
                     .toLog(
                         message -> {
                           collected.add(message);
-                          // Self-stop on the reader thread; fire once (stop() throws after the
-                          // thread reference is cleared).
+                          // Self-stop on the reader thread, once.
                           if (stopRequested.compareAndSet(false, true)) {
                             ref.get().stop();
                           }
@@ -539,8 +538,7 @@ class StreamedLogTest {
   @Test
   void closeFromInsideConsumerDoesNotDeadlock() {
     // Same self-join hazard as stopFromInsideConsumerDoesNotDeadlock, via close(). close() is
-    // idempotent, so the consumer can call it on
-    // every message without guarding.
+    // idempotent, so the consumer can call it on every message without guarding.
     MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(
         200, new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n"));

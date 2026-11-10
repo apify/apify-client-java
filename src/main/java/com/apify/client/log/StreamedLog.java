@@ -180,8 +180,10 @@ public final class StreamedLog implements AutoCloseable {
    * Stops log redirection, waiting for the background reader thread to finish.
    *
    * <p>Called from inside the destination consumer, which runs on the reader thread, it cannot join
-   * itself: it only signals the stop and returns. Prefer {@link #close()} there, because a {@code
-   * stop()} after redirection has stopped throws and {@code close()} does not.
+   * itself: it only signals the stop and returns. If the calling thread is interrupted, it closes
+   * the stream, keeps the interrupt flag and returns before the reader has ended, so the last
+   * message may arrive after it returns. {@link #start()} throws until a later {@code stop()} or
+   * {@link #close()} has joined the reader.
    *
    * @throws IllegalStateException if redirection is not running
    */
@@ -199,8 +201,9 @@ public final class StreamedLog implements AutoCloseable {
   /**
    * Stops redirection if it is still running; a no-op otherwise. If {@link #start()} is still
    * opening the log stream, the stream is closed as soon as it opens, no reader is launched and the
-   * future {@code start()} returned is cancelled. Idempotent and safe to call concurrently with
-   * {@link #stop()}; unlike it, never throws.
+   * future {@code start()} returned is cancelled. Waits and handles interruption and a call from
+   * the consumer as {@link #stop()} does. Idempotent and safe to call concurrently with {@code
+   * stop()}; unlike it, never throws.
    */
   @Override
   public void close() {
@@ -244,9 +247,10 @@ public final class StreamedLog implements AutoCloseable {
   }
 
   /**
-   * Joins the stopped reader and clears the state. The consumer runs on the reader thread, so a
-   * stop from the consumer neither joins nor clears: the reader is still running, and {@link
-   * #start()} stays rejected until a later {@code stop()} or {@code close()} has joined it.
+   * Joins the stopped reader and clears the state. A stop from the consumer, which runs on the
+   * reader thread, neither joins nor clears. A join that is interrupted closes the stream, keeps
+   * the interrupt flag and does not clear. In both cases {@link #start()} stays rejected until a
+   * later {@code stop()} or {@code close()} has joined the reader.
    */
   private void awaitStopped(StopHandle handle) {
     if (Thread.currentThread() == handle.thread()) {
