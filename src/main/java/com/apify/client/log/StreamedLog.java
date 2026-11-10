@@ -181,7 +181,7 @@ public final class StreamedLog implements AutoCloseable {
    *
    * <p>Called from inside the destination consumer, which runs on the reader thread, it cannot join
    * itself: it only signals the stop and returns. If the calling thread is interrupted, it closes
-   * the stream, keeps the interrupt flag and returns before the reader has ended, so the last
+   * the stream, keeps the interrupt flag, and returns before the reader has ended, so the last
    * message may arrive after it returns. {@link #start()} throws until a later {@code stop()} or
    * {@link #close()} has joined the reader.
    *
@@ -201,8 +201,8 @@ public final class StreamedLog implements AutoCloseable {
   /**
    * Stops redirection if it is still running; a no-op otherwise. If {@link #start()} is still
    * opening the log stream, the stream is closed as soon as it opens, no reader is launched and the
-   * future {@code start()} returned is cancelled. Waits and handles interruption and a call from
-   * the consumer as {@link #stop()} does. Idempotent and safe to call concurrently with {@code
+   * future {@code start()} returned is cancelled. Handles an interrupted caller and a call from the
+   * consumer the same way as {@link #stop()}. Idempotent and safe to call concurrently with {@code
    * stop()}; unlike it, never throws.
    */
   @Override
@@ -249,7 +249,7 @@ public final class StreamedLog implements AutoCloseable {
   /**
    * Joins the stopped reader and clears the state. A stop from the consumer, which runs on the
    * reader thread, neither joins nor clears. A join that is interrupted closes the stream, keeps
-   * the interrupt flag and does not clear. In both cases {@link #start()} stays rejected until a
+   * the interrupt flag, and does not clear. In both cases {@link #start()} stays rejected until a
    * later {@code stop()} or {@code close()} has joined the reader.
    */
   private void awaitStopped(StopHandle handle) {

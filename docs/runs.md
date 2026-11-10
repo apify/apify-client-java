@@ -85,8 +85,9 @@ log in one plain request instead, so whatever was logged by then is still delive
 The `toLog` consumer runs on the background reader thread, one message at a time. `stop()` and
 `close()` wait for the consumer to finish its current message and up to 1 second for a message still
 arriving, deliver the last message, and then return. If the calling thread is interrupted, they
-close the stream, keep the interrupt flag and return before the reader has ended, so the last
-message may arrive after they return.
+close the stream, keep the interrupt flag, and return before the reader has ended, so the last
+message may arrive after they return, and `start()` throws until a later `stop()` or `close()` has
+joined the reader.
 
 Calling `close()` from inside the consumer is supported: it signals the stop and returns without
 waiting, and the reader ends once the consumer returns. `start()` throws until a later `stop()` or
