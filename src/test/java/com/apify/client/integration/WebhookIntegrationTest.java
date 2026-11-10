@@ -122,8 +122,7 @@ class WebhookIntegrationTest extends IntegrationBase {
         assertTrue(
             foundInList, "expected the just-created webhook to appear in the top-level list");
 
-        // Typed getters (previously only reachable via getExtra()): verify the API's response
-        // actually deserializes into them, not just that the code compiles.
+        // Typed getters: verify the API's response deserializes into them.
         assertEquals(task.getId(), wh.getCondition().get("actorTaskId").asString());
         assertTrue(wh.getCreatedAt() != null);
         assertTrue(wh.getModifiedAt() != null);

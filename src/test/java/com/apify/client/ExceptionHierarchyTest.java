@@ -57,7 +57,7 @@ class ExceptionHierarchyTest {
   /**
    * {@link HttpClientCore#buildApiError} must construct the subclass matching each status code, so
    * callers can branch with {@code instanceof} instead of comparing {@code getStatusCode()} by
-   * number (see the reference JS client's per-status {@code ApifyApiError} subclasses).
+   * number.
    */
   @Test
   void buildApiErrorPicksSubclassByStatus() {

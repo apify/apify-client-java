@@ -9,8 +9,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 /**
  * Offline tests for {@code ApifyClientBuilder}'s {@code baseUrl}/{@code publicBaseUrl}
  * normalization: trailing slashes are stripped and {@code /v2} is appended, unless the URL's path
- * already ends with it. Mirrors the reference JS client's table-driven regression test for the same
- * bug (a caller-supplied {@code .../v2} used to become {@code .../v2/v2}).
+ * already ends with it, so a caller-supplied {@code .../v2} does not become {@code .../v2/v2}.
  */
 class BaseUrlNormalizationTest {
 

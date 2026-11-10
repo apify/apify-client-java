@@ -77,8 +77,7 @@ class ScheduleIntegrationTest extends IntegrationBase {
       // list() step of the create/get/modify/list/delete flow.
       assertTrue(client.schedules().list(new ListOptions().limit(5L)).join().getTotal() >= 0);
 
-      // Typed getters (previously only reachable via getExtra()): verify the API's response
-      // actually deserializes into them, not just that the code compiles.
+      // Typed getters: verify the API's response deserializes into them.
       assertTrue(sch.isExclusive());
       assertTrue(sch.getTimezone() != null && !sch.getTimezone().isEmpty());
       assertTrue(sch.getCreatedAt() != null);

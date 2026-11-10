@@ -49,7 +49,7 @@ public final class Json {
               override -> override.setNullHandling(JsonSetter.Value.forValueNulls(Nulls.SKIP)))
           .changeDefaultPropertyInclusion(
               incl -> incl.withValueInclusion(JsonInclude.Include.NON_NULL))
-          // Bind directly to (private) fields so models need no setters — getters remain the
+          // Bind directly to (private) fields so models need no setters; getters remain the
           // public read surface. Any-getters/setters are still honored for the `extra` map.
           .changeDefaultVisibility(
               vc ->

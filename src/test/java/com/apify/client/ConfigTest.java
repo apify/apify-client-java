@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
  */
 class ConfigTest {
 
-  /** Mirror of the integration base's resolution logic (kept in sync with IntegrationBase). */
+  /** The base URL resolution of IntegrationBase. */
   private static String resolveBaseUrl(String apiUrl) {
     if (apiUrl == null || apiUrl.isEmpty()) {
       apiUrl = "https://api.apify.com/v2";

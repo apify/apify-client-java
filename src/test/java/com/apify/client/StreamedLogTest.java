@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -39,6 +40,9 @@ class StreamedLogTest {
    * in this suite.
    */
   private static final int REDIRECT_POLL_ATTEMPTS = (int) (5_000 / REDIRECT_POLL_MILLIS);
+
+  /** How long a test waits for {@code stop()} to signal the reader. */
+  private static final long STOP_SIGNAL_SETTLE_MILLIS = 200;
 
   private static ApifyClient client(MockTransport backend) {
     return ApifyClient.builder().token("test-token").httpTransport(backend).maxRetries(0).build();
@@ -117,10 +121,9 @@ class StreamedLogTest {
   void throwingConsumerDoesNotKillDaemonThreadUncaught() throws InterruptedException {
     // The destination consumer runs on the background daemon reader thread. A user consumer that
     // throws must not escape as an uncaught exception that silently kills that thread (and, via the
-    // final flush, throws again). Matching the reference client, redirection must degrade to a
+    // final flush, throws again). Redirection must degrade to a
     // logged warning. We capture any exception that reaches the reader thread's uncaught handler
-    // and
-    // assert none does, while confirming the consumer was actually exercised.
+    // and assert none does, while confirming the consumer was actually exercised.
     AtomicReference<Throwable> uncaught = new AtomicReference<>();
     Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
     Thread.setDefaultUncaughtExceptionHandler(
@@ -152,8 +155,7 @@ class StreamedLogTest {
           uncaught.get(),
           "a throwing destination consumer must not escape as an uncaught daemon-thread exception");
       // Two complete lines are streamed, but redirection must unwind on the first throw and forward
-      // nothing further (no re-invocation for the remaining line or the final flush), matching the
-      // reference client's single warning.
+      // nothing further (no re-invocation for the remaining line or the final flush).
       assertEquals(
           1, calls.get(), "the destination consumer must not be invoked again after it throws");
     } finally {
@@ -200,7 +202,7 @@ class StreamedLogTest {
 
   @Test
   void deliversLastMessageWhenStoppingLiveStream() {
-    // Regression test for a live stream that never reaches end-of-stream on its own. The reader
+    // A live stream never reaches end-of-stream on its own. The reader
     // buffers three complete lines (a, b, c): a and b are emitted immediately while c is retained
     // as the possibly-still-growing last message. Then the read blocks. stop() closes the stream,
     // which unblocks the read with an IOException; the retained last message (c) must still be
@@ -251,14 +253,87 @@ class StreamedLogTest {
             .join();
     streamedLog.start().join();
     // The reader has consumed the body and blocks, holding back "a" as the last message.
-    pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, stream::isBlocked);
+    assertTrue(pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, stream::isBlocked));
 
     streamedLog.stop();
 
     assertEquals(
-        List.of(false),
-        interruptedPerMessage,
-        "stop() interrupts the reader; the flush must not run the consumer interrupted");
+        List.of(false), interruptedPerMessage, "the flush must not run the consumer interrupted");
+  }
+
+  @Test
+  void closeFromInsideTheConsumerDoesNotInterruptTheMessagesAfterIt() {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(
+        200,
+        "2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n2999-01-01T00:00:02.000Z c\n");
+    List<String> interruptedPerMessage = new CopyOnWriteArrayList<>();
+    AtomicReference<StreamedLog> streamedLog = new AtomicReference<>();
+    streamedLog.set(
+        client(backend)
+            .run("run123")
+            .getStreamedLog(
+                new StreamedLogOptions()
+                    .toLog(
+                        message -> {
+                          interruptedPerMessage.add(
+                              message.substring(message.length() - 1)
+                                  + "="
+                                  + Thread.currentThread().isInterrupted());
+                          if (message.endsWith(" a")) {
+                            streamedLog.get().close();
+                          }
+                        }))
+            .join());
+    streamedLog.get().start().join();
+
+    streamedLog.get().close();
+
+    assertEquals(List.of("a=false", "b=false", "c=false"), interruptedPerMessage);
+  }
+
+  @Test
+  void stopFromAnotherThreadDoesNotInterruptAConsumerThatIsBlocked() throws InterruptedException {
+    BlockingStream stream =
+        new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n");
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(200, stream);
+    CountDownLatch consumerEntered = new CountDownLatch(1);
+    CountDownLatch releaseConsumer = new CountDownLatch(1);
+    List<String> outcomePerMessage = new CopyOnWriteArrayList<>();
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(
+                new StreamedLogOptions()
+                    .toLog(
+                        message -> {
+                          String name = message.substring(message.length() - 1);
+                          if (name.equals("a")) {
+                            consumerEntered.countDown();
+                            try {
+                              releaseConsumer.await();
+                              outcomePerMessage.add("a=ok");
+                            } catch (InterruptedException e) {
+                              outcomePerMessage.add("a=interrupted");
+                            }
+                          } else {
+                            outcomePerMessage.add(
+                                name + "=" + Thread.currentThread().isInterrupted());
+                          }
+                        }))
+            .join();
+    streamedLog.start().join();
+    assertTrue(consumerEntered.await(5, TimeUnit.SECONDS));
+    Thread stopper = new Thread(streamedLog::stop);
+    stopper.start();
+    // Give stop() time to signal the reader while the consumer is blocked.
+    Thread.sleep(STOP_SIGNAL_SETTLE_MILLIS);
+
+    releaseConsumer.countDown();
+    stopper.join();
+
+    assertEquals(List.of("a=ok", "b=false"), outcomePerMessage);
   }
 
   @Test
@@ -282,12 +357,9 @@ class StreamedLogTest {
 
   @Test
   void concurrentCloseNeverThrowsWhileStopRaces() throws InterruptedException {
-    // Reproduces the concurrent case the fix targets: a stop() and a close() fire simultaneously.
-    // Because close() does its running-check and stop atomically under the monitor, it must never
-    // throw regardless of interleaving. (stop() may legitimately throw when it loses the race - its
-    // explicit-misuse contract - so only close()'s outcome is asserted.) The pre-fix check-then-act
-    // close() could observe a non-null thread, release the lock, then call a stop() that had
-    // already nulled the field and threw. Run several rounds to make the interleaving likely.
+    // A stop() and a close() fire simultaneously. close() checks and stops under the monitor, so it
+    // must never throw. stop() may throw when it loses the race, so only close() is asserted. Many
+    // rounds make the interleaving likely.
     for (int round = 0; round < 50; round++) {
       MockTransport backend = MockTransport.ofConstant(200, "");
       backend.scriptStream(200, "2999-01-01T00:00:00.000Z x\n");
@@ -398,8 +470,7 @@ class StreamedLogTest {
   void closeFromInsideConsumerDoesNotDeadlock() {
     // Same self-join hazard as stopFromInsideConsumerDoesNotDeadlock, via close() (which routes
     // through the same stopStreaming()). close() is idempotent, so the consumer can call it on
-    // every
-    // message without guarding.
+    // every message without guarding.
     MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(
         200, new BlockingStream("2999-01-01T00:00:00.000Z a\n2999-01-01T00:00:01.000Z b\n"));
@@ -449,9 +520,8 @@ class StreamedLogTest {
   @Test
   void stopBeforeAnyBytesStreamedFallsBackToOneShotFetch() {
     // If stop() is requested before any stream ever delivers a byte, redirection must not simply
-    // end
-    // with nothing: it fetches the log in one plain request instead, so whatever was logged by then
-    // is still delivered.
+    // end with nothing: it fetches the log in one plain request instead, so whatever was logged by
+    // then is still delivered.
     MockTransport backend = MockTransport.ofConstant(200, "fallback content");
     backend.scriptStream(200, ""); // every streamed open stays empty - the run never logs anything
     List<String> collected = new CopyOnWriteArrayList<>();
@@ -467,10 +537,9 @@ class StreamedLogTest {
 
   @Test
   void stopDuringAnInFlightReopenStillCompletesPromptly() {
-    // Regression test: stop() must still unblock redirection (not hang) when it races a reopen that
-    // is already in flight - every scripted open comes back empty, so without draining into the
-    // "stopped, fetch once" path the reader would otherwise keep reopening for the whole backoff
-    // schedule (or, pre-fix, could block forever on a newly installed stream nothing then closes).
+    // stop() must end redirection promptly when it races a reopen that is already in flight. Every
+    // scripted open is empty, so the reader must take the "stopped, fetch once" path instead of
+    // reopening for the whole backoff schedule.
     MockTransport backend = MockTransport.ofConstant(200, "");
     backend.scriptStream(200, "");
     backend.scriptStream(200, "");
@@ -513,7 +582,6 @@ class StreamedLogTest {
     private final byte[] data;
     private int pos;
     private final CountDownLatch closed = new CountDownLatch(1);
-
     private volatile boolean blocked;
 
     BlockingStream(String data) {

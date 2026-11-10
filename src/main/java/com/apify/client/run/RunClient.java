@@ -213,10 +213,9 @@ public final class RunClient {
 
   /**
    * Polls until the run reaches a terminal state or {@code waitSecs} elapses ({@code null} waits
-   * indefinitely). Completes with the latest run fetched, whether or not it is terminal: if the
-   * wait budget runs out first, this completes with the still-running run as of the last poll
-   * rather than failing or waiting further — check {@link ActorRun#isTerminal()} on the result if
-   * the distinction matters to the caller.
+   * indefinitely). Completes with the latest run fetched, terminal or not: if the wait runs out
+   * first, it completes with the still-running run of the last poll. Check {@link
+   * ActorRun#isTerminal()} on the result.
    */
   public CompletableFuture<ActorRun> waitForFinish(Long waitSecs) {
     return ctx.waitForFinish(waitSecs, "run", Json.type(ActorRun.class), ActorRun::isTerminal);
@@ -348,9 +347,8 @@ public final class RunClient {
    * and {@code " -> "}. Falls back to the run id alone when the Actor name is unavailable.
    */
   private CompletableFuture<String> buildDefaultLogPrefix() {
-    // Fall back to the field `id`: correct for a direct run client, but it is the literal string
-    // "last" for a `runs/last` accessor (see #lastRun) — replaced with the resolved run's real id
-    // below as soon as the fetch succeeds.
+    // The field `id` is the literal "last" for a `runs/last` accessor; the resolved run's id
+    // replaces it below once the fetch succeeds.
     return get()
         .thenCompose(
             run -> {

@@ -76,10 +76,9 @@ public final class TaskStartOptions {
   /**
    * Retries the start while the account lacks the memory or a concurrent-run slot for the run (the
    * API rejects it with {@code actor-memory-limit-exceeded} or {@code
-   * concurrent-runs-limit-exceeded}, both of which clear as other runs or builds finish), waiting
-   * 10 seconds between attempts. {@code true} retries until the run starts ({@link
-   * ActorStartOptions#WAIT_FOR_RESOURCES_INDEFINITELY}); {@code false} (the default) does not retry
-   * — a resource-limit error is thrown immediately, like any other error.
+   * concurrent-runs-limit-exceeded}), waiting 10 seconds between attempts. {@code true} retries
+   * until the run starts ({@link ActorStartOptions#WAIT_FOR_RESOURCES_INDEFINITELY}); {@code false}
+   * (the default) does not retry and throws the error immediately.
    */
   public TaskStartOptions waitForResources(boolean waitForResources) {
     this.waitForResourcesSecs =

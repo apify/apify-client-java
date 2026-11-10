@@ -153,11 +153,9 @@ class DatasetItemsIteratorTest {
 
   @Test
   void advancesByScannedCountNotReturnedCount() {
-    // Regression for the fully-filtered-page bug (see AsyncPaginatedPublisher.applyPage): a
-    // server-side filter (clean/skipEmpty/skipHidden) can drop every item of a scanned page.
-    // Advancing by the *returned* count (0) would stop iteration right there; advancing by the
-    // *scanned* count (reported via X-Apify-Pagination-Count) must skip past the filtered-out
-    // window and reach the real data on the next page.
+    // A server-side filter (clean/skipEmpty/skipHidden) can drop every item of a scanned page.
+    // Iteration must advance by the scanned count (X-Apify-Pagination-Count), not the returned
+    // count, to reach the data on the next page.
     MockTransport backend =
         new MockTransport(
             List.of(
@@ -182,11 +180,8 @@ class DatasetItemsIteratorTest {
 
   @Test
   void advancesByScannedCountEvenWhenUnwindReturnsMoreThanScanned() {
-    // Regression for the mirror-image bug the naive "trust the header only when it's >= the
-    // returned count" guard introduced: `unwind` splits one scanned row's array field into several
-    // output items, so returnedCount > scannedCount is a legitimate, common shape - not a sign the
-    // header is unpopulated. A guard that falls back to the (larger) returned count here advances
-    // the offset too far and silently drops the rows in between on the next page.
+    // `unwind` splits one scanned row into several items, so the returned count can exceed the
+    // scanned count. The offset must still advance by the scanned count, or rows are skipped.
     MockTransport backend =
         new MockTransport(
             List.of(
@@ -257,13 +252,9 @@ class DatasetItemsIteratorTest {
 
   @Test
   void fallsBackToReturnedCountWhenHeaderIsImplausiblyLow() {
-    // Regression for a real finding against the live API (see PaginationList.getScannedCount): it
-    // was observed sending X-Apify-Pagination-Count: 0 on every page of an *unfiltered* listing,
-    // even though each page genuinely scanned and returned real items - a combination that can
-    // never
-    // be a real "nothing scanned" answer (0 scanned rows can't produce items), so it must mean the
-    // header is not populated for this request/endpoint yet. Trusting it anyway would advance the
-    // offset by 0 and re-request (or, worse, treat the page as exhausted and stop).
+    // The API can send X-Apify-Pagination-Count: 0 for an unfiltered page that returned items.
+    // That is not a real "nothing scanned" answer, so iteration falls back to the returned count
+    // instead of re-requesting the same offset or stopping.
     MockTransport backend =
         new MockTransport(
             List.of(

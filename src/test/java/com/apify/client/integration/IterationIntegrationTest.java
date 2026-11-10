@@ -39,11 +39,11 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Iteration coverage for every paginated collection client that exposes an {@code iterate} helper,
- * mirroring the reference client's async iterators. Where creation is cheap, tests create a few
- * uniquely-named resources and assert iteration finds them (so paging is exercised across pages);
- * for resources whose setup is expensive (builds, runs, dispatches) they iterate a bounded slice
- * and assert the publisher behaves. All resources are uniquely named for parallel isolation.
+ * Iteration coverage for every paginated collection client that exposes an {@code iterate} helper.
+ * Where creation is cheap, tests create a few uniquely-named resources and assert iteration finds
+ * them (so paging is exercised across pages); for resources whose setup is expensive (builds, runs,
+ * dispatches) they iterate a bounded slice and assert the publisher behaves. All resources are
+ * uniquely named for parallel isolation.
  */
 class IterationIntegrationTest extends IntegrationBase {
 

@@ -29,17 +29,10 @@ import tools.jackson.databind.JsonNode;
 
 class ActorRunIntegrationTest extends IntegrationBase {
 
-  // Note: RunClient.metamorph/reboot/charge are intentionally NOT exercised by a live integration
-  // test here, matching the project's existing convention for UserIntegrationTest#updateLimits.
-  // `metamorph` requires a second target Actor under the same account with a compatible input
-  // schema. `reboot` requires a genuinely *running* container; the store Actor exercised in this
-  // suite (hello-world) finishes in ~1-2s, so a live reboot test would be either flaky-by-
-  // construction or need a bespoke slow-running test Actor this suite doesn't otherwise need.
-  // `charge` only applies to pay-per-event Actors, which none of this suite's fixtures are. All
-  // three are covered offline instead, against a mock backend, by
-  // ClientBehaviourRegressionTest#metamorphSendsTargetActorIdBuildAndInputBody,
-  // #rebootSendsPostToRebootWithNoBody, and #chargeSendsIdempotencyKey (+ its sibling charge*
-  // tests) respectively.
+  // metamorph, reboot and charge have no live test: metamorph needs a second Actor with a
+  // compatible input schema, reboot needs a run that is still running (hello-world finishes in a
+  // couple of seconds), and charge needs a pay-per-event Actor. ClientBehaviourRegressionTest
+  // covers them against a mock backend.
 
   @Test
   void listRuns() {
@@ -118,9 +111,8 @@ class ActorRunIntegrationTest extends IntegrationBase {
     client.run(run.getId()).keyValueStore().getRecord("OUTPUT").join();
     client.run(run.getId()).requestQueue().listHead(null).join();
 
-    // Nested run-storage metadata GETs (previously untested): confirm the run's default storages
-    // are reachable as full metadata resources, not just via the item/record/head-level calls
-    // above.
+    // Nested run-storage metadata GETs: the run's default storages are reachable as metadata
+    // resources.
     assertTrue(client.run(run.getId()).dataset().get().join().isPresent());
     assertTrue(client.run(run.getId()).keyValueStore().get().join().isPresent());
     assertTrue(client.run(run.getId()).requestQueue().get().join().isPresent());
@@ -137,8 +129,7 @@ class ActorRunIntegrationTest extends IntegrationBase {
     assertTrue(
         client.run(run.getId()).requestQueue().getRequest("does-not-exist").join().isEmpty());
 
-    // Typed getters (previously only reachable via getExtra()): verify the API's response
-    // actually deserializes into them, not just that the code compiles.
+    // Typed getters: verify the API's response deserializes into them.
     assertTrue(run.getGeneralAccess() != null);
     assertTrue(run.getStats() != null);
     assertTrue(run.getOptions() != null && run.getOptions().getBuild() != null);
@@ -192,10 +183,8 @@ class ActorRunIntegrationTest extends IntegrationBase {
     ApifyClient client = requireClient();
     ActorClient actor = client.actor("apify/hello-world");
     List<String> collected = new CopyOnWriteArrayList<>();
-    // The log-streaming call() overload (ActorCallOptions), matching the reference client's
-    // default call(options.log='default') behavior: the run's log is streamed for the duration of
-    // the wait without any explicit opt-in. runActorAndReadOutputs above exercises the plain
-    // (non-streaming) ActorStartOptions overload.
+    // The log-streaming call() overload (ActorCallOptions) streams the run's log during the wait
+    // without an explicit opt-in. runActorAndReadOutputs above covers the plain overload.
     ActorRun run =
         actor
             .call(
@@ -204,14 +193,8 @@ class ActorRunIntegrationTest extends IntegrationBase {
                 TEST_ACTOR_WAIT_SECS)
             .join();
     assertEquals("SUCCEEDED", run.getStatus());
-    // call()'s internal log-streaming lifecycle closes the stream as soon as the run is finished
-    // (RunStartSupport#callWithLogStreaming), which can race the background reader the same way
-    // streamedLogRedirection below does for its own explicit StreamedLog. Gate the assertion on
-    // whether the run actually produced a log at all - via the call()-default variant, which
-    // (unlike
-    // streamedLogRedirection's) never rescues via a separate explicit stream, so a genuinely broken
-    // default-streaming wiring still fails here rather than being masked.
-    assertCallDefaultStreamedLogNonEmptyIfProduced(client.run(run.getId()), collected);
+    // The assertion applies only if the run logged anything.
+    assertStreamedLogNonEmptyIfProduced(client.run(run.getId()), collected);
   }
 
   @Test
@@ -265,11 +248,9 @@ class ActorRunIntegrationTest extends IntegrationBase {
             .join();
     assertEquals("SUCCEEDED", run.getStatus());
 
-    // `apify/hello-world` is a shared public store Actor: under the account's concurrent-execution
-    // isolation contract, other runs of that same Actor (e.g. a sibling-language client's suite
-    // running at the same time against the same test user) can legitimately be "last" between the
-    // `call` above and the `lastRun` lookup below. Assert presence/status/origin, not identity
-    // with the run just started.
+    // `apify/hello-world` is shared, so another run of it by a concurrent test can be "last"
+    // between the `call` above and the `lastRun` lookup below. Assert presence, status and origin,
+    // not identity.
     var lastRun = client.actor("apify/hello-world").lastRun("SUCCEEDED").get().join();
     assertTrue(lastRun.isPresent());
     assertEquals("SUCCEEDED", lastRun.get().getStatus());
@@ -284,11 +265,8 @@ class ActorRunIntegrationTest extends IntegrationBase {
     assertEquals("SUCCEEDED", byOrigin.get().getStatus());
     assertEquals("API", byOrigin.get().getMeta().getOrigin());
 
-    // Last-run-scoped nested storage GETs (previously untested — only `lastRun().get()` itself
-    // was): `actor(...).lastRun(...)` returns a RunClient, and its nested storage clients must be
-    // reachable the same way `run(id).<storage>()`'s are. Whichever run resolves as "last" (see
-    // the concurrency note above) is a hello-world run, so its default storages are guaranteed to
-    // exist.
+    // Last-run-scoped nested storage GETs. Whichever run is "last" (see the note above) is a
+    // hello-world run, so its default storages exist.
     RunClient lastRunClient = client.actor("apify/hello-world").lastRun("SUCCEEDED");
     lastRunClient.dataset().listItems(new DatasetListItemsOptions()).join();
     lastRunClient.keyValueStore().getRecord("OUTPUT").join();
@@ -308,13 +286,7 @@ class ActorRunIntegrationTest extends IntegrationBase {
       runClient.waitForFinish(TEST_ACTOR_WAIT_SECS).join();
     }
 
-    // The *first* stream above was opened before the run finished, following the live log as the
-    // run was still writing to it, so the underlying HTTP stream can reach EOF (the container/
-    // log-follow connection closing) a hair before the final bytes are flushed to that same
-    // connection, or before the background reader has pulled any bytes off it at all - no amount
-    // of client-side waiting after that EOF recovers bytes that were never delivered on it. Gate
-    // the assertion on the authoritative persisted log (see
-    // IntegrationBase#assertStreamedLogNonEmptyIfProduced for the full retry/skip rationale).
+    // The assertion applies only if the run logged anything.
     assertStreamedLogNonEmptyIfProduced(runClient, collected);
   }
 }

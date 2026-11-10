@@ -15,6 +15,8 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -217,9 +219,9 @@ public final class StreamedLog implements AutoCloseable {
     CompletableFuture<Void> graceTimer =
         Async.delay(Duration.ofMillis(STOP_GRACE_MILLIS))
             .thenRun(() -> closeQuietly(streamToForceClose));
-    // Wakes the reader if it is backing off before reopening an empty stream. A wake signal only:
-    // sleepAsWakeableBackoff clears it.
-    streamingThread.interrupt();
+    // Wakes the reader if it is backing off before reopening an empty stream. Not an interrupt:
+    // that would reach a consumer that is running or blocked in its own call.
+    LockSupport.unpark(streamingThread);
     // The consumer runs on the streaming thread. Joining it from there would block forever while
     // holding the monitor, so a self-stop skips the join; stopLogging unwinds the reader anyway.
     if (Thread.currentThread() != streamingThread) {
@@ -256,9 +258,7 @@ public final class StreamedLog implements AutoCloseable {
       return;
     }
     if (stream == null) {
-      // Stopped before any byte arrived: fetch the log as it is now. Clears a pending wake-up
-      // interrupt first so it does not leak into the consumer or the HTTP call.
-      Thread.interrupted();
+      // Stopped before any byte arrived: fetch the log as it is now.
       try {
         String logContent = logClient.get(new LogOptions().raw(true)).join().orElse("");
         if (!forwardingFailed) {
@@ -299,8 +299,6 @@ public final class StreamedLog implements AutoCloseable {
         LOG.warn("Log redirection stopped due to error", e);
       }
     } finally {
-      // Clears a pending wake-up interrupt so it does not leak into the consumer.
-      Thread.interrupted();
       // Flush on stream end and on a stop mid-read: emitMessages holds back the last message and a
       // stop skips the loop body. Skipped once a consumer has thrown.
       if (!forwardingFailed) {
@@ -368,15 +366,15 @@ public final class StreamedLog implements AutoCloseable {
   }
 
   /**
-   * Sleeps for {@code millis}, waking early on interrupt and clearing the interrupt status: {@link
-   * #stopStreaming()} interrupts only to wake this wait, and {@link #stopLogging} is the stop
-   * signal.
+   * Sleeps for {@code millis}, waking early when {@link #stopStreaming()} sets {@link
+   * #stopLogging}.
    */
-  private static void sleepAsWakeableBackoff(long millis) {
-    try {
-      Thread.sleep(millis);
-    } catch (InterruptedException ignored) {
-      // Intentionally not restoring the interrupt status - see method javadoc.
+  private void sleepAsWakeableBackoff(long millis) {
+    long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(millis);
+    long remaining = deadline - System.nanoTime();
+    while (!stopLogging && remaining > 0) {
+      LockSupport.parkNanos(this, remaining);
+      remaining = deadline - System.nanoTime();
     }
   }
 

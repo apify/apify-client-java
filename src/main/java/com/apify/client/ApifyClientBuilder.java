@@ -215,12 +215,9 @@ public final class ApifyClientBuilder {
   }
 
   /**
-   * Validates a non-null, strictly-positive {@link Duration} argument, returning it unchanged.
-   * Unlike the delay parameters (where zero legitimately means "retry immediately"), a zero {@code
-   * timeout} is not tolerated: it is passed straight through to {@code HttpRequest.Builder#timeout}
-   * deep inside {@link DefaultHttpTransport}, which rejects a zero/negative duration at
-   * request-send time — so a zero value here would build a client that fails on its very first call
-   * rather than at construction time.
+   * Returns {@code value} if it is strictly positive. Zero is rejected because {@code
+   * HttpRequest.Builder#timeout} rejects it at send time, which would fail the first request
+   * instead of the builder.
    */
   private static Duration requirePositive(Duration value, String argName) {
     if (value == null || value.isZero() || value.isNegative()) {

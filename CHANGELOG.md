@@ -497,7 +497,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `setStatusMessage` to the README resources table; noted `getExtra()` on every thin response model.
 - Fixed a contradiction in `README.md`/`docs/README.md`: both described `docs/examples.md` as
   "complete, runnable programs," but its own snippets are fragments in the same style as the
-  resource pages — the complete, runnable programs live under
+  resource pages; the complete, runnable programs live under
   `src/test/java/com/apify/client/examples/`. Reworded both to match.
   Added the missing `WebhookLastDispatch` import to the `com.apify.client.webhook` package-table row.
   Corrected the "one raw-JSON field" framing in `docs/README.md`'s "Raw JSON values" section:
@@ -612,8 +612,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   key-value-store, request-queue, task, schedule, webhook, and webhook-dispatch collection clients;
   and `DatasetClient.iterateItems(...)` for dataset items and `KeyValueStoreClient.iterateKeys(...)`
   for store keys. The options' `limit` caps the total number of items yielded and `chunkSize` sets
-  the per-request page size. The non-paginated collections — `ActorVersionCollectionClient.iterate(options)`
-  and `ActorEnvVarCollectionClient.iterate()` — return the full list in a single fetch (no page size
+  the per-request page size. The non-paginated collections, `ActorVersionCollectionClient.iterate(options)`
+  and `ActorEnvVarCollectionClient.iterate()`, return the full list in a single fetch (no page size
   to tune).
 
 ### Changed

@@ -30,11 +30,11 @@ import java.util.zip.GZIPInputStream;
 import org.junit.jupiter.api.Test;
 
 /**
- * Offline tests for request-body compression. Mirrors the reference JS client: bodies of at least
- * 1024 bytes are compressed and announced via {@code Content-Encoding}, smaller bodies are sent
- * verbatim. The client uses brotli ({@code br}) by default where its native codec is available and
- * gzip elsewhere; the compressor is configurable, and its failure fails the request. Both
- * compressors are exercised directly, and the live client path via a real request.
+ * Offline tests for request-body compression: bodies of at least 1024 bytes are compressed and
+ * announced via {@code Content-Encoding}, smaller bodies are sent verbatim. The client uses brotli
+ * ({@code br}) by default where its native codec is available and gzip elsewhere; the compressor is
+ * configurable, and its failure fails the request. Both compressors are exercised directly, and the
+ * live client path via a real request.
  */
 class CompressionTest {
 

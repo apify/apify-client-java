@@ -9,10 +9,6 @@ import java.util.List;
 /**
  * Configures starting an Actor run ({@link ActorClient#start}/{@link ActorClient#call}). All fields
  * are optional.
- *
- * <p>{@link #apply}/{@link #contentTypeOrDefault}/{@link #waitForResourcesSecsValue} are
- * package-private on purpose — see {@link com.apify.client.internal.RunStartSupport}'s class
- * javadoc for why.
  */
 public final class ActorStartOptions {
 
@@ -103,10 +99,9 @@ public final class ActorStartOptions {
   /**
    * Retries the start while the account lacks the memory or a concurrent-run slot for the run (the
    * API rejects it with {@code actor-memory-limit-exceeded} or {@code
-   * concurrent-runs-limit-exceeded}, both of which clear as other runs or builds finish), waiting
-   * 10 seconds between attempts. {@code true} retries until the run starts ({@link
-   * #WAIT_FOR_RESOURCES_INDEFINITELY}); {@code false} (the default) does not retry — a
-   * resource-limit error is thrown immediately, like any other error.
+   * concurrent-runs-limit-exceeded}), waiting 10 seconds between attempts. {@code true} retries
+   * until the run starts ({@link #WAIT_FOR_RESOURCES_INDEFINITELY}); {@code false} (the default)
+   * does not retry and throws the error immediately.
    */
   public ActorStartOptions waitForResources(boolean waitForResources) {
     this.waitForResourcesSecs = waitForResources ? WAIT_FOR_RESOURCES_INDEFINITELY : null;

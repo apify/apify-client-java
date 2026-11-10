@@ -60,8 +60,8 @@ class ClientMetaTest {
 
   @Test
   void userAgentOsTokenIsShortAndLowercase() {
-    // The OS token must be a short, lowercase platform identifier (linux/darwin/win32/…), matching
-    // the reference JS client's os.platform() output — never the human-readable os.name.
+    // The OS token must be a short, lowercase platform identifier (linux/darwin/win32/…), never the
+    // human-readable os.name.
     String token = ApifyClientBuilder.platformToken();
     assertFalse(token.isEmpty(), "platform token must not be empty");
     assertEquals(token.toLowerCase(Locale.ROOT), token, "token must be lowercase: " + token);

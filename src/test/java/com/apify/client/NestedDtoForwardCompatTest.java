@@ -25,13 +25,10 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 /**
- * Guards the fix for the nested-value-DTO data-loss finding: every nested value DTO now extends
- * {@link ApifyResource}, so (a) the specific spec fields the finding named as missing typed getters
- * are modelled, and (b) any *other* field the API returns that still has no typed getter is
- * reachable via {@code getExtra()} rather than silently discarded. Each assertion deserializes a
- * literal JSON fixture directly (via the same {@link Json} the client uses for real responses), not
- * just a hand-built object, so a regression that drops {@code extends ApifyResource} or a field
- * name typo is actually caught here, not only at compile time.
+ * Every nested value DTO extends {@link ApifyResource}, so its spec fields have typed getters and
+ * any other field the API returns is kept in {@code getExtra()} instead of being dropped. Each
+ * assertion deserializes a literal JSON fixture with the same {@link Json} the client uses for
+ * responses.
  */
 class NestedDtoForwardCompatTest {
 
@@ -184,9 +181,8 @@ class NestedDtoForwardCompatTest {
   }
 
   /**
-   * Every other nested value DTO in the audit (one representative per resource package) also
-   * preserves fields it has no typed getter for, instead of discarding them — the general fix, not
-   * just the three fields the finding named explicitly.
+   * One representative nested value DTO per resource package also keeps fields it has no typed
+   * getter for.
    */
   @Test
   void otherAuditedNestedDtosAlsoKeepUnknownFields() {

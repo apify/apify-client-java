@@ -15,7 +15,7 @@ All snippets assume a configured client:
 ApifyClient client = ApifyClient.create("my-api-token");
 ```
 
-`ApifyClient.create` takes the token as an explicit argument — it does not read `APIFY_TOKEN`
+`ApifyClient.create` takes the token as an explicit argument; it does not read `APIFY_TOKEN`
 automatically. Use `ApifyClient.builder()` for non-default settings (base URL, retries, timeout tiers,
 compression, default headers, user-agent suffix, custom HTTP transport). `client.withTimeout(...)`
 returns a client that sends every request with a different timeout (see
@@ -25,7 +25,7 @@ Get your API token from the
 [Apify Console → Settings → API & Integrations](https://console.apify.com/settings/integrations).
 
 Every network-calling method returns a `CompletableFuture` (`java.util.concurrent.CompletableFuture`)
-rather than blocking the calling thread — see [Asynchronous API](../README.md#asynchronous-api) in
+rather than blocking the calling thread; see [Asynchronous API](../README.md#asynchronous-api) in
 the top-level README. Methods that fetch a single resource complete with an `Optional<T>`: a missing
 resource is reported by an empty `Optional` rather than an exception. API failures surface as the
 future's exceptional completion, wrapping an `ApifyApiException` (see
@@ -34,7 +34,7 @@ future's exceptional completion, wrapping an `ApifyApiException` (see
 ## Imports and dependencies
 
 Client types are **not** all in one package: `import com.apify.client.*;` only resolves
-`ApifyClient`, its builder, and the shared kernel types below — a wildcard import does not reach
+`ApifyClient`, its builder, and the shared kernel types below; a wildcard import does not reach
 into sub-packages in Java. Every resource has its own sub-package for its client(s), model(s) and
 option types, so import each resource you use from its own package:
 
@@ -58,7 +58,7 @@ option types, so import each resource you use from its own package:
 For example, the [top-level README's dataset snippet](../README.md#quick-start) needs
 `com.apify.client.ApifyClient`, `com.apify.client.PaginationList`,
 `com.apify.client.dataset.DatasetListItemsOptions`, `com.apify.client.run.ActorRun`,
-`com.apify.client.actor.ActorStartOptions` and `tools.jackson.databind.JsonNode` — five
+`com.apify.client.actor.ActorStartOptions` and `tools.jackson.databind.JsonNode`; five
 different packages for one short snippet.
 
 Snippets in these docs also assume the standard-library types they use are imported
@@ -86,18 +86,18 @@ the run itself keeps running.
 A few methods return data whose shape is not modelled by this client and is instead exposed as a
 Jackson `JsonNode` (or accept an arbitrary `Object` serialized to JSON):
 
-- Read, returning a required `JsonNode` (never absent; a 404 throws rather than returning empty —
+- Read, returning a required `JsonNode` (never absent; a 404 throws rather than returning empty;
   see [error handling](../README.md#error-handling)): `me().monthlyUsage(...)`, `me().limits()` (and the same on `user(id)`),
   `dataset(id).getStatistics()`, `task(id).getInput()`.
 - Read, returning `Optional<JsonNode>` (empty when the underlying resource has none):
   `build(id).getOpenApiDefinition()`.
 - Write: `task(id).updateInput(...)` (itself returning a required `JsonNode`, the updated input)
   and `me().updateLimits(...)` accept an arbitrary JSON-serializable value, as do
-  definition/`update`/`create` arguments generally — a `Map`, a `JsonNode`, or your own POJO.
+  definition/`update`/`create` arguments generally; a `Map`, a `JsonNode`, or your own POJO.
 - A few typed models still carry one or more raw-JSON fields where the shape is a discriminated
   union (or otherwise not worth fully modelling): `RequestQueueRequest.getUserData()`,
   `Webhook.getCondition()`, `Schedule.getActions()` (a `List<JsonNode>`), `Task.getInput()` (the
-  task's stored input, on the `Task` model itself — distinct from the live-fetching
+  task's stored input, on the `Task` model itself; distinct from the live-fetching
   `task(id).getInput()` client call listed above), and `ActorRun`, which carries two:
   `getPricingInfo()` and `getStorageIds()`.
 
@@ -106,22 +106,22 @@ Navigate a `JsonNode` with `node.get("field")`, `node.path("a").asText()`, etc.
 The request-queue lock/list operations (`listRequests`, `listAndLockHead`, `prolongRequestLock`,
 `unlockRequests`, `batchDeleteRequests`) return typed models (`RequestsList`,
 `LockedRequestQueueHead`, `RequestLockInfo`, `UnlockRequestsResult`, `BatchDeleteResult`) rather
-than raw `JsonNode` — see [Storages](storages.md#request-queues).
+than raw `JsonNode`; see [Storages](storages.md#request-queues).
 
 ## What `ApifyResource` is
 
-`ApifyResource` (root package) is the base class every response model extends — both the top-level
+`ApifyResource` (root package) is the base class every response model extends; both the top-level
 resources (`Actor`, `Dataset`, `Schedule`, `ActorRun`, and so on) and the nested value DTOs embedded
 in them (`ActorRunStats`, `ActorRunMeta`, `BuildStats`, `WebhookStats`, `UserProfile`, `PricingInfo`,
 and every other nested model in this client). It has no fields of its own beyond the `extra` map
 described below; it exists purely so every model shares one place to capture unmodelled API fields,
-and so code that only needs the common capability (rare — most call sites use a concrete model type
+and so code that only needs the common capability (rare; most call sites use a concrete model type
 directly) can accept `ApifyResource` rather than a specific model.
 
 ## Model fields and unmodeled data (`getExtra`)
 
 Response models expose the commonly-used fields as typed getters. The API returns more fields than
-are modelled; every model — including nested value DTOs, not only the top-level resources — also
+are modelled; every model, including nested value DTOs, not only the top-level resources, also
 carries a `getExtra()` map (`Map<String, Object>`, inherited from `ApifyResource` above) holding any
 field not mapped to a typed getter, so nothing the API returns is lost, now or as the API grows new
 fields later. For example a `me()` `User`'s private account details (email, plan, proxy settings,
@@ -154,11 +154,11 @@ ActorListOptions options = new ActorListOptions().my(true).limit(10L);
 PaginationList<Actor> page = client.actors().list(options).join();
 ```
 
-## Common list options — `ListOptions`
+## Common list options: `ListOptions`
 
 Most `list` methods (builds, tasks, schedules, webhooks, Actor versions) take the shared
 `ListOptions`, which carries the standard pagination/ordering controls. Runs additionally take a
-`RunListOptions` status filter — `runs().list(ListOptions, RunListOptions)`; see [Runs](runs.md).
+`RunListOptions` status filter; `runs().list(ListOptions, RunListOptions)`; see [Runs](runs.md).
 
 | Method | Type | Meaning |
 |---|---|---|
@@ -170,7 +170,7 @@ Most `list` methods (builds, tasks, schedules, webhooks, Actor versions) take th
 PaginationList<Build> builds = client.builds().list(new ListOptions().limit(50L).desc(true)).join();
 ```
 
-## Pagination — `PaginationList<T>`
+## Pagination: `PaginationList<T>`
 
 `list` methods return a `PaginationList<T>` page with `getTotal()`, `getOffset()`, `getLimit()`,
 `getCount()`, `isDesc()` and `getItems()`. `getCount()` is the number of entries on the page. On a
@@ -180,7 +180,7 @@ The next page starts at `offset + Math.min(count, limit)`; the cap matters only 
 can return more items than the rows scanned. Within-storage listers (`listKeys`, `listHead`) return
 their own page/head containers instead.
 
-## Iteration — `iterate` / `iterateItems` / `iterateKeys`
+## Iteration: `iterate` / `iterateItems` / `iterateKeys`
 
 Each paginated collection also offers a lazy `Flow.Publisher` (`java.util.concurrent.Flow.Publisher`,
 the JDK's built-in Reactive Streams type) that fetches pages only as the subscriber signals demand:
@@ -190,13 +190,13 @@ the JDK's built-in Reactive Streams type) that fetches pages only as the subscri
 that is the rows each page covers (`PaginationList.getCount()`, capped at the page limit that was
 requested). That is the number of items yielded, unless a page's count differs from its items:
 filtered or unwound dataset items, or a Store list that drops entries after counting them.
-`null`/unset — or a non-positive value such as `0` — means no cap, so every item is yielded. (This
+`null`/unset, or a non-positive value such as `0`, means no cap, so every item is yielded. (This
 differs from `list(...)`, which sends `limit=0` to the server verbatim rather than treating it as
-unbounded — the iteration behavior matches the reference JS client.) The per-request
+unbounded.) The per-request
 page size is an optional trailing `chunkSize` argument: the per-resource tables below show the
 `chunkSize` form, and each publisher also has an overload that omits it (using the server's default
 page size). The page size does not change which items a collection publisher yields; note the one
-exception in [Storages](storages.md) — `iterateItems` combined with server-side item filters, where
+exception in [Storages](storages.md); `iterateItems` combined with server-side item filters, where
 the page size can affect the result.
 
 Consume a publisher either by implementing `Flow.Subscriber<T>` yourself (see

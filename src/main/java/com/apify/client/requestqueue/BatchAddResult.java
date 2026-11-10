@@ -22,11 +22,8 @@ public final class BatchAddResult extends ApifyResource {
   }
 
   /**
-   * Appends another result's requests into this one (used to merge per-chunk batch results).
-   * Tolerates {@code other}'s lists being {@code null} (Jackson assigns the field directly on an
-   * explicit {@code "processedRequests": null}/{@code "unprocessedRequests": null} response,
-   * bypassing the constructor's empty-list default), mirroring {@link #getProcessedRequests()}/
-   * {@link #getUnprocessedRequests()}'s own null-coalescing.
+   * Appends the requests of another result, which may have {@code null} lists when the API returned
+   * an explicit {@code null}.
    */
   void merge(BatchAddResult other) {
     if (other.processedRequests != null) {

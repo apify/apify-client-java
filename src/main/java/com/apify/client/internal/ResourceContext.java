@@ -181,10 +181,8 @@ public final class ResourceContext {
   public <T> CompletableFuture<Optional<T>> getResource(
       String subPath, QueryParams params, JavaType dataType, Timeout timeout) {
     // ofNullable, not of: an HTTP 200 with body {"data": null} unwraps to null, which is a valid
-    // "no resource" answer rather than a programming error — never surface it as a raw NPE.
-    // Explicit <T> witness: getResourceRequired is the *receiver* of .handle below (not an argument
-    // to another generic call), so unlike a direct `return`, its type parameter cannot be inferred
-    // from the surrounding target type and must be pinned here.
+    // "no resource" answer, not an NPE.
+    // The explicit <T> is needed because the type cannot be inferred for a method-call receiver.
     return this.<T>getResourceRequired(subPath, params, dataType, timeout)
         .handle(
             (value, error) -> {
@@ -709,17 +707,9 @@ public final class ResourceContext {
   }
 
   /**
-   * Encodes a resource id so it is safe to embed in a URL path. Apify uses the {@code
-   * username~resourcename} form, so every {@code /} in an id is replaced with {@code ~} (not just
-   * the first: an id with more than one slash must not leave any literal {@code /} that could
-   * restructure the request path).
-   *
-   * <p>Public (not just intra-package) because {@code RunClient#metamorph} in the {@code .run}
-   * package needs to apply the same normalization to a resource id supplied as an argument value
-   * (as opposed to the id embedded in this client's own URL path, which {@link #single} already
-   * normalizes internally) — a cross-package caller of internal plumbing, same pattern as every
-   * other member here promoted narrowly for a specific caller (see the package-split rationale in
-   * this class's other narrowly-public members).
+   * Encodes a resource id for a URL path: Apify uses the {@code username~resourcename} form, so
+   * every {@code /} is replaced with {@code ~}. Public because {@code RunClient#metamorph}
+   * normalizes an id passed as an argument.
    */
   public static String toSafeId(String id) {
     return id.replace('/', '~');

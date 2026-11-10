@@ -29,15 +29,10 @@ public final class ActorVersionCollectionClient {
   }
 
   /**
-   * Returns a publisher over the Actor's versions. Unlike the paginated collection publishers, this
-   * fetches eagerly: the single request runs when {@code iterate} is called, not on first demand.
-   * That's because {@code GET /v2/actors/{actorId}/versions} is not offset/limit paginated at all —
-   * it takes no pagination parameters and always returns the full version list in one {@code
-   * {total, items}} response, so routing it through the offset/limit paging engine would loop
-   * forever (the server returns the same non-empty page at every offset; this is why the sibling
-   * non-paginated {@code env-vars} collection is also a single-fetch publisher). The options'
-   * {@code limit} still caps the number yielded ({@code null} or non-positive = all); {@code
-   * offset} has no effect and there is no page size to tune.
+   * Returns a publisher over the Actor's versions. The endpoint is not paginated, so the single
+   * request runs when {@code iterate} is called, not on first demand. The {@code limit} of {@code
+   * options} caps the number yielded ({@code null} or non-positive means all); {@code offset} has
+   * no effect.
    */
   public Flow.Publisher<ActorVersion> iterate(ListOptions options) {
     ListOptions opts = options != null ? options : new ListOptions();

@@ -86,8 +86,7 @@ class TaskIntegrationTest extends IntegrationBase {
                       .anyMatch(t -> task.getId().equals(t.getId())));
       assertTrue(foundInList, "expected the just-created task to appear in the top-level list");
 
-      // Typed getters (previously only reachable via getExtra()): verify the API's response
-      // actually deserializes into them, not just that the code compiles.
+      // Typed getters: verify the API's response deserializes into them.
       assertEquals("Integration test task", task.getDescription());
       assertTrue(task.getStats() != null);
       assertTrue(task.getOptions() != null && "latest".equals(task.getOptions().getBuild()));
@@ -142,9 +141,8 @@ class TaskIntegrationTest extends IntegrationBase {
       assertTrue(lastRun.isPresent());
       assertEquals(run.getId(), lastRun.get().getId());
 
-      // Last-run-scoped nested storage GETs (previously untested — only `lastRun().get()` itself
-      // was). This task is exclusively owned by this test, so `lastRun` is deterministically the
-      // run started above and its default storages are guaranteed to exist.
+      // Last-run-scoped nested storage GETs. The task is owned by this test, so the last run is the
+      // one started above.
       tc.lastRun("SUCCEEDED").dataset().listItems(new DatasetListItemsOptions()).join();
       tc.lastRun("SUCCEEDED").keyValueStore().getRecord("OUTPUT").join();
       assertTrue(tc.lastRun("SUCCEEDED").log().get().join().isPresent());
@@ -165,9 +163,8 @@ class TaskIntegrationTest extends IntegrationBase {
     try {
       TaskClient tc = client.task(task.getId());
       List<String> collected = new CopyOnWriteArrayList<>();
-      // The log-streaming call() overload (TaskCallOptions), matching the reference client's
-      // default call(options.log='default') behavior: the run's log is streamed for the duration
-      // of the wait without any explicit opt-in.
+      // The log-streaming call() overload (TaskCallOptions) streams the run's log during the wait
+      // without an explicit opt-in.
       ActorRun run =
           tc.call(
                   null,
@@ -175,16 +172,8 @@ class TaskIntegrationTest extends IntegrationBase {
                   TEST_ACTOR_WAIT_SECS)
               .join();
       assertEquals("SUCCEEDED", run.getStatus());
-      // As in ActorRunIntegrationTest#callWithActorCallOptionsStreamsLogByDefault: call()'s
-      // internal log-streaming lifecycle closes the stream as soon as the run finishes, which can
-      // race the background reader before it has pulled any bytes off the live log stream, even
-      // though the log content is already fully available server-side. Gate the assertion on
-      // whether the run actually produced a log at all - via the call()-default variant, which
-      // never
-      // rescues via a separate explicit stream, so a genuinely broken default-streaming wiring
-      // still
-      // fails here rather than being masked.
-      assertCallDefaultStreamedLogNonEmptyIfProduced(client.run(run.getId()), collected);
+      // The assertion applies only if the run logged anything.
+      assertStreamedLogNonEmptyIfProduced(client.run(run.getId()), collected);
     } finally {
       client.task(task.getId()).delete().join();
     }
