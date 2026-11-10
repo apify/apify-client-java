@@ -167,8 +167,8 @@ rec.ifPresent(r -> System.out.println(new String(r.getValue())));
 `SetRecordOptions.contentEncoding(String)` names an encoding already applied to `value` (e.g.
 `"gzip"` for a pre-compressed file), sent as the `Content-Encoding` header (trimmed first); the
 client then sends the bytes as they are and does not compress them again, and the API accepts
-`gzip`, `br`, `zstd`, `deflate`, or `identity` (matched case-insensitively — `identity` turns the client's
-own automatic compression off for this upload). It must not be blank after trimming. The record is
+`gzip`, `br`, `zstd`, `deflate`, or `identity` (matched case-insensitively; `identity` turns the
+client's own automatic compression off for this upload). It must not be blank after trimming. The record is
 stored exactly as uploaded, but since this client sends no `Accept-Encoding`, a later
 `getRecord(...)` transparently receives the decompressed value rather than the stored compressed
 bytes.

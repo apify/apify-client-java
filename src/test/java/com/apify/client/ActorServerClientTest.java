@@ -261,6 +261,7 @@ class ActorServerClientTest {
         .join();
 
     TestHttpServer.Received request = serverRequests().get(0);
+    // Exactly one value: the header set with header(...) is replaced, not sent next to it.
     assertEquals("parent-id", request.header("X-Actor-Request-ID"));
   }
 

@@ -164,7 +164,7 @@ public final class ApifyClientBuilder {
    * Sets how request bodies of at least 1 KiB are compressed (default {@link
    * com.apify.client.http.BrotliHttpCompressor} where its native library is available, {@link
    * com.apify.client.http.GzipHttpCompressor} elsewhere). Pass a configured {@code
-   * BrotliHttpCompressor}, {@code GzipHttpCompressor} or {@code ZstdHttpCompressor} to tune the
+   * BrotliHttpCompressor}, {@code GzipHttpCompressor}, or {@code ZstdHttpCompressor} to tune the
    * quality, or your own {@link HttpCompressor}.
    */
   public ApifyClientBuilder compression(HttpCompressor compression) {

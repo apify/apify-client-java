@@ -9,7 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `ZstdHttpCompressor` (level 1-19, default 3) for `Content-Encoding: zstd` request bodies. It needs the optional `com.github.luben:zstd-jni` dependency; `ZstdHttpCompressor.isAvailable()` tells whether it loaded.
+- `ZstdHttpCompressor` for `Content-Encoding: zstd` request bodies (optional `com.github.luben:zstd-jni` dependency).
 - `ActorServerRequestOptions.parentRequestId(String)`, sent as the `X-Actor-Request-ID` header so a called multi-tenant Server Actor charges at the pricing tier of the incoming request.
 
 ### Changed

@@ -15,7 +15,8 @@ public final class ZstdHttpCompressor implements HttpCompressor {
 
   /**
    * zstd goes up to 22, but levels 20 to 22 use a window above the 8 MB that RFC 9659 requires HTTP
-   * decoders to support, so the output could fail to decode in a browser.
+   * decoders to support. A record stored at those levels and served with {@code Content-Encoding:
+   * zstd} could fail to decode in a browser.
    */
   private static final int MAX_LEVEL = 19;
 

@@ -242,11 +242,27 @@ already did: a started run keeps running (abort it with `RunClient.abort(...)`).
 
 Request bodies of at least 1 KiB with a compressible content type are compressed with the
 configured `HttpCompressor`: `BrotliHttpCompressor` (quality 0-11, default 6; used by default where
-its native library is available), `GzipHttpCompressor` (level 1-9, default 6) or
-`ZstdHttpCompressor` (level 1-19, default 3; needs the optional `com.github.luben:zstd-jni`
-dependency), or your own implementation of the interface. A failing compressor fails the request; the client does not fall
-back to another coding. A body that already carries a `Content-Encoding`, and already-compressed
-content types (images, archives, ...), are sent as they are.
+its native library is available), `GzipHttpCompressor` (level 1-9, default 6), `ZstdHttpCompressor`
+(level 1-19, default 3), or your own implementation of the interface. A failing compressor fails
+the request; the client does not fall back to another coding. A body that already carries a
+`Content-Encoding`, and already-compressed content types (images, archives, ...), are sent as they
+are.
+
+`ZstdHttpCompressor` is opt-in and needs the optional `zstd-jni` dependency, which bundles its
+native libraries. On the module path, also add `requires com.github.luben.zstd_jni;`.
+
+```xml
+<dependency>
+  <groupId>com.github.luben</groupId>
+  <artifactId>zstd-jni</artifactId>
+  <version>1.5.7-4</version>
+</dependency>
+```
+
+```java
+ApifyClient client =
+    ApifyClient.builder().token("MY-APIFY-TOKEN").compression(new ZstdHttpCompressor()).build();
+```
 
 `header(name, value)` adds a header to every request, such as an integration platform marker. It
 replaces a built-in header of the same name (`User-Agent`, `Authorization`) and is replaced by a
@@ -421,7 +437,7 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION` — the semantic version of this client (`0.14.0`).
+- `Version.CLIENT_VERSION`: the semantic version of this client (`0.14.0`).
 - `Version.API_SPEC_VERSION` — the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters and models were last generated
   and checked against (`v2-2026-11-09T143926Z`). It is a snapshot, not a live compatibility

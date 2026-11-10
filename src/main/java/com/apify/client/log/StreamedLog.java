@@ -247,8 +247,7 @@ public final class StreamedLog implements AutoCloseable {
     InputStream stream;
     try {
       // The API serves the log of a run that has not logged yet as a stream that ends at once.
-      // Reopen
-      // it until a byte arrives, so a queued or starting run is not given up on.
+      // Reopen it until a byte arrives, so a queued or starting run is not given up on.
       stream = awaitNonEmptyStream();
     } catch (IOException e) {
       if (!stopLogging) {
@@ -301,6 +300,7 @@ public final class StreamedLog implements AutoCloseable {
       }
     } finally {
       // Clears a pending wake-up interrupt so it does not leak into the consumer.
+      Thread.interrupted();
       // Flush on stream end and on a stop mid-read: emitMessages holds back the last message and a
       // stop skips the loop body. Skipped once a consumer has thrown.
       if (!forwardingFailed) {

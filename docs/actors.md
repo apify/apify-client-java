@@ -134,9 +134,8 @@ Actor's `standbyUrl` and `actorStandby` fields.
 parameters, converted as for API calls: `null` is left out, a boolean is sent as `1`/`0`, a
 collection comma-joined), `header(String, String)`/`headers(Map)`, `body(Object)` (a `byte[]` or
 `String` is sent as it is; anything else is serialized to JSON and sent as `application/json`
-unless you set a `Content-Type` header), `parentRequestId(String)` (the `X-Actor-Request-ID` header of
-the request your multi-tenant Server Actor is handling, sent on as the same header so the called
-Actor charges at that request's pricing tier; use a client created with the run's `APIFY_TOKEN`),
+unless you set a `Content-Type` header), `parentRequestId(String)` (see
+[Calling a Server Actor from a Server Actor](#calling-a-server-actor-from-a-server-actor)),
 `compression(HttpCompressor)` and `timeout(Timeout)`
 (`Timeout.LONG` by default, since the first request to an idle Actor waits for the platform to
 start a server run).
@@ -199,6 +198,30 @@ directory inside the uploaded source (for example `actors/typescript-actor` in a
 you create or update them; `ActorVersion.getActorPath()` and `BuildActVersion.getActorPath()` read
 it. An update that sends `sourceType`, `sourceFiles` or `tarballUrl` without `actorPath` removes the
 stored one, so send it again with every upload.
+
+### Calling a Server Actor from a Server Actor
+
+A multi-tenant Server Actor shares the developer's runs among its users, so the platform tells
+requests apart by an ID it sends in the `X-Actor-Request-ID` header of each request it forwards to
+the Actor. The Actor uses it to charge the caller of the request and to pass the caller's pricing
+tier on to the Actors it calls.
+
+When your multi-tenant Server Actor calls another one while handling a request, pass the incoming
+`X-Actor-Request-ID` header value as `parentRequestId`. The client sends it as the same header, so
+the called Actor charges at the pricing tier of your incoming request. Use a client created with
+the run's `APIFY_TOKEN`. See [Compose multi-tenant Server Actors](https://docs.apify.com/platform/actors/development/programming-interface/standby#compose-server-actors).
+
+```java
+// requestId is the X-Actor-Request-ID header value of the request your Actor is handling.
+String requestId = "7Hs2kQw9LxP4mN1vB";
+ApiResponse response =
+    client
+        .actor("username/other-actor")
+        .server()
+        .request("/search", new ActorServerRequestOptions().param("q", "apify").parentRequestId(requestId))
+        .join();
+System.out.println(response.statusCode());
+```
 
 ## `ActorVersionClient` and `ActorVersionCollectionClient`
 

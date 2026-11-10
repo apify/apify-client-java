@@ -124,8 +124,11 @@ final class TestHttpServer implements AutoCloseable {
     Map<String, String> headers = new TreeMap<>();
     for (String line = readLine(in); line != null && !line.isEmpty(); line = readLine(in)) {
       int colon = line.indexOf(':');
-      headers.put(
-          line.substring(0, colon).toLowerCase(Locale.ROOT), line.substring(colon + 1).trim());
+      // Repeated headers are joined with a comma, so a duplicate sent by mistake stays visible.
+      headers.merge(
+          line.substring(0, colon).toLowerCase(Locale.ROOT),
+          line.substring(colon + 1).trim(),
+          (first, second) -> first + ", " + second);
     }
     int length = Integer.parseInt(headers.getOrDefault("content-length", "0"));
     byte[] body = in.readNBytes(length);

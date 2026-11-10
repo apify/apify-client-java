@@ -19,7 +19,7 @@
   2. UWF_UNWRITTEN_FIELD / UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD on Jackson-populated DTOs/response
      shapes ({@code KeyValueStoreKey}, {@code DeletedRequestInfo}, {@code ActorRunMeta}, {@code
      TaskOptions}, {@code WebhookLastDispatch}, {@code ActorDefaultRunOptions}, {@code ActorRunStandby}, {@code TaskStats}, {@code BuildActVersion},
-     {@code ActorDefinitionMeta}, {@code ActorDefinitionStorages},
+     {@code ActorDefinitionMeta}, {@code ActorDefinitionStorages}, {@code SourceCodeFile},
      {@code BuildMeta}, {@code BuildOptions}, {@code BuildStats}, {@code PricingInfo}, {@code ProxyGroup}, {@code
      UserProxy}, {@code WebhookDispatchEventData}, {@code WebhookDispatchWebhookInfo}, the internal
      error-response mapping in {@code HttpClientCore}): their fields are written by the

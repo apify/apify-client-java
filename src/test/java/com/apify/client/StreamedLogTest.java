@@ -235,6 +235,33 @@ class StreamedLogTest {
   }
 
   @Test
+  void flushesTheLastMessageWithoutAnInterruptPendingOnTheReaderThread() {
+    BlockingStream stream = new BlockingStream("2999-01-01T00:00:00.000Z a\n");
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(200, stream);
+    List<Boolean> interruptedPerMessage = new CopyOnWriteArrayList<>();
+    StreamedLog streamedLog =
+        client(backend)
+            .run("run123")
+            .getStreamedLog(
+                new StreamedLogOptions()
+                    .toLog(
+                        message ->
+                            interruptedPerMessage.add(Thread.currentThread().isInterrupted())))
+            .join();
+    streamedLog.start().join();
+    // The reader has consumed the body and blocks, holding back "a" as the last message.
+    pollUntil(REDIRECT_POLL_ATTEMPTS, REDIRECT_POLL_MILLIS, stream::isBlocked);
+
+    streamedLog.stop();
+
+    assertEquals(
+        List.of(false),
+        interruptedPerMessage,
+        "stop() interrupts the reader; the flush must not run the consumer interrupted");
+  }
+
+  @Test
   void closeAfterStopIsNoOp() throws InterruptedException {
     // Sequential idempotency: after an explicit stop() (which nulls the running thread), a trailing
     // close() - e.g. from try-with-resources - and any repeat close() must be no-ops, not throws,
@@ -487,8 +514,14 @@ class StreamedLogTest {
     private int pos;
     private final CountDownLatch closed = new CountDownLatch(1);
 
+    private volatile boolean blocked;
+
     BlockingStream(String data) {
       this.data = data.getBytes(StandardCharsets.UTF_8);
+    }
+
+    boolean isBlocked() {
+      return blocked;
     }
 
     @Override
@@ -501,6 +534,7 @@ class StreamedLogTest {
       }
       // Payload exhausted: block like a live stream awaiting more bytes, until close() unblocks us.
       try {
+        blocked = true;
         closed.await();
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
