@@ -204,7 +204,7 @@ public final class DatasetClient {
   /**
    * Downloads dataset items serialized in the given format, returning the raw bytes. Unlike {@link
    * #listItems} (parsed items), this returns the items already serialized to JSON, CSV, XLSX, XML,
-   * RSS or HTML — useful for exporting.
+   * RSS or HTML, which is useful for exporting.
    */
   public CompletableFuture<byte[]> downloadItems(
       DownloadItemsFormat format, DatasetDownloadOptions options) {
@@ -253,8 +253,8 @@ public final class DatasetClient {
    */
   public CompletableFuture<Void> pushItems(Object items) {
     byte[] body = items instanceof String json ? serializedItems(json) : serializedItems(items);
-    // Route through mergedParams like every sibling method, so a context seeded with pinned filters
-    // (e.g. actor(id).lastRun(...).dataset()) targets the same run's dataset on write as on read.
+    // mergedParams applies pinned run filters, so a lastRun(...).dataset() client writes to the
+    // same dataset it reads.
     String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("items"));
     return http.call(
             "POST", url, body, ResourceContext.CONTENT_TYPE_JSON_CHARSET, Timeout.MEDIUM, true)
@@ -355,11 +355,9 @@ public final class DatasetClient {
                   params.addString("signature", sig);
                 }
               }
-              // Mirror the JS reference: the public URL is this client's resource path plus the
-              // signature (over the resolved concrete dataset id) and the explicit options — the
-              // seeded status/origin filters are deliberately not carried. On a last-run-nested
-              // client this keeps the unpinned ".../runs/last/dataset" path; see docs/storages.md
-              // for that limitation.
+              // The public URL is the resource path, the explicit options and the signature of the
+              // resolved dataset id. Seeded filters are not carried, so a last-run client keeps the
+              // unpinned ".../runs/last/dataset" path; see docs/storages.md.
               return params.applyToUrl(ctx.publicUrl("items"));
             });
   }

@@ -105,10 +105,9 @@ public final class KeyValueStoreClient {
   }
 
   /**
-   * Lazily publishes a store's keys via the cursor-based ({@code exclusiveStartKey}) listing,
-   * fetching a page only once the subscriber has signalled demand for it. Supports a single
-   * subscriber, like {@link com.apify.client.internal.AsyncPaginatedPublisher}, whose draining
-   * design this mirrors (cursor pagination instead of offset/limit is the only real difference).
+   * Publishes the store's keys page by page through the cursor-based ({@code exclusiveStartKey})
+   * listing, as the subscriber signals demand. Like {@link
+   * com.apify.client.internal.AsyncPaginatedPublisher}, it supports a single subscriber.
    */
   private final class KeysPublisher implements Flow.Publisher<KeyValueStoreKey> {
     private final Long chunkSize;
@@ -287,8 +286,8 @@ public final class KeyValueStoreClient {
   }
 
   /**
-   * Fetches a record by key, or empty if it does not exist. Like the reference client, it requests
-   * the record as an attachment so the API returns the raw bytes directly rather than redirecting.
+   * Fetches a record by key, or empty if it does not exist. The record is requested as an
+   * attachment, so the API returns the raw bytes instead of redirecting.
    */
   public CompletableFuture<Optional<KeyValueStoreRecord>> getRecord(String key) {
     return getRecord(key, new GetRecordOptions().attachment(true));
@@ -323,8 +322,7 @@ public final class KeyValueStoreClient {
    */
   public CompletableFuture<Void> setRecord(
       String key, byte[] value, String contentType, SetRecordOptions options) {
-    // Trimmed before validating/forwarding, matching the reference client's
-    // z.string().trim().min(1) schema (it sends the trimmed value, not the original).
+    // The trimmed value is validated and sent.
     String contentEncoding = options.contentEncodingValue();
     if (contentEncoding != null) {
       contentEncoding = contentEncoding.trim();
@@ -371,9 +369,8 @@ public final class KeyValueStoreClient {
                   params.addString("signature", Signatures.createHmacSignature(secret, key));
                 }
               }
-              // Public URL = resource path + signature only, matching the JS reference.
-              // Seeded filters are not carried; see DatasetClient.createItemsPublicUrl and
-              // docs/storages.md for the last-run caveat.
+              // The public URL is the resource path plus the signature. Seeded filters are not
+              // carried; see docs/storages.md for the last-run caveat.
               return params.applyToUrl(
                   ctx.publicUrl("records/" + ResourceContext.encodePathSegment(key)));
             });
@@ -421,8 +418,8 @@ public final class KeyValueStoreClient {
                       Signatures.signStorageContent(secret, store.get().getId(), expiresInSecs));
                 }
               }
-              // Public URL = resource path + the explicit key-listing options + signature, matching
-              // the JS reference (see the last-run caveat documented in docs/storages.md).
+              // The public URL is the resource path, the explicit options and the signature (see
+              // the last-run caveat in docs/storages.md).
               return params.applyToUrl(ctx.publicUrl("keys"));
             });
   }

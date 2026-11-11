@@ -26,7 +26,7 @@ public final class RunChargeOptions {
 
   /**
    * A key that deduplicates the charge across retries. If unset, one is auto-generated as {@code
-   * "{runId}-{eventName}-{timestampMillis}-{random}"}, matching the reference client.
+   * "{runId}-{eventName}-{timestampMillis}-{random}"}.
    */
   public RunChargeOptions idempotencyKey(String idempotencyKey) {
     this.idempotencyKey = idempotencyKey;
@@ -36,7 +36,7 @@ public final class RunChargeOptions {
   /**
    * The ID of the Server Actor request being charged, taken from the {@code X-Actor-Request-ID}
    * header of the incoming request. Required for multi-tenant Server Actor runs, where it
-   * identifies the request the charge belongs to; omit it otherwise.
+   * identifies the request the charge belongs to. Runs of single-tenant Server Actors ignore it.
    */
   public RunChargeOptions requestId(String requestId) {
     this.requestId = requestId;

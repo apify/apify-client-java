@@ -249,6 +249,23 @@ class ActorServerClientTest {
   }
 
   @Test
+  void requestSendsParentRequestIdAsTheActorRequestIdHeaderOverOnePassedInHeaders() {
+    client()
+        .actor(ACTOR_ID)
+        .server()
+        .request(
+            "/",
+            new ActorServerRequestOptions()
+                .header("x-actor-request-id", "stale")
+                .parentRequestId("parent-id"))
+        .join();
+
+    TestHttpServer.Received request = serverRequests().get(0);
+    // Exactly one value: the header set with header(...) is replaced, not sent next to it.
+    assertEquals("parent-id", request.header("X-Actor-Request-ID"));
+  }
+
+  @Test
   void requestReturnsARedirectOfTheServerAsItIsSoTheTokenNeverReachesItsTarget()
       throws IOException {
     for (HttpTransport transport :

@@ -23,22 +23,22 @@ builds) and a single build with `client.build(id)`.
 | `log()` | A `LogClient` for the build's log. |
 
 `Build` fields: `getId()`, `getActId()`, `getUserId()`, `getStatus()`, `getStartedAt()`,
-`getFinishedAt()`, `getBuildNumber()`, `getActVersion()` (`BuildActVersion` — `getSourceType()`, `getBuildTag()`
-(nullable), `getVersionNumber()`, `getGitRepoUrl()`, `getSourceFiles()` (`List<SourceCodeFile>` — `getName()`,
-`getFormat()`, `getContent()`)), `getActorDefinition()` (`ActorDefinition`, nullable — the Actor's `.actor/actor.json` at build time:
+`getFinishedAt()`, `getBuildNumber()`, `getActVersion()` (`BuildActVersion`: `getSourceType()`, `getBuildTag()`
+(nullable), `getVersionNumber()`, `getGitRepoUrl()`, `getSourceFiles()` (`List<SourceCodeFile>`: `getName()`,
+`getFormat()`, `getContent()`)), `getActorDefinition()` (`ActorDefinition`, nullable; the Actor's `.actor/actor.json` at build time:
 `getActorSpecification()`, `getName()`, `getTitle()`, `getDescription()`, `getVersion()`, `getBuildTag()`,
-`getMeta()` (`ActorDefinitionMeta` — `getTemplateId()`, `getGeneratedBy()`), `getEnvironmentVariables()`,
+`getMeta()` (`ActorDefinitionMeta`: `getTemplateId()`, `getGeneratedBy()`), `getEnvironmentVariables()`,
 `getDockerfile()`, `getDockerContextDir()`, `getReadme()`, `getInput()`/`getOutput()` (`JsonNode` schemas),
-`getChangelog()`, `getStorages()` (`ActorDefinitionStorages` — `getDataset()`, `getDatasets()`,
+`getChangelog()`, `getStorages()` (`ActorDefinitionStorages`: `getDataset()`, `getDatasets()`,
 `getKeyValueStore()`), `getDefaultMemoryMbytes()` (`JsonNode`, an integer or a dynamic memory
 expression), `getMinMemoryMbytes()`, `getMaxMemoryMbytes()`, `getUsesStandbyMode()`, `getWebServerSchema()`,
-`getWebServerMcpPath()`), `getImageDigest()` (`String`, nullable — the built Docker
+`getWebServerMcpPath()`), `getImageDigest()` (`String`, nullable: the built Docker
 image manifest's digest, without the `sha256:` prefix; compare two builds' digests to tell whether
-their image contents differ), `getMeta()` (`BuildMeta` — `getOrigin()`, `getClientIp()`,
-`getUserAgent()`), `getStats()` (`BuildStats` — `getDurationMillis()`/`getRunTimeSecs()` as `Long`,
-`getComputeUnits()` as `Double`, `getImageSizeBytes()` as `Long`), `getOptions()` (`BuildOptions` —
+their image contents differ), `getMeta()` (`BuildMeta`: `getOrigin()`, `getClientIp()`,
+`getUserAgent()`), `getStats()` (`BuildStats`: `getDurationMillis()`/`getRunTimeSecs()` as `Long`,
+`getComputeUnits()` as `Double`, `getImageSizeBytes()` as `Long`), `getOptions()` (`BuildOptions`:
 `getUseCache()`/`getBetaPackages()` as `Boolean`, `getMemoryMbytes()`/`getDiskMbytes()` as `Long`),
-`getUsage()` / `getUsageUsd()` (`BuildUsage` — `getActorComputeUnits()` as `Double`, the latter as
+`getUsage()` / `getUsageUsd()` (`BuildUsage`: `getActorComputeUnits()` as `Double`, the latter as
 its USD cost), `getUsageTotalUsd()` (`Double`), plus `isTerminal()` and `getExtra()`. The status is
 one of `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `TIMING-OUT`, `TIMED-OUT`, `ABORTING`, `ABORTED`.
 Every nested model above (`BuildActVersion`, `ActorDefinition`, `ActorDefinitionMeta`, `ActorDefinitionStorages`, `BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage`) also has its own
@@ -56,18 +56,18 @@ if (finished.isTerminal()) {
 source* to build, matching one of the version numbers under `client.actor(id).versions()`.
 `ActorBuildOptions.tag(...)` is unrelated to that: it is the *build tag* (e.g. `"latest"`, `"beta"`)
 stamped onto the resulting build, which is what `ActorStartOptions.build(...)` /
-`Actor.defaultBuild(...)` later resolve by name — a version can be rebuilt many times under the
+`Actor.defaultBuild(...)` later resolve by name; a version can be rebuilt many times under the
 same tag, with each new build replacing which build that tag currently points to.
 
 `ActorBuildOptions` fields (all optional): `betaPackages` (`Boolean`; if `true`, use beta versions
 of Apify packages instead of the latest stable ones), `tag` (`String`; the build tag to apply, e.g.
-`"latest"` — see above), `useCache` (`Boolean`; whether to reuse the Docker build cache, default
+`"latest"`; see above), `useCache` (`Boolean`; whether to reuse the Docker build cache, default
 `true`), `waitForFinish` (`Long`; maximum seconds to wait server-side for the build to finish
-before the API responds, max 60 — see `defaultBuild` below for the same wait model).
+before the API responds, max 60; see `defaultBuild` below for the same wait model).
 
 `ActorClient.defaultBuild(Long waitForFinish)` resolves the Actor's currently-tagged default build
 (the build behind the `"latest"`/`"default"` tag, i.e. what a plain `start`/`call` with no explicit
-`build` would run) and completes with a `BuildClient` handle for it — it does not itself return the
+`build` would run) and completes with a `BuildClient` handle for it; it does not itself return the
 `Build` object. `waitForFinish` only bounds how long the *resolving GET* waits server-side for that build to
 finish before responding (`null`/`0` returns immediately with whatever state the build is
 currently in); it does not make `defaultBuild` block until the build is done. To actually observe

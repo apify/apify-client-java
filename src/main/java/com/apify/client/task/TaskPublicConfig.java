@@ -12,9 +12,7 @@ import java.util.List;
  * null}. {@code publishedAt} is read-only - use {@link TaskClient#publish()} and {@link
  * TaskClient#unpublish()} to change the publication state.
  *
- * <p>{@link #getCategorization()} is not part of the documented {@code TaskPublicConfig} schema in
- * the OpenAPI spec, but is kept here for parity with the reference JS client, which also exposes
- * it. Every other field below is part of the documented schema.
+ * <p>{@link #getCategorization()} is not in the OpenAPI schema of {@code TaskPublicConfig}.
  */
 public final class TaskPublicConfig extends ApifyResource {
   private Instant publishedAt;

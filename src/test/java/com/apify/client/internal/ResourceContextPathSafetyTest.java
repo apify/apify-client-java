@@ -7,8 +7,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Pins {@link ResourceContext#toSafeId} and {@link ResourceContext#encodePathSegment} against
- * path-traversal / path-restructuring inputs, mirroring the reference JS client's hardening (<a
- * href="https://github.com/apify/apify-client-js/pull/1011">apify-client-js#1011</a>).
+ * path-traversal and path-restructuring inputs.
  */
 class ResourceContextPathSafetyTest {
 

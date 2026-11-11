@@ -18,20 +18,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Shared implementation of "start a run" and "call: start, then wait, optionally streaming the log"
- * for every client that can start a run from a runnable resource (Actor, Task).
+ * Shared implementation of starting a run, and of calling it (start, wait, optionally stream the
+ * log), for Actors and tasks.
  *
- * <p>{@code ActorStartOptions}/{@code TaskStartOptions}/{@code ActorCallOptions}/{@code
- * TaskCallOptions} (in {@code com.apify.client.actor}/{@code com.apify.client.task}) are themselves
- * public classes — only the handful of accessor methods this class needs from them ({@code apply},
- * {@code contentTypeOrDefault}, {@code waitForResourcesSecsValue}, {@code toStartOptions}, {@code
- * logStreamingEnabledValue}, {@code logOptionsValue}) are package-private, with no public interface
- * or shared supertype exposing them. {@code ActorClient}/{@code TaskClient} (same package as their
- * respective options types) read those values directly and pass them here as plain values and
- * method references (e.g. {@code options::apply} bound as a {@code Consumer<QueryParams>}). That
- * keeps this one implementation backing both Actor and task calls (instead of each duplicating the
- * same ~90 lines) without forcing any of the options builders' internal plumbing — including the
- * internal {@link QueryParams} type — into their public API.
+ * <p>The accessors this class needs from the start and call options ({@code apply}, {@code
+ * contentTypeOrDefault}, {@code waitForResourcesSecsValue}, {@code toStartOptions}, {@code
+ * logStreamingEnabledValue}, {@code logOptionsValue}) are package-private, to keep the internal
+ * {@link QueryParams} type out of the public API. {@code ActorClient} and {@code TaskClient} read
+ * them and pass plain values and method references here.
  */
 public final class RunStartSupport {
 
@@ -65,10 +59,10 @@ public final class RunStartSupport {
    * every start-option query parameter (build, memory, timeout, ...) the caller's options type
    * configures; {@code contentType} is the input body's content type.
    *
-   * @param waitForResourcesSecs mirrors {@link ActorStartOptions#waitForResources(Long)}: {@code
-   *     null} does not retry a start rejected for lack of resources (the default); {@link
+   * @param waitForResourcesSecs as {@link ActorStartOptions#waitForResources(Long)}: {@code null}
+   *     does not retry a start rejected for lack of resources; {@link
    *     ActorStartOptions#WAIT_FOR_RESOURCES_INDEFINITELY} retries until it succeeds; any other
-   *     value bounds the retrying to that many seconds, after which the last such error is thrown
+   *     value bounds the retrying to that many seconds
    */
   public static CompletableFuture<ActorRun> start(
       ResourceContext ctx,
@@ -176,11 +170,8 @@ public final class RunStartSupport {
   }
 
   /**
-   * Starts a run and waits for it to finish, additionally streaming the run's log for the duration
-   * of the wait by default, matching the reference client's {@code call} defaulting {@code
-   * options.log} to {@code 'default'}. Log streaming is best-effort: if starting it fails (e.g. the
-   * log is not yet available), the run still starts and is still waited for, just without
-   * redirected log output.
+   * Starts a run and waits for it to finish, streaming the run's log during the wait by default.
+   * Log streaming is best-effort: if it fails to start, the run is still started and awaited.
    *
    * @param applyParams applies every start-option query parameter the caller's call-options type
    *     configures (delegated from its paired start-options type)

@@ -14,7 +14,9 @@ import com.apify.client.http.ApifyTransportException;
 import com.apify.client.http.BrotliHttpCompressor;
 import com.apify.client.http.GzipHttpCompressor;
 import com.apify.client.http.HttpCompressor;
+import com.apify.client.http.ZstdHttpCompressor;
 import com.apify.client.internal.HttpClientCore;
+import com.github.luben.zstd.Zstd;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -28,11 +30,11 @@ import java.util.zip.GZIPInputStream;
 import org.junit.jupiter.api.Test;
 
 /**
- * Offline tests for request-body compression. Mirrors the reference JS client: bodies of at least
- * 1024 bytes are compressed and announced via {@code Content-Encoding}, smaller bodies are sent
- * verbatim. The client uses brotli ({@code br}) by default where its native codec is available and
- * gzip elsewhere; the compressor is configurable, and its failure fails the request. Both
- * compressors are exercised directly, and the live client path via a real request.
+ * Offline tests for request-body compression: bodies of at least 1024 bytes are compressed and
+ * announced via {@code Content-Encoding}, smaller bodies are sent verbatim. The client uses brotli
+ * ({@code br}) by default where its native codec is available and gzip elsewhere; the compressor is
+ * configurable, and its failure fails the request. Both compressors are exercised directly, and the
+ * live client path via a real request.
  */
 class CompressionTest {
 
@@ -107,6 +109,44 @@ class CompressionTest {
     assertEquals("gzip", compressor.contentEncoding());
     assertTrue(compressed.length < payload.length, "gzip-compressed body should be smaller");
     assertArrayEquals(payload, gunzip(compressed));
+  }
+
+  @Test
+  void zstdCompressorEncodesAsZstdAndRoundTrips() throws IOException {
+    assertTrue(ZstdHttpCompressor.isAvailable(), "zstd-jni must load on the test platform");
+    byte[] payload = payload(4096, (byte) 'a');
+
+    HttpCompressor compressor = new ZstdHttpCompressor();
+    byte[] compressed = compressor.compress(payload);
+
+    assertEquals("zstd", compressor.contentEncoding());
+    assertTrue(compressed.length < payload.length, "zstd-compressed body should be smaller");
+    assertArrayEquals(payload, Zstd.decompress(compressed, payload.length));
+  }
+
+  @Test
+  void zstdRejectsLevelsOutsideOneToNineteen() {
+    assertThrows(IllegalArgumentException.class, () -> new ZstdHttpCompressor(0));
+    assertThrows(IllegalArgumentException.class, () -> new ZstdHttpCompressor(20));
+  }
+
+  @Test
+  void configuredZstdCompressorIsUsedForLargeBodies() {
+    MockTransport backend = MockTransport.ofConstant(201, "");
+    byte[] payload = payload(4096, (byte) 'a');
+
+    ApifyClient.builder()
+        .token("t")
+        .httpTransport(backend)
+        .maxRetries(0)
+        .compression(new ZstdHttpCompressor(19))
+        .build()
+        .keyValueStore(STORE_ID)
+        .setRecord(RECORD_KEY, payload, CONTENT_TYPE)
+        .join();
+
+    assertEquals("zstd", backend.lastHeaders.firstValue("Content-Encoding").orElse(null));
+    assertArrayEquals(payload, Zstd.decompress(backend.lastBodyBytes, payload.length));
   }
 
   @Test

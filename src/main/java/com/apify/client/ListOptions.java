@@ -20,10 +20,8 @@ public final class ListOptions implements ListOptionsLike {
   }
 
   /**
-   * Maximum number of items to return. In {@code list(...)} this is sent verbatim (so {@code 0}
-   * returns zero items); in {@code iterate(...)} a non-positive/zero {@code limit} means "no cap" —
-   * iteration yields every item (matching the reference client's falsy-limit-means-unbounded
-   * intent).
+   * Maximum number of items to return. {@code list(...)} sends it as it is, so {@code 0} returns no
+   * items; in {@code iterate(...)} a non-positive limit means no cap.
    */
   public ListOptions limit(Long limit) {
     this.limit = limit;

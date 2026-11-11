@@ -202,8 +202,8 @@ public final class ActorServerClient {
    *     against the server URL, so the request, and the token with it, cannot be sent to another
    *     host. Pass the query as {@link ActorServerRequestOptions#param params}. A fragment ({@code
    *     #...}) is dropped, since it is never sent to the server.
-   * @param options the method, query, headers, body, compression and timeout; {@code null} sends a
-   *     plain {@code GET}
+   * @param options the method, query, headers, body, parent request ID, compression and timeout;
+   *     {@code null} sends a plain {@code GET}
    * @return the response; fails with a {@link ServerActorException} when the Actor is not a Server
    *     Actor, and with a {@link com.apify.client.http.NotFoundError} when the Actor does not exist
    */

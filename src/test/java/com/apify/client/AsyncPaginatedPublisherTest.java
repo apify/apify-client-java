@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Hermetic (token-free) tests for the offset/limit async iteration engine. They drive {@link
  * AsyncPaginatedPublisher} with a stub page fetcher over a synthetic collection, pinning the
- * total-cap / chunk-size arithmetic, server-side page-size clamping, and termination — without any
+ * total-cap / chunk-size arithmetic, server-side page-size clamping, and termination, without any
  * network or {@code APIFY_TOKEN}.
  */
 class AsyncPaginatedPublisherTest {
@@ -150,10 +150,10 @@ class AsyncPaginatedPublisherTest {
   }
 
   /**
-   * Records onNext/onError deliveries for the reentrant-invalid-request regression tests below. A
-   * subscriber violating Reactive Streams §3.9 by issuing {@code request(n<=0)} from within {@code
-   * onNext} must see exactly the one item already being emitted when the violation is reported,
-   * then a single {@code onError} - never further {@code onNext} calls for the rest of an
+   * Records onNext/onError deliveries for the reentrant-invalid-request tests below. A subscriber
+   * violating Reactive Streams §3.9 by issuing {@code request(n<=0)} from within {@code onNext}
+   * must see exactly the one item already being emitted when the violation is reported, then a
+   * single {@code onError} - never further {@code onNext} calls for the rest of an
    * already-fetched/already-fully-in-hand page (RS §1.7: no signals after a terminal one).
    */
   private static final class RecordingSubscriber implements Flow.Subscriber<Integer> {
@@ -184,11 +184,8 @@ class AsyncPaginatedPublisherTest {
 
   @Test
   void reentrantInvalidRequestStopsEmissionImmediately() {
-    // Regression test: the drain loop used to check only `cancelled`/demand/buffer-position, never
-    // `terminated`, so a reentrant request(n<=0) mid-emission still let the loop emit the rest of
-    // an
-    // already-fetched page (and even fetch and emit a further page) after onError had already
-    // fired.
+    // A reentrant request(n<=0) during emission must stop the drain loop: nothing more is emitted
+    // or fetched after onError.
     StubFetcher f = new StubFetcher(5);
     RecordingSubscriber subscriber = new RecordingSubscriber();
     new AsyncPaginatedPublisher<>(null, null, null, f).subscribe(subscriber);
@@ -202,7 +199,7 @@ class AsyncPaginatedPublisherTest {
 
   @Test
   void listPublisherReentrantInvalidRequestStopsEmissionImmediately() {
-    // Same regression, for ListPublisher's independent (but structurally identical) drain loop.
+    // The same, for ListPublisher's drain loop.
     CompletableFuture<List<Integer>> source =
         CompletableFuture.completedFuture(List.of(0, 1, 2, 3, 4));
     RecordingSubscriber subscriber = new RecordingSubscriber();

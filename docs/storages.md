@@ -31,7 +31,7 @@ any field not covered by a typed getter above is still available via the inherit
 
 ## Datasets
 
-### `DatasetCollectionClient` — `client.datasets()`
+### `DatasetCollectionClient`: `client.datasets()`
 
 | Method | Description |
 |---|---|
@@ -42,11 +42,11 @@ any field not covered by a typed getter above is still available via the inherit
 
 `StorageListOptions` adds `unnamed(Boolean)` and `ownership(String)` on top of offset/limit/desc.
 
-### `DatasetClient` — `client.dataset(id)`
+### `DatasetClient`: `client.dataset(id)`
 
 | Method | Description |
 |---|---|
-| `get()` / `update(Object)` / `delete()` | Metadata CRUD. On a client reached through a run/task with no dataset id of its own (e.g. `run.dataset()`), a 404 is ambiguous (parent vs. sub-resource gone) and throws `NotFoundError` instead of resolving to empty/no-op — see [Fetching single resources](../README.md#fetching-single-resources). |
+| `get()` / `update(Object)` / `delete()` | Metadata CRUD. On a client reached through a run/task with no dataset id of its own (e.g. `run.dataset()`), a 404 is ambiguous (parent vs. sub-resource gone) and throws `NotFoundError` instead of resolving to empty/no-op; see [Fetching single resources](../README.md#fetching-single-resources). |
 | `listItems(DatasetListItemsOptions)` | List items. Completes with `PaginationList<JsonNode>`. |
 | `listItems(DatasetListItemsOptions, Class<T>)` | List items decoded into `T`. Completes with `PaginationList<T>`. |
 | `iterateItems(DatasetListItemsOptions)` / `iterateItems(DatasetListItemsOptions, Long chunkSize)` | A lazy `Flow.Publisher<JsonNode>` over all items; the options' `limit` caps the dataset *rows* read (`null`/unset or non-positive = all), the optional `chunkSize` sets the per-request page size. Dataset items have no default page limit, so without `chunkSize` the whole dataset (or all `limit` rows) is loaded in one response: pass `chunkSize` to iterate a large dataset. |
@@ -91,14 +91,13 @@ try (InputStream stream =
 `DatasetListItemsOptions` fields: `offset` (`Long`, number of items to skip), `limit` (`Long`,
 maximum number of items to return), `desc` (`Boolean`, return items newest-first), `fields`
 (`List<String>`, restrict the output to these source fields), `outputFields` (`List<String>`,
-positionally *renames* the fields chosen by `fields` in the output — the i-th name renames the i-th
+positionally *renames* the fields chosen by `fields` in the output; the i-th name renames the i-th
 `fields` entry, so it only makes sense together with `fields`), `omit` (`List<String>`, exclude
 these fields from the output), `skipEmpty` (`Boolean`, skip empty items), `skipHidden` (`Boolean`,
-skip hidden fields, i.e. those starting with `#`), `clean` (`Boolean`, return only clean —
-non-empty, non-hidden — items), `unwind` (`List<String>`, expand these fields so each array element
+skip hidden fields, i.e. those starting with `#`), `clean` (`Boolean`, return only clean items: non-empty and non-hidden), `unwind` (`List<String>`, expand these fields so each array element
 becomes a separate item), `flatten` (`List<String>`, flatten these nested fields into dot-notation
 keys), `view` (`String`, select a predefined dataset view for field selection), `simplified`
-(`Boolean`, return simplified — flattened and cleaned — items), `skipFailedPages` (`Boolean`, skip
+(`Boolean`, return flattened and cleaned items), `skipFailedPages` (`Boolean`, skip
 items that come from failed pages), `signature` (`String`, a pre-shared URL signature granting
 access without an API token). `downloadItems(...)` returns `byte[]` (the serialized export);
 `streamItems(...)` takes the same two arguments but returns a live `InputStream` over it instead.
@@ -116,7 +115,7 @@ request is sent. The expiry counts from the moment the URL is signed, after the 
 optional `format` sets the serialization the URL serves items in (default `json` when
 omitted/`null`).
 
-> **Public-URL limitation (matches the JavaScript reference client).** The public-URL builders
+> **Public-URL limitation.** The public-URL builders
 > (`createItemsPublicUrl`, and the key-value-store `getRecordPublicUrl` / `createKeysPublicUrl`)
 > build the URL from the client's own resource path plus the signature. When called on a *last-run
 > nested* client (e.g. `client.actor(id).lastRun("SUCCEEDED").dataset().createItemsPublicUrl(...)`)
@@ -126,17 +125,17 @@ omitted/`null`).
 
 ## Key-value stores
 
-### `KeyValueStoreCollectionClient` — `client.keyValueStores()`
+### `KeyValueStoreCollectionClient`: `client.keyValueStores()`
 
 `list(StorageListOptions)`, `iterate(StorageListOptions, Long chunkSize)`, `getOrCreate(String)`, and
 `getOrCreate(String, Object schema)` (the latter sends a creation-time store `schema`), as for
 datasets.
 
-### `KeyValueStoreClient` — `client.keyValueStore(id)`
+### `KeyValueStoreClient`: `client.keyValueStore(id)`
 
 | Method | Description |
 |---|---|
-| `get()` / `update(Object)` / `delete()` | Metadata CRUD. On a client reached through a run/task with no store id of its own (e.g. `run.keyValueStore()`), a 404 is ambiguous (parent vs. sub-resource gone) and throws `NotFoundError` instead of resolving to empty/no-op — see [Fetching single resources](../README.md#fetching-single-resources). |
+| `get()` / `update(Object)` / `delete()` | Metadata CRUD. On a client reached through a run/task with no store id of its own (e.g. `run.keyValueStore()`), a 404 is ambiguous (parent vs. sub-resource gone) and throws `NotFoundError` instead of resolving to empty/no-op; see [Fetching single resources](../README.md#fetching-single-resources). |
 | `listKeys(ListKeysOptions)` | List keys. Completes with `KeyValueStoreKeysPage`. |
 | `iterateKeys(ListKeysOptions)` / `iterateKeys(ListKeysOptions, Long chunkSize)` | A lazy `Flow.Publisher<KeyValueStoreKey>` over all keys, paging with the cursor (`exclusiveStartKey`). Note: here the options' `limit` caps the **total** number of keys yielded (`null`/unset or non-positive = all), whereas for `listKeys`/`createKeysPublicUrl` the same `ListKeysOptions.limit` is a single-request page size. `chunkSize` sets the per-request page size (`null` = server default). |
 | `recordExists(String key)` | Whether a record exists. Completes with `boolean`. |
@@ -167,9 +166,9 @@ rec.ifPresent(r -> System.out.println(new String(r.getValue())));
 `SetRecordOptions.contentEncoding(String)` names an encoding already applied to `value` (e.g.
 `"gzip"` for a pre-compressed file), sent as the `Content-Encoding` header (trimmed first); the
 client then sends the bytes as they are and does not compress them again, and the API accepts
-`gzip`, `br`, `deflate`, or `identity` (matched case-insensitively — `identity` turns the client's
-own automatic compression off for this upload). It must not be blank after trimming. The record is
-stored exactly as uploaded, but since this client sends no `Accept-Encoding`, a later
+`gzip`, `br`, `zstd`, `deflate`, or `identity` (matched case-insensitively; `identity` turns the
+client's own automatic compression off for this upload). It must not be blank after trimming. The
+record is stored exactly as uploaded, but since this client sends no `Accept-Encoding`, a later
 `getRecord(...)` transparently receives the decompressed value rather than the stored compressed
 bytes.
 
@@ -192,23 +191,23 @@ client.keyValueStore("my-store")
 Both `getRecordPublicUrl` and `createKeysPublicUrl` complete with a `String` URL, signed for private stores
 and unsigned for public ones. They differ because they sign different things: a single record URL
 signs the record key directly (there is no expiry to bound), while a key-list URL uses an
-expiry-aware storage-content signature — hence only `createKeysPublicUrl` takes an `expiresInSecs`
+expiry-aware storage-content signature; hence only `createKeysPublicUrl` takes an `expiresInSecs`
 (`null` = non-expiring, otherwise positive and at most `4611686018427387`; anything else throws
 `IllegalArgumentException` before any request is sent).
 
 ## Request queues
 
-### `RequestQueueCollectionClient` — `client.requestQueues()`
+### `RequestQueueCollectionClient`: `client.requestQueues()`
 
 `list(StorageListOptions)`, `iterate(StorageListOptions, Long chunkSize)`, and `getOrCreate(String)`,
 as for datasets. Unlike datasets/key-value stores, there is no `getOrCreate(String, Object schema)`
-overload here — the request-queue creation endpoint does not accept a creation-time schema.
+overload here; the request-queue creation endpoint does not accept a creation-time schema.
 
-### `RequestQueueClient` — `client.requestQueue(id)`
+### `RequestQueueClient`: `client.requestQueue(id)`
 
 | Method | Description |
 |---|---|
-| `get()` / `update(Object)` / `delete()` | Metadata CRUD. On a client reached through a run/task with no queue id of its own (e.g. `run.requestQueue()`), a 404 is ambiguous (parent vs. sub-resource gone) and throws `NotFoundError` instead of resolving to empty/no-op — see [Fetching single resources](../README.md#fetching-single-resources). |
+| `get()` / `update(Object)` / `delete()` | Metadata CRUD. On a client reached through a run/task with no queue id of its own (e.g. `run.requestQueue()`), a 404 is ambiguous (parent vs. sub-resource gone) and throws `NotFoundError` instead of resolving to empty/no-op; see [Fetching single resources](../README.md#fetching-single-resources). |
 | `withClientKey(String)` | A copy that identifies its requests with a stable client key (required for lock operations). |
 | `listHead(Long limit)` | Requests at the head. Completes with `RequestQueueHead`. |
 | `addRequest(RequestQueueRequest, boolean forefront)` | Add a request. Completes with `RequestQueueOperationInfo`. |
@@ -230,7 +229,7 @@ overload here — the request-queue creation endpoint does not accept a creation
 > `prolongRequestLock` and `deleteRequestLock` all take a `boolean forefront`. It controls queue
 > priority: `false` (the common case) processes the request in normal FIFO order; `true` inserts
 > or moves the request to the *front* of the queue, so it is returned before anything already
-> queued — use it for urgent/priority work that should jump the line, e.g. re-queuing a failed
+> queued; use it for urgent/priority work that should jump the line, e.g. re-queuing a failed
 > request for immediate retry or seeding a crawl's very first URLs.
 
 ```java
@@ -240,10 +239,10 @@ RequestQueueRequest failed = queue.getRequest("REQUEST_ID").join().orElseThrow()
 queue.updateRequest(failed.setNoRetry(false), true).join();
 ```
 
-> **Naming exception.** Request-queue *requests* are iterated with `paginateRequests(...)` — not an
-> `iterate(...)` method — because the request-queue listing is cursor-based rather than
+> **Naming exception.** Request-queue *requests* are iterated with `paginateRequests(...)`, not an
+> `iterate(...)` method, because the request-queue listing is cursor-based rather than
 > offset/limit; it always starts from the beginning of the queue (resuming from an explicit
-> `exclusiveStartId`/`cursor` is not supported by the publisher — use `listRequests(ListRequestsOptions)`
+> `exclusiveStartId`/`cursor` is not supported by the publisher; use `listRequests(ListRequestsOptions)`
 > directly for that single-page use case). Every other resource uses the
 > `iterate`/`iterateItems`/`iterateKeys` family.
 
@@ -299,7 +298,7 @@ fields are omitted on the wire): `setId`/`getId` (`String`), `setUrl`/`getUrl` (
 `setHandledAt(Instant)`/`getHandledAt()` (`Instant`),
 `setRetryCount(Integer)`/`getRetryCount()` (`Integer`),
 `setLoadedUrl(String)`/`getLoadedUrl()` (`String`, the URL actually loaded, after redirects), and
-`setErrorMessages(List<String>)`/`getErrorMessages()` (`List<String>`, never `null` — empty when
+`setErrorMessages(List<String>)`/`getErrorMessages()` (`List<String>`, never `null`; empty when
 unset). `getLockExpiresAt()` (read-only, no setter, `Instant`) is populated only on items returned
 from `listAndLockHead`.
 

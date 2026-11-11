@@ -11,11 +11,10 @@ import java.util.concurrent.CompletionException;
 import org.junit.jupiter.api.Test;
 
 /**
- * Hermetic tests for the ambiguous-404 rule (mirrors <a
- * href="https://github.com/apify/apify-client-js/pull/1042">apify-client-js#1042</a>): a resource
- * client addressed by an explicit id swallows a 404 to an empty {@code Optional}/no-op, but a
- * client reached through a run/build with no id of its own throws {@link NotFoundError} instead,
- * since the 404 could mean either the parent or the sub-resource is gone.
+ * Hermetic tests for the ambiguous-404 rule: a resource client addressed by an explicit id swallows
+ * a 404 to an empty {@code Optional}/no-op, but a client reached through a run/build with no id of
+ * its own throws {@link NotFoundError} instead, since the 404 could mean either the parent or the
+ * sub-resource is gone.
  */
 class AmbiguousNotFoundTest {
 

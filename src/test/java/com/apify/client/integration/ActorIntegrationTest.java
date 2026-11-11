@@ -154,7 +154,7 @@ class ActorIntegrationTest extends IntegrationBase {
       assertTrue(defaultBuild.get().join().isPresent());
 
       // Read-only nested webhook collection (GET + iterate); the account has none registered for
-      // this fresh Actor, so this just exercises both calls succeeding against an empty result —
+      // this fresh Actor, so this just exercises both calls succeeding against an empty result,
       // not a multi-item case. `NestedWebhookCollectionClient` shares its `list`/`iterate`
       // implementation with `AbstractWebhookCollectionClient`, whose paging/iteration behavior is
       // already exercised with real multi-item data (2 created webhooks, paged one at a time) by

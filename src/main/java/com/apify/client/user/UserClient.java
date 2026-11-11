@@ -63,9 +63,7 @@ public final class UserClient {
 
   /** Updates the user's account and usage limits. */
   public CompletableFuture<Void> updateLimits(Object newLimits) {
-    // Route through the shared PUT primitive for consistency with every other resource client's
-    // update-style call; the response body (the updated limits) is intentionally not parsed,
-    // matching the reference client's void-returning updateLimits.
+    // The response body is not parsed: this call returns nothing.
     return ctx.putRaw(
         "limits", new QueryParams(), Json.toBytes(newLimits), ResourceContext.CONTENT_TYPE_JSON);
   }

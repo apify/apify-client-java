@@ -5,6 +5,23 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-11-10
+
+### Added
+
+- `ZstdHttpCompressor` for `Content-Encoding: zstd` request bodies (optional `com.github.luben:zstd-jni` dependency).
+- `ActorServerRequestOptions.parentRequestId(String)`, sent as the `X-Actor-Request-ID` header so a called multi-tenant Server Actor charges at the pricing tier of the incoming request.
+
+### Fixed
+
+- `StreamedLog.stop()` and `close()` no longer interrupt the reader thread, so a log consumer that is running or blocked is not interrupted and does not lose its message.
+- `StreamedLog.close()` called from the log consumer no longer deadlocks while another thread is stopping the same `StreamedLog`, and `stop()` or `close()` from an interrupted thread still ends the reader.
+
+### Changed
+
+- Updated to Apify OpenAPI specification `v2-2026-11-09T143926Z`: `zstd` is an accepted `Content-Encoding`.
+- Documented that `RunChargeOptions.requestId` is ignored by runs of single-tenant Server Actors.
+
 ## [0.13.0] - 2026-11-06
 
 ### Added
@@ -485,7 +502,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `setStatusMessage` to the README resources table; noted `getExtra()` on every thin response model.
 - Fixed a contradiction in `README.md`/`docs/README.md`: both described `docs/examples.md` as
   "complete, runnable programs," but its own snippets are fragments in the same style as the
-  resource pages — the complete, runnable programs live under
+  resource pages; the complete, runnable programs live under
   `src/test/java/com/apify/client/examples/`. Reworded both to match.
   Added the missing `WebhookLastDispatch` import to the `com.apify.client.webhook` package-table row.
   Corrected the "one raw-JSON field" framing in `docs/README.md`'s "Raw JSON values" section:
@@ -600,8 +617,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   key-value-store, request-queue, task, schedule, webhook, and webhook-dispatch collection clients;
   and `DatasetClient.iterateItems(...)` for dataset items and `KeyValueStoreClient.iterateKeys(...)`
   for store keys. The options' `limit` caps the total number of items yielded and `chunkSize` sets
-  the per-request page size. The non-paginated collections — `ActorVersionCollectionClient.iterate(options)`
-  and `ActorEnvVarCollectionClient.iterate()` — return the full list in a single fetch (no page size
+  the per-request page size. The non-paginated collections, `ActorVersionCollectionClient.iterate(options)`
+  and `ActorEnvVarCollectionClient.iterate()`, return the full list in a single fetch (no page size
   to tune).
 
 ### Changed

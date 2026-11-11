@@ -20,27 +20,19 @@ public final class ActorVersionCollectionClient {
   }
 
   /**
-   * Lists the Actor's versions. {@code options} is accepted only for signature consistency with
-   * every other collection's {@code list(ListOptions)} (matching the reference client, whose {@code
-   * list()} likewise accepts but never forwards an options argument here) — {@code GET
-   * .../versions} takes no query parameters at all, so nothing in {@code options} (including {@code
-   * offset}/{@code limit}/{@code desc}) is sent to the server. Pass {@code null} for the common
-   * case; use {@link #iterate(ListOptions)}'s {@code limit} to cap the number returned client-side.
+   * Lists the Actor's versions. The endpoint takes no query parameters, so {@code options} is
+   * accepted only for consistency with other collections and is never sent. Pass {@code null}; to
+   * cap the number returned, use the {@code limit} of {@link #iterate(ListOptions)}.
    */
   public CompletableFuture<PaginationList<ActorVersion>> list(ListOptions options) {
     return ctx.listResource("", new QueryParams(), ActorVersion.class, Timeout.SHORT);
   }
 
   /**
-   * Returns a publisher over the Actor's versions. Unlike the paginated collection publishers, this
-   * fetches eagerly: the single request runs when {@code iterate} is called, not on first demand.
-   * That's because {@code GET /v2/actors/{actorId}/versions} is not offset/limit paginated at all —
-   * it takes no pagination parameters and always returns the full version list in one {@code
-   * {total, items}} response, so routing it through the offset/limit paging engine would loop
-   * forever (the server returns the same non-empty page at every offset; this is why the sibling
-   * non-paginated {@code env-vars} collection is also a single-fetch publisher). The options'
-   * {@code limit} still caps the number yielded ({@code null} or non-positive = all); {@code
-   * offset} has no effect and there is no page size to tune.
+   * Returns a publisher over the Actor's versions. The endpoint is not paginated: one request, sent
+   * when {@code iterate} is called rather than on first demand, returns every version. The {@code
+   * limit} of {@code options} caps the number yielded ({@code null} or non-positive means all);
+   * {@code offset} has no effect.
    */
   public Flow.Publisher<ActorVersion> iterate(ListOptions options) {
     ListOptions opts = options != null ? options : new ListOptions();

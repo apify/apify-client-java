@@ -9,10 +9,6 @@ import java.util.List;
 /**
  * Configures starting an Actor run ({@link ActorClient#start}/{@link ActorClient#call}). All fields
  * are optional.
- *
- * <p>{@link #apply}/{@link #contentTypeOrDefault}/{@link #waitForResourcesSecsValue} are
- * package-private on purpose — see {@link com.apify.client.internal.RunStartSupport}'s class
- * javadoc for why.
  */
 public final class ActorStartOptions {
 
@@ -92,8 +88,8 @@ public final class ActorStartOptions {
   }
 
   /**
-   * Ad-hoc webhooks to attach to this run. They are serialized to base64-encoded JSON as the {@code
-   * webhooks} query parameter, matching the reference clients.
+   * Ad-hoc webhooks to attach to this run, sent as base64-encoded JSON in the {@code webhooks}
+   * query parameter.
    */
   public ActorStartOptions webhooks(List<Object> webhooks) {
     this.webhooks = webhooks == null ? null : List.copyOf(webhooks);
@@ -103,10 +99,9 @@ public final class ActorStartOptions {
   /**
    * Retries the start while the account lacks the memory or a concurrent-run slot for the run (the
    * API rejects it with {@code actor-memory-limit-exceeded} or {@code
-   * concurrent-runs-limit-exceeded}, both of which clear as other runs or builds finish), waiting
-   * 10 seconds between attempts. {@code true} retries until the run starts ({@link
-   * #WAIT_FOR_RESOURCES_INDEFINITELY}); {@code false} (the default) does not retry — a
-   * resource-limit error is thrown immediately, like any other error.
+   * concurrent-runs-limit-exceeded}), waiting 10 seconds between attempts. {@code true} retries
+   * until the run starts ({@link #WAIT_FOR_RESOURCES_INDEFINITELY}); {@code false} (the default)
+   * does not retry and throws the error immediately.
    */
   public ActorStartOptions waitForResources(boolean waitForResources) {
     this.waitForResourcesSecs = waitForResources ? WAIT_FOR_RESOURCES_INDEFINITELY : null;
@@ -146,9 +141,8 @@ public final class ActorStartOptions {
   }
 
   /**
-   * Encodes an ad-hoc webhooks list as base64-encoded JSON, as the API's {@code webhooks} query
-   * parameter requires. Returns {@code null} for a {@code null} list. Shared by Actor and task
-   * start options (DRY).
+   * Encodes an ad-hoc webhooks list as base64-encoded JSON for the {@code webhooks} query
+   * parameter; returns {@code null} for a {@code null} list.
    */
   public static String encodeWebhooks(List<Object> webhooks) {
     if (webhooks == null) {

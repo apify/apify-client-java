@@ -42,11 +42,9 @@ public final class DefaultHttpTransport implements HttpTransport {
 
   /** Creates a transport with an explicit connection-establishment timeout. */
   public DefaultHttpTransport(Duration connectTimeout) {
-    // Follow redirects (NORMAL, matching the reference clients): some endpoints — e.g. a
-    // non-attachment key-value-store record GET — answer with a 302 to external storage, which the
-    // JDK's default Redirect.NEVER would otherwise surface as an error. NORMAL does not follow an
-    // HTTPS->HTTP downgrade, and the JDK strips the Authorization header on cross-origin hops, so
-    // the bearer token is not leaked to the redirect target.
+    // Follow redirects: some endpoints, such as a non-attachment record GET, answer with a 302 to
+    // external storage. NORMAL does not follow an HTTPS to HTTP downgrade, and the JDK strips the
+    // Authorization header on cross-origin hops, so the token does not reach the redirect target.
     this(
         HttpClient.newBuilder()
             .connectTimeout(connectTimeout)

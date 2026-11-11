@@ -28,8 +28,7 @@ public final class KeyValueStoreCollectionClient
 
   /**
    * Gets the store with the given name, creating it if it does not exist, applying the given {@code
-   * schema} on creation. Mirrors the reference client's {@code getOrCreate(name, {schema})}; a
-   * {@code null} schema behaves like {@link #getOrCreate(String)}.
+   * schema} on creation. A {@code null} schema behaves like {@link #getOrCreate(String)}.
    */
   public CompletableFuture<KeyValueStore> getOrCreate(String name, Object schema) {
     return ctx.getOrCreateNamedWithSchema(name, schema, KeyValueStore.class);

@@ -6,21 +6,13 @@ import java.util.List;
 /**
  * Configures {@link ActorClient#call(Object, ActorCallOptions, Long)}.
  *
- * <p>Mirrors {@link ActorStartOptions} (delegating every field to an internal instance) but omits
- * {@code waitForFinish}: that field asks the API to hold the HTTP response open server-side while
- * the run finishes, which is redundant with (and wastes a request slot next to) {@code call}'s own
- * client-side {@code waitSecs} polling. This matches the reference client, whose dedicated {@code
- * ActorCallOptions} type is {@code Omit<ActorStartOptions, 'waitForFinish'>}.
+ * <p>It has the options of {@link ActorStartOptions} except {@code waitForFinish}, which {@code
+ * call} replaces with its own polling. By default {@code call} also streams the run's log to a
+ * per-run logger while it waits. Use {@link #disableLogStreaming()} to opt out, or {@link
+ * #logOptions(StreamedLogOptions)} for a custom destination.
  *
- * <p>By default, {@code call} also streams the run's log to a default per-run logger for the
- * duration of the wait (via {@link com.apify.client.run.RunClient#getStreamedLog()}), matching the
- * reference client's {@code options.log} defaulting to {@code 'default'}. Use {@link
- * #disableLogStreaming()} to opt out, or {@link #logOptions(StreamedLogOptions)} for a custom
- * destination.
- *
- * <p>{@link #toStartOptions}/{@link #logStreamingEnabledValue}/{@link #logOptionsValue} are
- * package-private on purpose — see {@link com.apify.client.internal.RunStartSupport}'s class
- * javadoc for why.
+ * <p>The package-private accessors are described in {@link
+ * com.apify.client.internal.RunStartSupport}.
  */
 public final class ActorCallOptions {
 
@@ -98,9 +90,8 @@ public final class ActorCallOptions {
   }
 
   /**
-   * Disables the default log streaming, matching the reference client's {@code log: null}. {@code
-   * call} then only starts the run and polls for completion, as if built from {@link
-   * ActorStartOptions} directly.
+   * Disables the default log streaming: {@code call} then only starts the run and polls for
+   * completion.
    */
   public ActorCallOptions disableLogStreaming() {
     this.logStreamingEnabled = false;

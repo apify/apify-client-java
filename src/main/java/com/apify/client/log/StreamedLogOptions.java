@@ -6,8 +6,8 @@ import java.util.function.Consumer;
 /**
  * Configures {@link RunClient#getStreamedLog(StreamedLogOptions)} log redirection.
  *
- * <p>Mirrors the reference client's {@code getStreamedLog} options: a destination log ({@code
- * toLog}) and whether to include messages produced before redirection started ({@code fromStart}).
+ * <p>Sets the destination ({@code toLog}) and whether to include messages produced before
+ * redirection started ({@code fromStart}).
  */
 public final class StreamedLogOptions {
 

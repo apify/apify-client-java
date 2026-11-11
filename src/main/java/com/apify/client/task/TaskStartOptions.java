@@ -8,13 +8,11 @@ import java.util.List;
 /**
  * Configures starting a task run ({@link TaskClient#start}/{@link TaskClient#call}).
  *
- * <p>It mirrors {@link ActorStartOptions} but omits the fields the task run endpoint does not
- * accept (the Actor-only {@code contentType} and {@code forcePermissionLevel}), matching the
- * reference client.
+ * <p>It has the options of {@link ActorStartOptions} except the Actor-only {@code contentType} and
+ * {@code forcePermissionLevel}, which the task run endpoint does not accept.
  *
- * <p>{@link #apply}/{@link #contentTypeOrDefault}/{@link #waitForResourcesSecsValue} are
- * package-private on purpose — see {@link com.apify.client.internal.RunStartSupport}'s class
- * javadoc for why.
+ * <p>The package-private accessors are described in {@link
+ * com.apify.client.internal.RunStartSupport}.
  */
 public final class TaskStartOptions {
   private String build;
@@ -78,10 +76,9 @@ public final class TaskStartOptions {
   /**
    * Retries the start while the account lacks the memory or a concurrent-run slot for the run (the
    * API rejects it with {@code actor-memory-limit-exceeded} or {@code
-   * concurrent-runs-limit-exceeded}, both of which clear as other runs or builds finish), waiting
-   * 10 seconds between attempts. {@code true} retries until the run starts ({@link
-   * ActorStartOptions#WAIT_FOR_RESOURCES_INDEFINITELY}); {@code false} (the default) does not retry
-   * — a resource-limit error is thrown immediately, like any other error.
+   * concurrent-runs-limit-exceeded}), waiting 10 seconds between attempts. {@code true} retries
+   * until the run starts ({@link ActorStartOptions#WAIT_FOR_RESOURCES_INDEFINITELY}); {@code false}
+   * (the default) does not retry and throws the error immediately.
    */
   public TaskStartOptions waitForResources(boolean waitForResources) {
     this.waitForResourcesSecs =

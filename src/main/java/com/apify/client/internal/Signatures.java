@@ -8,9 +8,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
- * Apify storage-content URL signing, byte-for-byte compatible with the platform's
- * {@code @apify/utilities} implementation that the reference clients rely on. Internal to the
- * client.
+ * Apify storage-content URL signing, compatible with the platform's {@code @apify/utilities}
+ * implementation.
  */
 public final class Signatures {
 
@@ -69,8 +68,8 @@ public final class Signatures {
   }
 
   /**
-   * Builds a storage-content signature for a resource's public URL, byte-for-byte compatible with
-   * upstream {@code createStorageContentSignature}.
+   * Builds a storage-content signature for a resource's public URL, compatible with upstream {@code
+   * createStorageContentSignature}.
    *
    * <p>It signs the message {@code "{version}.{expiresAtMillis}.{resourceId}"} ({@code
    * expiresAtMillis} is the absolute expiry in ms, or {@code 0} for a non-expiring URL) with {@link

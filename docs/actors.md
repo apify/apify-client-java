@@ -48,7 +48,7 @@ Actor created = client.actors().create(Map.of(
 | `delete()` | Delete the Actor. |
 | `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Completes with `ActorRun`. The `input` is any JSON-serializable value, or a `byte[]`/`String` that is sent as it is (set the matching `ActorStartOptions.contentType(...)`), or `null`. |
 | `call(Object input, ActorStartOptions, Long waitSecs)` | Start a run and poll until it finishes (`null` waits indefinitely); does **not** stream the run's log. Completes with `ActorRun`. |
-| `call(Object input, ActorCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default (matching the reference client's `call` defaulting `options.log` to `'default'`). Use `ActorCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
+| `call(Object input, ActorCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default. Use `ActorCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
 | `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Completes with `boolean`. `ValidateInputOptions` fields (optional): `build` (`String`), `contentType` (`String`). |
 | `build(String versionNumber, ActorBuildOptions)` | Build a version. Completes with `Build`. |
 | `defaultBuild(Long waitForFinish)` | Resolve the default build. Completes with `BuildClient`. |
@@ -67,19 +67,18 @@ to charge, pay-per-result Actors), `maxTotalChargeUsd(Double)` (maximum total ch
 pay-per-event Actors), `contentType(String)` (content type of the input body, defaults to
 `application/json`), `restartOnError(Boolean)` (restart the run if it fails),
 `forcePermissionLevel(String)` (override the Actor's permission level for this run:
-`LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), `webhooks(List<Object>)` — ad-hoc webhook definitions
+`LIMITED_PERMISSIONS`/`FULL_PERMISSIONS`), `webhooks(List<Object>)`, ad-hoc webhook definitions
 (each a JSON-serializable `Map`, as in [Webhooks](webhooks.md)) that the client base64-encodes on the
-wire — and `waitForResources(boolean)`/`waitForResources(Long maxSecs)`: retry the start, every 10
-seconds, while the account lacks the memory or a concurrent-run slot for the run (`true` retries
-until it starts — `ActorStartOptions.WAIT_FOR_RESOURCES_INDEFINITELY`; a bound throws the last such
-error once exceeded; omitted, the default, does not retry at all).
+wire, and `waitForResources(boolean)`/`waitForResources(Long maxSecs)`: retry the start, every 10
+seconds, while the account lacks the memory or a concurrent-run slot for the run (`true`, or
+`ActorStartOptions.WAIT_FOR_RESOURCES_INDEFINITELY`, retries until it starts; a bound throws the
+last such error once exceeded; omitted, the default, does not retry at all).
 
 `ActorCallOptions` (for the log-streaming `call` overload) mirrors `ActorStartOptions` field for
 field, but omits `waitForFinish`: that field asks the API to hold the HTTP response open
 server-side while the run finishes, which is redundant with (and wastes a request slot next to)
-`call`'s own client-side `waitSecs` polling. It adds `disableLogStreaming()` (matching the
-reference client's `log: null`) and `logOptions(StreamedLogOptions)` (a custom destination/prefix,
-matching a custom `Log` instance) — see [Streamed log redirection](runs.md#streamed-log-redirection).
+`call`'s own client-side `waitSecs` polling. It adds `disableLogStreaming()` and
+`logOptions(StreamedLogOptions)` (a custom destination or prefix); see [Streamed log redirection](runs.md#streamed-log-redirection).
 
 `lastRun(String status)` filters only by status; `lastRun(LastRunOptions)` also accepts an origin
 filter. `LastRunOptions` has fluent setters `status(String)` (e.g. `SUCCEEDED`, `RUNNING`) and
@@ -98,17 +97,17 @@ System.out.println(run.getStatus());
 ```
 
 `Actor` fields: `getId()`, `getUserId()`, `getName()`, `getUsername()`, `getTitle()`,
-`getDescription()`, `isPublic()`, `getCreatedAt()`, `getModifiedAt()`, `getStats()` (`ActorStats` —
+`getDescription()`, `isPublic()`, `getCreatedAt()`, `getModifiedAt()`, `getStats()` (`ActorStats`:
 `getTotalBuilds()`/`getTotalRuns()`/`getTotalUsers()`/`getTotalUsers7Days()`/
 `getTotalUsers30Days()`/`getTotalUsers90Days()`/`getTotalMetamorphs()` as `Long`,
 `getLastRunStartedAt()` as `Instant`), `getVersions()` (`List<ActorVersion>`),
 `getPricingInfos()` (`List<JsonNode>`; shape depends on pricing model), `getDefaultRunOptions()`
-(`ActorDefaultRunOptions` — `getBuild()`, `getTimeoutSecs()`/`getMemoryMbytes()` as `Long`,
+(`ActorDefaultRunOptions`: `getBuild()`, `getTimeoutSecs()`/`getMemoryMbytes()` as `Long`,
 `getRestartOnError()` as `Boolean`), `getTaggedBuilds()` (`JsonNode`; dynamic tag-name keys),
 `getIsDeprecated()` (`Boolean`), `getDeploymentKey()`, `getSeoTitle()`, `getSeoDescription()`,
 `getCategories()` (`List<String>`), `getStandbyUrl()` (the URL of the Actor's server, `null` unless
 Standby mode is enabled), `getActorStandby()` (`ActorStandby`, from
-`com.apify.client.actor`, nullable — see [Tasks](tasks.md) for its field list; only on `Actor` does
+`com.apify.client.actor`, nullable; see [Tasks](tasks.md) for its field list; only on `Actor` does
 it additionally expose
 `getIsEnabled()`), `getActorPermissionLevel()` (e.g. `"OWNER"`), plus `getExtra()` for any
 unmodelled fields.
@@ -134,7 +133,9 @@ Actor's `standbyUrl` and `actorStandby` fields.
 parameters, converted as for API calls: `null` is left out, a boolean is sent as `1`/`0`, a
 collection comma-joined), `header(String, String)`/`headers(Map)`, `body(Object)` (a `byte[]` or
 `String` is sent as it is; anything else is serialized to JSON and sent as `application/json`
-unless you set a `Content-Type` header), `compression(HttpCompressor)` and `timeout(Timeout)`
+unless you set a `Content-Type` header), `parentRequestId(String)` (see
+[Calling a Server Actor from a Server Actor](#calling-a-server-actor-from-a-server-actor)),
+`compression(HttpCompressor)` and `timeout(Timeout)`
 (`Timeout.LONG` by default, since the first request to an idle Actor waits for the platform to
 start a server run).
 
@@ -197,20 +198,43 @@ you create or update them; `ActorVersion.getActorPath()` and `BuildActVersion.ge
 it. An update that sends `sourceType`, `sourceFiles` or `tarballUrl` without `actorPath` removes the
 stored one, so send it again with every upload.
 
+### Calling a Server Actor from a Server Actor
+
+The platform adds an `X-Actor-Request-ID` header with a unique ID to every request it forwards to a
+Server Actor. A multi-tenant Server Actor uses it to charge the user who sent the request, and to
+pass that user's pricing tier on to the Server Actors it calls.
+
+When your multi-tenant Server Actor calls another one while handling a request, pass the incoming
+`X-Actor-Request-ID` header value as `parentRequestId`. The client sends it as the same header, so
+the called Actor charges at the pricing tier of your incoming request. Use a client created with
+the run's `APIFY_TOKEN`. See [Call another multi-tenant Server Actor](https://docs.apify.com/actors/monetize/server-actors#call-another-multi-tenant-server-actor).
+
+```java
+// requestId is the X-Actor-Request-ID header value of the request your Actor is handling.
+String requestId = "7Hs2kQw9LxP4mN1vB";
+ApiResponse response =
+    client
+        .actor("username/other-actor")
+        .server()
+        .request("/search", new ActorServerRequestOptions().param("q", "apify").parentRequestId(requestId))
+        .join();
+System.out.println(response.statusCode());
+```
+
 ## `ActorVersionClient` and `ActorVersionCollectionClient`
 
 `client.actor(id).versions()` lists/creates versions; `client.actor(id).version(v)` reads, updates
 and deletes a single version and exposes its environment variables.
 
-### `ActorVersionCollectionClient` — `client.actor(id).versions()`
+### `ActorVersionCollectionClient`: `client.actor(id).versions()`
 
 | Method | Description |
 |---|---|
-| `list(ListOptions)` | List the Actor's versions. Completes with `PaginationList<ActorVersion>`. The endpoint takes no query parameters; `options` (`offset`/`limit`/`desc`) is accepted only for signature consistency with every other `list(ListOptions)` and has no effect — pass `null`. |
+| `list(ListOptions)` | List the Actor's versions. Completes with `PaginationList<ActorVersion>`. The endpoint takes no query parameters; `options` (`offset`/`limit`/`desc`) is accepted only for signature consistency with every other `list(ListOptions)` and has no effect; pass `null`. |
 | `iterate(ListOptions)` | Lazy `Flow.Publisher<ActorVersion>` over all versions; `limit` caps the total (`null`/unset or non-positive = all), applied client-side after the single fetch. `offset` has no effect and there is no page size to tune. |
 | `create(Object version)` | Create a version. Completes with `ActorVersion`. |
 
-### `ActorVersionClient` — `client.actor(id).version(v)`
+### `ActorVersionClient`: `client.actor(id).version(v)`
 
 | Method | Description |
 |---|---|
@@ -234,7 +258,7 @@ Attach environment variables to a version. `ActorEnvVar` has a `(name, value)` c
 fluent setters `setName`, `setValue`, `setIsSecret(Boolean)` (when secret, the value is stored
 encrypted), and matching getters `getName()`, `getValue()`, `getIsSecret()`.
 
-### `ActorEnvVarCollectionClient` — `client.actor(id).version(v).envVars()`
+### `ActorEnvVarCollectionClient`: `client.actor(id).version(v).envVars()`
 
 | Method | Description |
 |---|---|
@@ -242,7 +266,7 @@ encrypted), and matching getters `getName()`, `getValue()`, `getIsSecret()`.
 | `iterate()` | `Flow.Publisher<ActorEnvVar>` over the variables. The env-var collection is not paginated (all variables are returned at once), so this iterates a single fetched page; provided for API consistency. |
 | `create(ActorEnvVar)` | Create an environment variable. Completes with `ActorEnvVar`. |
 
-### `ActorEnvVarClient` — `client.actor(id).version(v).envVar(name)`
+### `ActorEnvVarClient`: `client.actor(id).version(v).envVar(name)`
 
 | Method | Description |
 |---|---|

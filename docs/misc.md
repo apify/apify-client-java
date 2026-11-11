@@ -1,6 +1,6 @@
 # Store, users & logs
 
-## Apify Store — `client.store()`
+## Apify Store: `client.store()`
 
 Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollectionClient`.
 
@@ -20,7 +20,7 @@ Actors that allow agentic users), `responseFormat` (the response shape: `full` o
 ```java
 // Publishers.collect() drains the whole publisher; fine here since `limit` already caps it.
 // To stop early without fetching further pages, subscribe with your own Flow.Subscriber instead
-// (request(1) at a time, cancel() once you have enough) — see IterateStore.java in the examples.
+// (request(1) at a time, cancel() once you have enough); see IterateStore.java in the examples.
 List<ActorStoreListItem> items =
     Publishers.collect(client.store().iterate(new StoreListOptions().search("crawler").limit(20L), 10L))
         .join();
@@ -29,12 +29,12 @@ items.forEach(item -> System.out.println(item.getUsername() + "/" + item.getName
 
 `ActorStoreListItem` fields: `getId()`, `getName()`, `getUsername()`, `getTitle()`,
 `getDescription()`, `getStats()` (`ActorStats`; see [Actors](actors.md#actorclient)),
-`getCurrentPricingInfo()` (`PricingInfo` — `getPricingModel()`), `getPictureUrl()`,
+`getCurrentPricingInfo()` (`PricingInfo`: `getPricingModel()`), `getPictureUrl()`,
 `getUserPictureUrl()`, `getUrl()`, `getReadmeSummary()`. Any field not covered by a typed getter is
 still available via the inherited `getExtra()` (see
 [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
 
-## Users — `client.me()` / `client.user(id)`
+## Users: `client.me()` / `client.user(id)`
 
 | Method | Description |
 |---|---|
@@ -58,12 +58,12 @@ me.ifPresent(
 JsonNode usage = client.me().monthlyUsage().join();
 ```
 
-`User` fields: `getId()`, `getUsername()`, `getProfile()` (`UserProfile` — `getBio()`, `getReadme()`,
+`User` fields: `getId()`, `getUsername()`, `getProfile()` (`UserProfile`: `getBio()`, `getReadme()`,
 `getName()`, `getPictureUrl()`, `getGithubUsername()`, `getWebsiteUrl()`, `getTwitterUsername()`, all
 nullable).
-Only present for `me()`: `getEmail()`, `getProxy()` (`UserProxy` — `getPassword()`, `getGroups()`
+Only present for `me()`: `getEmail()`, `getProxy()` (`UserProxy`: `getPassword()`, `getGroups()`
 as `List<ProxyGroup>`, each with `getName()`/`getDescription()`/`getAvailableCount()` as `Long`),
-`getPlan()` (`UserPlan` — `getId()`, `getDescription()`, `getIsEnabled()`,
+`getPlan()` (`UserPlan`: `getId()`, `getDescription()`, `getIsEnabled()`,
 `getMonthlyBasePriceUsd()`/`getMonthlyUsageCreditsUsd()`/`getUsageDiscountPercent()`/
 `getMaxMonthlyUsageUsd()`/`getMaxActorMemoryGbytes()`/`getMaxMonthlyActorComputeUnits()`/
 `getMaxMonthlyResidentialProxyGbytes()`/`getMaxMonthlyProxySerps()`/
@@ -71,16 +71,16 @@ as `List<ProxyGroup>`, each with `getName()`/`getDescription()`/`getAvailableCou
 `List<String>`, `getMaxActorCount()`/`getMaxActorTaskCount()`/`getDataRetentionDays()`/
 `getTeamAccountSeatCount()` as `Long`, `getAvailableProxyGroups()` as `JsonNode`,
 `getSupportLevel()`, `getAvailableAddOns()` as `List<JsonNode>`), `getEffectivePlatformFeatures()`
-(`JsonNode`), `getCreatedAt()` (`Instant`), `getIsPaying()` (`Boolean`). Plus `getExtra()` — a
+(`JsonNode`), `getCreatedAt()` (`Instant`), `getIsPaying()` (`Boolean`). Plus `getExtra()`, a
 `Map<String, Object>` carrying any account field not modelled directly.
 
-## Logs — `client.log(id)`
+## Logs: `client.log(id)`
 
 Access a build's or run's log directly, or via `client.run(id).log()` / `client.build(id).log()`.
 
 | Method | Description |
 |---|---|
-| `get()` / `get(LogOptions)` | The whole log as text. Completes with `Optional<String>` when addressed by an explicit id (`client.log(id)`); on `run.log()`/`build.log()` (no log id of its own), a 404 is ambiguous and throws `NotFoundError` instead — see [Fetching single resources](../README.md#fetching-single-resources). |
+| `get()` / `get(LogOptions)` | The whole log as text. Completes with `Optional<String>` when addressed by an explicit id (`client.log(id)`); on `run.log()`/`build.log()` (no log id of its own), a 404 is ambiguous and throws `NotFoundError` instead; see [Fetching single resources](../README.md#fetching-single-resources). |
 | `getAsBytes()` / `getAsBytes(LogOptions)` | As `get()`, but completes with `Optional<byte[]>` (the raw bytes, not decoded as text). Same 404 handling as `get()`. |
 | `stream()` / `stream(LogOptions)` | A live `InputStream` over the log (for redirection). Completes with `InputStream`; throws on any error response, including a 404. |
 

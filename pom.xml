@@ -6,7 +6,7 @@
 
     <groupId>com.apify</groupId>
     <artifactId>apify-client</artifactId>
-    <version>0.13.0</version>
+    <version>0.14.0</version>
     <packaging>jar</packaging>
 
     <name>Apify Java Client</name>
@@ -42,6 +42,7 @@
         <jackson.version>3.2.1</jackson.version>
         <junit.version>5.10.2</junit.version>
         <brotli4j.version>1.23.0</brotli4j.version>
+        <zstd-jni.version>1.5.7-4</zstd-jni.version>
         <slf4j.version>2.0.13</slf4j.version>
     </properties>
 
@@ -76,6 +77,16 @@
             <groupId>com.aayushatharva.brotli4j</groupId>
             <artifactId>brotli4j</artifactId>
             <version>${brotli4j.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Zstandard request-body compression (Content-Encoding: zstd). The JDK has no zstd codec.
+             zstd-jni bundles its native libraries for the common platforms in one jar, so a
+             consumer that wants ZstdHttpCompressor adds this artifact to their own project. -->
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <version>${zstd-jni.version}</version>
             <optional>true</optional>
         </dependency>
 

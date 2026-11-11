@@ -7,7 +7,6 @@ import com.apify.client.build.BuildCollectionClient;
 import com.apify.client.dataset.DatasetClient;
 import com.apify.client.dataset.DatasetCollectionClient;
 import com.apify.client.http.DefaultHttpTransport;
-import com.apify.client.http.HttpTransport;
 import com.apify.client.http.Timeout;
 import com.apify.client.internal.ApiPaths;
 import com.apify.client.internal.HttpClientCore;
@@ -41,10 +40,8 @@ import java.util.concurrent.CompletableFuture;
  * resource clients via the accessor methods, e.g. {@link #actor(String)}, {@link #dataset(String)},
  * {@link #run(String)}. It is safe for concurrent use.
  *
- * <p>Every network-calling method is asynchronous and non-blocking: it returns a {@link
- * java.util.concurrent.CompletableFuture} (or, for a paginated collection's lazy iteration, a
- * {@link java.util.concurrent.Flow.Publisher}) instead of blocking the calling thread on the HTTP
- * exchange.
+ * <p>Every network-calling method is non-blocking and returns a {@link CompletableFuture} (or a
+ * {@link java.util.concurrent.Flow.Publisher} for lazy iteration of a collection).
  *
  * <h2>Quick start</h2>
  *
@@ -57,23 +54,13 @@ import java.util.concurrent.CompletableFuture;
  *     .join();
  * }</pre>
  *
- * <h2>Architecture</h2>
+ * <p>The HTTP transport is replaceable with {@link ApifyClientBuilder#httpTransport}; the default
+ * is {@link DefaultHttpTransport}. Authentication, the {@code User-Agent} header, retries and
+ * timeouts apply to every request.
  *
- * <ul>
- *   <li>Public interface: {@link ApifyClient} and the resource clients it returns.
- *   <li>Replaceable transport: the {@link HttpTransport} interface, with a default {@link
- *       DefaultHttpTransport}; swap it via {@link ApifyClientBuilder#httpTransport(HttpTransport)}.
- *   <li>Cross-cutting behaviour (auth, User-Agent, retries with exponential backoff, timeouts)
- *       lives in the internal HTTP client and is applied to every request, non-blocking end to end.
- * </ul>
- *
- * <p>Every resource client's constructor is public, but that is an artifact of each living in its
- * own resource-scoped package (e.g. {@link ActorClient} in {@code com.apify.client.actor}) rather
- * than an invitation to call it directly: they are not meant to be constructed by user code. Always
- * obtain one from {@link ApifyClient} or from another resource client's own accessor methods (e.g.
- * {@link ActorClient#lastRun}, {@link ActorClient#builds}), which supply the internal wiring (the
- * shared HTTP client, base URL, inherited query filters) a direct constructor call would otherwise
- * have to reconstruct by hand.
+ * <p>Obtain resource clients from this class or from another resource client's accessors, such as
+ * {@link ActorClient#builds}. Their constructors are public only because they live in separate
+ * packages, and are not meant to be called directly.
  */
 public final class ApifyClient {
 
@@ -120,27 +107,18 @@ public final class ApifyClient {
     return new ApifyClient(http.withTimeout(timeout), baseUrl, publicBaseUrl);
   }
 
-  /**
-   * Returns the {@code User-Agent} header value this client sends. Not part of the public API
-   * (there is no supported use for an end user to read it back); package-private only so the test
-   * suite can assert on it.
-   */
+  /** Returns the {@code User-Agent} header value this client sends. Package-private for tests. */
   String getUserAgent() {
     return http.userAgent();
   }
 
-  /**
-   * Returns the fully-qualified API base URL this client targets (including the {@code /v2}
-   * suffix). Not part of the public API, for the same reason as {@link #getUserAgent()}.
-   */
+  /** Returns the API base URL this client targets, including {@code /v2}. For tests. */
   String getApiBaseUrl() {
     return baseUrl;
   }
 
   /**
-   * Returns the fully-qualified public API base URL this client builds shareable URLs against
-   * (including the {@code /v2} suffix). Not part of the public API, for the same reason as {@link
-   * #getUserAgent()}.
+   * Returns the public API base URL used to build shareable URLs, including {@code /v2}. For tests.
    */
   String getPublicApiBaseUrl() {
     return publicBaseUrl;
@@ -289,10 +267,10 @@ public final class ApifyClient {
   /**
    * Sets the status message of the current Actor run.
    *
-   * <p>This convenience method updates the run identified by the {@code ACTOR_RUN_ID} environment
-   * variable, so it only works when called from inside an Actor run. Throws {@link
-   * IllegalStateException} if {@code ACTOR_RUN_ID} is not set. Matches the reference client's
-   * top-level {@code setStatusMessage}.
+   * <p>It updates the run identified by the {@code ACTOR_RUN_ID} environment variable, so it works
+   * only inside an Actor run.
+   *
+   * @throws IllegalStateException if {@code ACTOR_RUN_ID} is not set
    */
   public CompletableFuture<ActorRun> setStatusMessage(
       String message, SetStatusMessageOptions options) {

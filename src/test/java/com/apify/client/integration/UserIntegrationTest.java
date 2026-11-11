@@ -63,7 +63,6 @@ class UserIntegrationTest extends IntegrationBase {
   // Note: `me().updateLimits(...)` is intentionally NOT exercised by a live integration test. It
   // mutates account-global state that cannot be isolated between the concurrent cross-language test
   // runs the test-requirements mandate (unlike the per-run resources every other test creates), so
-  // a
-  // mutating test here would race those runs. Its request behaviour is covered offline instead by
+  // a mutating test here would race those runs. Its request behaviour is covered offline instead by
   // ClientBehaviourRegressionTest#updateLimitsSendsPutToMeLimits.
 }

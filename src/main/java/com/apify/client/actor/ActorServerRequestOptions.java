@@ -26,10 +26,13 @@ public final class ActorServerRequestOptions {
   private static final Set<String> METHODS =
       Set.of("GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS", "TRACE", "PATCH");
 
+  private static final String PARENT_REQUEST_ID_HEADER = "X-Actor-Request-ID";
+
   private String method = "GET";
   private final Map<String, Object> params = new LinkedHashMap<>();
   private final Map<String, String> headers = new LinkedHashMap<>();
   private Object body;
+  private String parentRequestId;
   private HttpCompressor compression;
   private Timeout timeout = Timeout.LONG;
 
@@ -93,6 +96,17 @@ public final class ActorServerRequestOptions {
   }
 
   /**
+   * The {@code X-Actor-Request-ID} header of the request your multi-tenant Server Actor is
+   * handling. It is sent on as the same header, replacing one set in {@link #headers}, so the
+   * called Actor charges at that request's pricing tier. Use a client created with the run's {@code
+   * APIFY_TOKEN}.
+   */
+  public ActorServerRequestOptions parentRequestId(String parentRequestId) {
+    this.parentRequestId = parentRequestId;
+    return this;
+  }
+
+  /**
    * Compresses the request body with {@code compression}, under the same conditions as for API
    * calls: a body that is large enough and has a content type that is not already compressed, and
    * no {@code Content-Encoding} header of your own. Set it only if the Actor's server decodes the
@@ -125,8 +139,17 @@ public final class ActorServerRequestOptions {
     return body;
   }
 
+  /**
+   * The headers to send: the caller's, with the parent request ID header replacing any duplicate.
+   */
   Map<String, String> headersValue() {
-    return Collections.unmodifiableMap(headers);
+    if (parentRequestId == null) {
+      return Collections.unmodifiableMap(headers);
+    }
+    Map<String, String> merged = new LinkedHashMap<>(headers);
+    merged.keySet().removeIf(PARENT_REQUEST_ID_HEADER::equalsIgnoreCase);
+    merged.put(PARENT_REQUEST_ID_HEADER, parentRequestId);
+    return Collections.unmodifiableMap(merged);
   }
 
   HttpCompressor compressionValue() {

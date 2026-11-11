@@ -5,7 +5,7 @@ Webhooks notify an external service when specific events occur. Access the colle
 invocations) are available account-wide via `client.webhookDispatches()` /
 `client.webhookDispatch(id)` and per-webhook via `client.webhook(id).dispatches()`.
 
-## `WebhookCollectionClient` — `client.webhooks()`
+## `WebhookCollectionClient`: `client.webhooks()`
 
 The account-wide collection supports both listing and creation.
 
@@ -20,7 +20,7 @@ The account-wide collection supports both listing and creation.
 `client.actor(id).webhooks()` and `client.task(id).webhooks()` return a
 `NestedWebhookCollectionClient`. The Apify API only supports **reading** webhooks on those nested
 paths (`GET /v2/actors/{id}/webhooks`, `GET /v2/actor-tasks/{id}/webhooks`), so this read-only type
-exposes `list(ListOptions)` and `iterate(ListOptions, Long chunkSize)` — it has no `create(...)`. To
+exposes `list(ListOptions)` and `iterate(ListOptions, Long chunkSize)`; it has no `create(...)`. To
 create a webhook targeting a specific Actor or task, use `client.webhooks().create(...)` and set the
 Actor/task in the webhook's `condition`.
 
@@ -57,7 +57,7 @@ System.out.println(dispatch.getId());
 `getHeadersTemplate()` are interpolated with values from the triggering event before dispatch),
 `getCondition()` (`JsonNode`; one of an Actor ID, a task ID or a specific run ID, depending on how
 the webhook was configured), `isIgnoreSslErrors()`, `isDoNotRetry()`, `getPayloadTemplate()`,
-`getHeadersTemplate()`, `getDescription()`, `getLastDispatch()` (`WebhookLastDispatch`, nullable —
+`getHeadersTemplate()`, `getDescription()`, `getLastDispatch()` (`WebhookLastDispatch`, nullable:
 a summary of the most recent dispatch: `getStatus()` one of `"ACTIVE"`/`"SUCCEEDED"`/`"FAILED"`,
 `getFinishedAt()`/`getRemovedAt()` as `Instant`), and `getStats()` (`WebhookStats`, exposing
 `getTotalDispatches()`). Any field not covered by a typed getter is still available via the
@@ -73,11 +73,11 @@ inherited `getExtra()` (see [the docs index](README.md#model-fields-and-unmodele
 
 `WebhookDispatch` fields: `getId()`, `getUserId()`, `getWebhookId()`, `getCreatedAt()` (`Instant`),
 `getStatus()` (one of `"ACTIVE"`/`"SUCCEEDED"`/`"FAILED"`), `getEventType()` (the event that
-triggered the dispatch), `getCalls()` (unmodifiable `List<WebhookDispatchCall>` — each exposing
+triggered the dispatch), `getCalls()` (unmodifiable `List<WebhookDispatchCall>`; each exposing
 `getStartedAt()`/`getFinishedAt()` as `Instant`, `getErrorMessage()`, `getResponseStatus()`
-(`Integer`), `getResponseBody()`), `getWebhook()` (`WebhookDispatchWebhookInfo`, nullable — a
+(`Integer`), `getResponseBody()`), `getWebhook()` (`WebhookDispatchWebhookInfo`, nullable: a
 `getRequestUrl()`/`isAdHoc()` summary of the webhook that produced the dispatch), and
-`getEventData()` (`WebhookDispatchEventData`, nullable — `getActorRunId()`/`getActorId()`/
+`getEventData()` (`WebhookDispatchEventData`, nullable: `getActorRunId()`/`getActorId()`/
 `getActorTaskId()`/`getActorBuildId()`, whichever apply to the triggering event). Any field not
 covered by a typed getter is still available via the inherited `getExtra()` (see
 [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).

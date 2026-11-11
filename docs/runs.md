@@ -16,7 +16,7 @@ Access the run collection with `client.runs()` (or `client.actor(id).runs()` /
 filter with only non-terminal statuses, declared by `client.runs()` and `client.actor(id).runs()`),
 declared by every scope's endpoint (`client.runs()`, `client.actor(id).runs()`,
 `client.task(id).runs()`), and `startedAfter(String)` / `startedBefore(String)` (ISO-8601), declared
-only by the account-wide `client.runs()` and the Actor-scoped `client.actor(id).runs()` endpoints —
+only by the account-wide `client.runs()` and the Actor-scoped `client.actor(id).runs()` endpoints;
 the task-scoped `client.task(id).runs()` endpoint's spec does not declare these two parameters at
 all, so set them only when listing at one of the other two scopes. All parameters a given scope
 declares compose (e.g. a status filter combined with a start-time window on `client.runs()`).
@@ -48,7 +48,7 @@ PaginationList<ActorRun> runs = client.runs().list(
 | `getStreamedLog(StreamedLogOptions)` | As above, with a custom destination / options. |
 
 If `waitSecs` elapses before the run reaches a terminal state, `waitForFinish` returns the run's
-current (non-terminal) status rather than throwing or blocking further — check `isTerminal()` on
+current (non-terminal) status rather than throwing or blocking further; check `isTerminal()` on
 the result and call `waitForFinish` again (or poll) if you need to keep waiting. `ActorClient`/
 `TaskClient`'s `call(...)` overloads (see [Actors](actors.md#actorclient)/[Tasks](tasks.md)) return
 this same possibly-non-terminal `ActorRun` for the same reason: `call` is `start` followed by
@@ -63,17 +63,17 @@ right after a run/build is created), past which it throws that `NotFoundError`.
 
 `getStreamedLog()` completes with a `StreamedLog`: a helper that follows the run's live raw log in a
 background thread and redirects each complete, timestamped message to a destination. It is
-`AutoCloseable` — call `start()` (itself asynchronous; it completes once the live stream is open and
+`AutoCloseable`; call `start()` (itself asynchronous; it completes once the live stream is open and
 the background reader thread is running) to begin redirection and `stop()` (or `close()`, via
 try-with-resources) to end it.
 
 With no options, messages go to an SLF4J `Logger` at `INFO` level, prefixed with the
 Actor name and run id (looked up automatically). `StreamedLogOptions` customizes it:
 
-- `toLog(Consumer<String>)` — send each complete message to your own consumer instead of the
+- `toLog(Consumer<String>)`: send each complete message to your own consumer instead of the
   default logger.
-- `prefix(String)` — override the auto-built prefix used by the default logger.
-- `fromStart(boolean)` — when `false`, skip log lines produced before redirection started
+- `prefix(String)`: override the auto-built prefix used by the default logger.
+- `fromStart(boolean)`: when `false`, skip log lines produced before redirection started
   (default `true`).
 
 A run that has not logged anything yet (e.g. still queued for resources, see
@@ -81,6 +81,17 @@ A run that has not logged anything yet (e.g. still queued for resources, see
 `StreamedLog` reopens it, with capped exponential backoff, until it actually delivers content,
 rather than silently giving up. If `stop()`/`close()` is called before that happens, it fetches the
 log in one plain request instead, so whatever was logged by then is still delivered.
+
+The `toLog` consumer runs on the background reader thread, one message at a time. `stop()` and
+`close()` wait for the consumer to finish its current message and up to 1 second for a message still
+arriving, deliver the last message, and then return. If the calling thread is interrupted, they
+close the stream, keep the interrupt flag, and return before the reader has ended, so the last
+message may arrive after they return, and `start()` throws until a later `stop()` or `close()` has
+joined the reader.
+
+Calling `close()` from inside the consumer is supported: it signals the stop and returns without
+waiting, and the reader ends once the consumer returns. `start()` throws until a later `stop()` or
+`close()` from another thread has joined the reader.
 
 ```java
 RunClient runClient = client.run("RUN_ID");
@@ -108,9 +119,8 @@ client.run("RUN_ID").update(Map.of("statusMessage", "half way there", "isStatusM
 > `task(id).lastRun(...)` targets the `runs/last` path and is intended for reading (`get`,
 > `dataset()`/`keyValueStore()`/`requestQueue()`, `log()`). The mutating methods (`abort`, `reboot`,
 > `resurrect`, `metamorph`, `charge`, `update`, `delete`) require a concrete run and have no
-> `runs/last` endpoint — resolve the id first (`lastRun(...).get().join()` then `client.run(id)`). The type
-> exposes them uniformly (matching the reference client's shared `RunClient`), but calling them on a
-> last-run client will fail server-side.
+> `runs/last` endpoint; resolve the id first (`lastRun(...).get().join()` then `client.run(id)`). The type
+> exposes them uniformly, but calling them on a last-run client fails server-side.
 
 `ActorRun` fields include `getId()`, `getActId()`, `getUserId()`, `getStatus()`,
 `getStatusMessage()`, `getStartedAt()`, `getFinishedAt()`, `getBuildId()`, `getDefaultDatasetId()`,
@@ -133,17 +143,17 @@ owning it, e.g. `"ANYONE_WITH_ID_CAN_READ"`, `"RESTRICTED"`, or `null` to follow
 default), `getChargedEventCounts()` (`Map<String, Long>`; per-event-type charge counts for
 pay-per-event Actors, `null` otherwise), `getPricingInfo()` (`JsonNode`; shape depends on the
 Actor's pricing model), `getUsage()` / `getUsageUsd()` (`ActorRunUsage`; per-billable-unit resource
-consumption, the latter as its USD cost — see below), `getUsageTotalUsd()` (`Double`; the run's
+consumption, the latter as its USD cost; see below), `getUsageTotalUsd()` (`Double`; the run's
 total cost in USD, combining platform usage and/or event costs depending on pricing model),
-`getStats()` (`ActorRunStats`; runtime metrics — `getInputBodyLen()`, `getMigrationCount()`,
+`getStats()` (`ActorRunStats`; runtime metrics; `getInputBodyLen()`, `getMigrationCount()`,
 `getRebootCount()`, `getRestartCount()`, `getResurrectCount()`,
 `getMemAvgBytes()`/`getMemMaxBytes()`/`getMemCurrentBytes()`,
 `getCpuAvgUsage()`/`getCpuMaxUsage()`/`getCpuCurrentUsage()`, `getNetRxBytes()`/`getNetTxBytes()`,
 `getDurationMillis()`, `getRunTimeSecs()`, `getMetamorph()`, `getComputeUnits()`; any other field is
 still reachable via the inherited `getExtra()`), `getOptions()` (`ActorRunOptions`; the run
 configuration actually applied,
-which may differ from what was requested — see below), `getMeta()` (`ActorRunMeta`; `getOrigin()`,
-`getClientIp()`, `getUserAgent()`, `getScheduleId()`, `getScheduledAt()` — how and, if triggered by a
+which may differ from what was requested; see below), `getMeta()` (`ActorRunMeta`; `getOrigin()`,
+`getClientIp()`, `getUserAgent()`, `getScheduleId()`, `getScheduledAt()`; how and, if triggered by a
 schedule, when the run was initiated), `getBuildNumber()` (`String`; the
 build's semver-like number, e.g. `"0.0.36"`), `getExitCode()` (`Integer`; the process exit code once
 finished), `isContainerServerReady()` (`Boolean`; whether the container's HTTP server can accept
@@ -165,8 +175,8 @@ nullable), `getMemoryMbytes()` (`Long`, nullable), `getDiskMbytes()` (`Long`, nu
 `getRestartOnError()` (`Boolean`, nullable).
 
 `RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)`,
-`idempotencyKey(String)` — auto-generated when unset so a transport-retried charge is applied at
-most once — and `requestId(String)`, the `X-Actor-Request-ID` of the Server Actor request being
+`idempotencyKey(String)`, auto-generated when unset so a transport-retried charge is applied at
+most once, and `requestId(String)`, the `X-Actor-Request-ID` of the Server Actor request being
 charged (required for multi-tenant Server Actor runs, omitted otherwise).
 
 ```java

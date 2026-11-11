@@ -4,8 +4,7 @@ import com.apify.client.http.Timeout;
 
 /**
  * Write options for {@link KeyValueStoreClient#setRecord(String, byte[], String,
- * SetRecordOptions)}, mirroring the reference client's {@code timeoutSecs}/{@code
- * doNotRetryTimeouts}/{@code contentEncoding}.
+ * SetRecordOptions)}: the timeout, whether to retry timeouts, and the content encoding.
  */
 public final class SetRecordOptions {
   private Timeout timeout;
@@ -40,18 +39,12 @@ public final class SetRecordOptions {
 
   /**
    * Encoding already applied to the record's {@code value}, sent as the {@code Content-Encoding}
-   * header (trimmed first; it must not be blank). Set it to upload a pre-compressed value (e.g. a
-   * gzipped file read from disk): the client then sends the bytes as they are and does not compress
-   * them again. The API accepts {@code gzip}, {@code br}, {@code deflate}, and {@code identity}
-   * (matched case-insensitively) and stores the record exactly as uploaded; since this client does
-   * not advertise support for a compressed response ({@code Accept-Encoding}), a later {@link
-   * KeyValueStoreClient#getRecord(String) getRecord} transparently receives the decompressed value
-   * rather than the stored compressed bytes. Passing {@code identity} turns the client's own
-   * automatic compression off for this upload without changing how the client is configured.
-   *
-   * <p>Unlike the reference JS client, this has no corresponding type check: {@code value} here is
-   * always raw bytes (never a string or an object the client would serialize to JSON), so there is
-   * no non-binary case to reject.
+   * header (trimmed; not blank). Use it to upload a pre-compressed value: the client sends the
+   * bytes as they are and does not compress them again. The API accepts {@code gzip}, {@code br},
+   * {@code zstd}, {@code deflate} and {@code identity} (case-insensitive) and stores the record as
+   * uploaded. Since the client sends no {@code Accept-Encoding}, {@link
+   * KeyValueStoreClient#getRecord(String) getRecord} returns the decompressed value. {@code
+   * identity} turns off the client's own compression for this upload.
    */
   public SetRecordOptions contentEncoding(String contentEncoding) {
     this.contentEncoding = contentEncoding;

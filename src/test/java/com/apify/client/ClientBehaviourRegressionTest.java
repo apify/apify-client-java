@@ -147,6 +147,9 @@ class ClientBehaviourRegressionTest {
     assertEquals(0, backend.calls, "no request should be sent for an invalid charge");
   }
 
+  // The setStatusMessage success path with ACTOR_RUN_ID set is not tested: the JVM environment
+  // cannot be changed in-process without reflection into JDK internals, and a live test is not an
+  // Actor run. This test covers the unset case.
   @Test
   void setStatusMessageThrowsWhenActorRunIdUnset() {
     MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{}}");
@@ -157,17 +160,6 @@ class ClientBehaviourRegressionTest {
     assertEquals(0, backend.calls, "no request should be sent when ACTOR_RUN_ID is unset");
   }
 
-  // Documented skip, mirroring this project's existing metamorph/reboot/charge live-skip
-  // convention (see ActorRunIntegrationTest's class-level comment): the ACTOR_RUN_ID-set success
-  // path (PUTs statusMessage/isStatusMessageTerminal to the run identified by that env var) is not
-  // covered here because the JVM's environment map is effectively immutable in-process without
-  // reflecting into JDK internals (fragile, and guarded by the module system since Java 9), and it
-  // is not live-testable either (a live integration test isn't itself an Actor run, so
-  // ACTOR_RUN_ID is never set there). The PUT-body construction it exercises — statusMessage
-  // always set, isStatusMessageTerminal only when non-null — is otherwise a straight-line, 3-line
-  // method body with no branch this test suite doesn't already cover elsewhere (RunClient.update's
-  // PUT is exercised by TaskIntegrationTest#taskCrudFlow and friends).
-
   @Test
   void metamorphSendsTargetActorIdBuildAndInputBody() {
     MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"id\":\"run123\"}}");
@@ -177,8 +169,7 @@ class ClientBehaviourRegressionTest {
         .join();
     assertTrue(backend.lastUrl.contains("actor-runs/run123/metamorph"), backend.lastUrl);
     // targetActorId is normalized to the URL-safe username~actor-name form before sending
-    // (ResourceContext.toSafeId), matching the reference client's _toSafeId; '~' is then
-    // percent-encoded like any other query value.
+    // (ResourceContext.toSafeId); '~' is then percent-encoded like any other query value.
     assertTrue(backend.lastUrl.contains("targetActorId=apify%7Eother-actor"), backend.lastUrl);
     assertTrue(backend.lastUrl.contains("build=1.2.3"), backend.lastUrl);
     assertTrue(backend.lastBody.contains("\"foo\":\"bar\""), backend.lastBody);
@@ -552,12 +543,10 @@ class ClientBehaviourRegressionTest {
   void iterateSnapshotsOptionsSoLaterMutationsDoNotLeak() {
     // The publisher must capture the options (offset/limit AND filters) at call time; mutating the
     // caller's options object afterwards must not change subsequent page requests. Note this
-    // backend
-    // always returns the same non-empty page (it never signals "empty page" / exhaustion - see
-    // AsyncPaginatedPublisher's class doc on why it never stops on a short page or reported total),
-    // so the test must not fully drain the publisher (that would fetch pages forever); it only
-    // needs
-    // to request a single item to trigger the one page fetch it is asserting on.
+    // backend always returns the same non-empty page (it never signals "empty page" / exhaustion -
+    // see AsyncPaginatedPublisher's class doc on why it never stops on a short page or reported
+    // total), so the test must not fully drain the publisher (that would fetch pages forever); it
+    // only needs to request a single item to trigger the one page fetch it is asserting on.
     MockTransport backend =
         MockTransport.ofConstant(
             200, "{\"data\":{\"items\":[{}],\"total\":1,\"offset\":0,\"limit\":0,\"count\":1}}");
@@ -626,9 +615,7 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void batchAddRequestsNeverThrowsOnNonRetryableClientError() {
-    // Matches the reference client's `_batchAddRequestsWithRetries`: even a hard 4xx (e.g. bad
-    // token / insufficient permissions) must NOT be thrown. It is reported as unprocessed instead,
-    // keeping batchAddRequests' never-throws contract regardless of the failure cause.
+    // Even a hard 4xx (such as a bad token) is not thrown: it is reported as unprocessed.
     MockTransport backend =
         MockTransport.ofConstant(
             403, "{\"error\":{\"type\":\"insufficient-permissions\",\"message\":\"no\"}}");
@@ -668,11 +655,10 @@ class ClientBehaviourRegressionTest {
   @Test
   void batchAddRequestsNeverThrowsOnPersistentTransportFailure() {
     // Sibling of `batchAddRequestsNeverThrowsOnNonRetryableClientError`: a transport-level failure
-    // (ApifyTransportException, e.g. connection refused/timeout — the request never reached the
-    // API at all) must be treated the same as an API-level failure (ApifyApiException). Both are
+    // (ApifyTransportException, e.g. connection refused or timeout, so the request never reached
+    // the API) must be treated the same as an API-level failure (ApifyApiException). Both are
     // ApifyClientException subtypes, and batchAddRequests' never-throws contract must hold across
-    // both, matching the reference client's `_batchAddRequestsWithRetries`. Sequential path
-    // (single chunk, default maxParallel).
+    // both. Sequential path (single chunk, default maxParallel).
     MockTransport backend = new MockTransport(List.of(MockTransport.networkError()));
     RequestQueueRequest request = new RequestQueueRequest("https://example.com", "k0");
     BatchAddResult result =
@@ -690,9 +676,9 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void batchAddRequestsNeverThrowsOnPersistentTransportFailureWithParallelChunks() {
-    // Same as above but exercising the `maxParallel > 1` path, where each chunk fails independently
-    // — the never-throws contract must hold there too, and every request across every chunk must
-    // come back via getUnprocessedRequests().
+    // Same as above but exercising the `maxParallel > 1` path, where each chunk fails
+    // independently. The never-throws contract must hold there too, and every request across every
+    // chunk must come back via getUnprocessedRequests().
     MockTransport backend = new MockTransport(List.of(MockTransport.networkError()));
     List<RequestQueueRequest> requests = new ArrayList<>();
     for (int i = 0; i < 60; i++) {
@@ -732,8 +718,7 @@ class ClientBehaviourRegressionTest {
   void waitForFinishToleratesNullDataBodyAsNotYetAvailable() {
     // A 200 response with a null `data` body (as opposed to a 404) must be tolerated the same way -
     // treated as "not yet available" and retried - not thrown as an NPE from testing a null value
-    // for
-    // terminality.
+    // for terminality.
     MockTransport backend =
         new MockTransport(
             List.of(
@@ -748,8 +733,7 @@ class ClientBehaviourRegressionTest {
   @Test
   void waitForFinishThrowsWhenResourceNeverAppears() {
     // If the resource is never fetchable within the budget, the wait must fail loudly rather than
-    // return a phantom result - with the actual 404 the server gave, matching the reference client,
-    // not a generic wrapped error.
+    // return a phantom result, and it must fail with the actual 404, not a generic wrapped error.
     MockTransport backend =
         MockTransport.ofConstant(
             404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}");
@@ -764,8 +748,8 @@ class ClientBehaviourRegressionTest {
   void waitForFinishGivesUpOnSustained404BeforeTheFullWaitBudget() {
     // A run/build id that never existed 404s forever. waitForFinish must not poll it for the whole
     // (here effectively indefinite, waitSecs omitted) wait budget - it gives up once the resource
-    // has
-    // been missing continuously for a few seconds, bounding how long a bad id can hang the caller.
+    // has been missing continuously for a few seconds, bounding how long a bad id can hang the
+    // caller.
     MockTransport backend =
         MockTransport.ofConstant(
             404, "{\"error\":{\"type\":\"record-not-found\",\"message\":\"missing\"}}");
@@ -1086,7 +1070,7 @@ class ClientBehaviourRegressionTest {
     assertEquals(
         "gzip",
         backend.lastHeaders.firstValue("Content-Encoding").orElse(null),
-        "the header value must be trimmed, matching the reference client's schema");
+        "the header value must be trimmed");
   }
 
   @Test

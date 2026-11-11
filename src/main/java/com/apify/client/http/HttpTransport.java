@@ -7,17 +7,15 @@ import java.net.http.HttpResponse;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * The replaceable, non-blocking transport contract of the client.
+ * The replaceable, non-blocking transport of the client.
  *
- * <p>Implementations are responsible only for sending a single, fully-prepared request and
- * completing the returned future with the raw response — asynchronously, never blocking the calling
- * thread on the network round-trip. Authentication, the {@code User-Agent} header, retries and
- * (de)serialization are handled by the client, so a transport implementation only needs to perform
- * one non-blocking network round-trip.
+ * <p>An implementation sends one fully prepared request without blocking the calling thread and
+ * completes the returned future with the raw response. The client handles authentication, the
+ * {@code User-Agent} header, retries and (de)serialization.
  *
- * <p>A non-2xx HTTP status is <b>not</b> an error at this layer — complete the future normally with
- * that {@link HttpResponse}. Only a transport-level failure (connection refused, DNS, timeout)
- * should complete the future exceptionally.
+ * <p>A non-2xx status is not an error here: complete the future normally with the {@link
+ * HttpResponse}. Only a transport-level failure (connection refused, DNS, timeout) completes it
+ * exceptionally.
  *
  * <p>Swap the default implementation via {@link ApifyClientBuilder#httpTransport(HttpTransport)} to
  * share a connection pool, customize TLS/proxy settings, or inject a mock in tests.

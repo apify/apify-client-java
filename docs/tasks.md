@@ -27,7 +27,7 @@ Task task = client.tasks().create(Map.of(
 | `publish()` / `unpublish()` | Publish/unpublish the task on its public landing page, by setting `isPublic` through `update(Object)`. Both require write permission to both the task and its Actor; `publish()` additionally requires the task's Actor to be public and a configured `publicConfig`. `unpublish()` preserves `publicConfig` so the task can be republished without re-entering it. Complete with the updated `Task`. |
 | `start(Object input, TaskStartOptions)` | Start a task run (input overrides stored input; `null` uses it). Completes with `ActorRun`. |
 | `call(Object input, TaskStartOptions, Long waitSecs)` | Start and poll until finished; does **not** stream the run's log. Completes with `ActorRun`. |
-| `call(Object input, TaskCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default (matching the reference client's `call` defaulting `options.log` to `'default'`). Use `TaskCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
+| `call(Object input, TaskCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default. Use `TaskCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
 | `getInput()` | The stored input. Completes with `JsonNode`; throws `NotFoundError` if the task is gone (no separate "input absent" state). |
 | `updateInput(Object)` | Replace the stored input. Completes with `JsonNode`. |
 | `lastRun(String status)` / `lastRun(LastRunOptions)` | A `RunClient` for the last run (see [`LastRunOptions`](actors.md#actorclient)). |
@@ -53,13 +53,13 @@ ActorRun streamed =
 
 `Task` fields: `getId()`, `getActId()`, `getUserId()`, `getName()`, `getTitle()`,
 `getDescription()`, `getCreatedAt()`, `getModifiedAt()`, `getStats()` (`TaskStats`, exposing
-`getTotalRuns()`), `getOptions()` (`TaskOptions`: the task's stored default run configuration —
+`getTotalRuns()`), `getOptions()` (`TaskOptions`: the task's stored default run configuration:
 `getBuild()` (`String`), `getTimeoutSecs()` (`Long`), `getMemoryMbytes()` (`Long`),
 `getRestartOnError()` (`Boolean`)), `getInput()` (a `JsonNode` snapshot of the stored input, from
 whichever response last returned this `Task` object; prefer `TaskClient.getInput()` above to fetch
 it fresh on-demand), `getActorStandby()` (`ActorStandby`, from `com.apify.client.actor`,
 standby-mode configuration overrides for this task, if any), `getIsPublic()` (`Boolean`; derived
-from `publicConfig.publishedAt` — use `publish()`/`unpublish()` above to change it), and
+from `publicConfig.publishedAt`; use `publish()`/`unpublish()` above to change it), and
 `getPublicConfig()`
 (`TaskPublicConfig`, the task's public landing page display configuration, if any). Any field not
 covered by a typed getter is still available via the inherited `getExtra()` (see
@@ -71,9 +71,9 @@ serving standby requests), `getDesiredRequestsPerActorRun()`, `getDisableStandby
 `getShouldPassActorInput()`.
 
 `TaskPublicConfig` fields (all optional; `null` when unset): `getPublishedAt()` (`Instant`; set
-when the task is published, `null` when unpublished — read-only, changed via `publish()` /
+when the task is published, `null` when unpublished; read-only, changed via `publish()` /
 `unpublish()`), `getSeoTitle()`, `getSeoDescription()`, `getCategorization()` (not part of the
-documented schema; kept for parity with the reference JS client), `getInputSchemaFields()`
+documented schema), `getInputSchemaFields()`
 (`List<String>`), `getDatasetName()`, `getDatasetView()`.
 
 ```java

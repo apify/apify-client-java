@@ -58,12 +58,12 @@ public final class RequestQueueRequest extends ApifyResource {
   }
 
   /**
-   * The deduplication key for the request. Nullable — if unset, the API derives one from the
-   * request (typically the URL + method). Note that {@link
-   * RequestQueueClient#batchAddRequests(List, boolean, BatchAddRequestsOptions) batchAddRequests}'
-   * retry reconciliation matches requests back to the API's response by this field, so a request
-   * without an explicit {@code uniqueKey} can be falsely reported unprocessed after a retry even
-   * though it succeeded server-side; set it explicitly if you rely on that return value.
+   * The deduplication key for the request. Nullable; if unset, the API derives one from the request
+   * (typically the URL and method). Note that {@link RequestQueueClient#batchAddRequests(List,
+   * boolean, BatchAddRequestsOptions) batchAddRequests}' retry reconciliation matches requests back
+   * to the API's response by this field, so a request without an explicit {@code uniqueKey} can be
+   * falsely reported unprocessed after a retry even though it succeeded server-side; set it
+   * explicitly if you rely on that return value.
    */
   public String getUniqueKey() {
     return uniqueKey;

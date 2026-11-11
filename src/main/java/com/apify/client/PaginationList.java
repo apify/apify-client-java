@@ -8,9 +8,8 @@ import java.util.List;
  *
  * <p>The pagination metadata ({@link #getTotal() total}, {@link #getOffset() offset}, {@link
  * #getLimit() limit}, {@link #getCount() count}, {@link #isDesc() desc}) accompanies the {@link
- * #getItems() items}. Note: {@code total} reflects the API's reported total, which can briefly lag
- * immediately after a write (e.g. right after pushing items) because the count is computed
- * asynchronously — re-read after a short delay if you need an exact post-write total.
+ * #getItems() items}. The reported {@code total} can briefly lag right after a write because it is
+ * computed asynchronously; re-read after a short delay for an exact total.
  *
  * @param <T> the item type
  */
