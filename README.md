@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.14.0</version>
+  <version>0.14.1</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.14.0'
+  implementation 'com.apify:apify-client:0.14.1'
 }
 ```
 
@@ -50,7 +50,7 @@ import com.apify.client.actor.ActorStartOptions;
 
 class HelloApify {
   public static void main(String[] args) {
-    // Your API token from https://console.apify.com/settings/integrations
+    // An API token created at https://console.apify.com/settings/integrations (shown only once)
     ApifyClient client = ApifyClient.create(System.getenv("APIFY_TOKEN"));
     ActorRun run = client.actor("apify/hello-world").call(null, new ActorStartOptions(), 120L).join();
     System.out.println("Run " + run.getId() + " finished with status " + run.getStatus());
@@ -437,10 +437,10 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION`: the semantic version of this client (`0.14.0`).
+- `Version.CLIENT_VERSION`: the semantic version of this client (`0.14.1`).
 - `Version.API_SPEC_VERSION`: the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters, and models were last generated
-  and checked against (`v2-2026-11-09T143926Z`). It is a snapshot, not a live compatibility
+  and checked against (`v2-2026-11-13T143025Z`). It is a snapshot, not a live compatibility
   guarantee: the client keeps working against newer, backward-compatible spec revisions, but a
   feature added to the API after this snapshot has no corresponding method here yet.
 

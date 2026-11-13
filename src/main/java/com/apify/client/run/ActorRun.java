@@ -152,7 +152,12 @@ public final class ActorRun extends ApifyResource {
     return usage;
   }
 
-  /** As {@link #getUsage()}, converted to USD; only present where {@link #getUsage()} is. */
+  /**
+   * Platform usage costs in USD, broken down by billable unit. Only present if you own the run and
+   * pay for platform usage (pay per usage, or pay per event with usage costs, such as runs of
+   * single-tenant Server Actors). Not available for standard pay-per-event Actors, and requires an
+   * authentication token.
+   */
   public ActorRunUsage getUsageUsd() {
     return usageUsd;
   }

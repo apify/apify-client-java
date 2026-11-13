@@ -159,7 +159,14 @@ public final class RunClient {
 
   /**
    * Charges for a pay-per-event Actor run: records occurrences of a named event. Only meaningful
-   * for runs of pay-per-event Actors.
+   * for runs of pay-per-event Actors. Call it from the Actor run itself, with the API token the run
+   * received at startup in the {@code APIFY_TOKEN} environment variable.
+   *
+   * <p>To charge a request to a multi-tenant Server Actor, set {@link
+   * RunChargeOptions#requestId(String)} to the {@code X-Actor-Request-ID} header value of the
+   * request. See <a
+   * href="https://docs.apify.com/platform/actors/monetize/server-actors#charge-for-a-request">Charge
+   * for a request</a>.
    *
    * <p>An idempotency key is always sent (generated if not provided), so a retried charge is
    * applied at most once.
@@ -182,8 +189,7 @@ public final class RunClient {
       body.put("requestId", requestId);
     }
     Map<String, String> headers = Map.of(CHARGE_IDEMPOTENCY_HEADER, idempotencyKey);
-    // Route through mergedParams like the run's other actions, so a last-run-seeded context charges
-    // the same run its read methods resolve to (its pinned status/origin filters are preserved).
+    // Kept consistent with the other actions; there is no runs/last/charge endpoint.
     String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("charge"));
     return ctx.http
         .call(
