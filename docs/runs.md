@@ -117,10 +117,12 @@ client.run("RUN_ID").update(Map.of("statusMessage", "half way there", "isStatusM
 
 > **`lastRun()` clients are for reads.** A `RunClient` obtained via `actor(id).lastRun(...)` /
 > `task(id).lastRun(...)` targets the `runs/last` path and is intended for reading (`get`,
-> `dataset()`/`keyValueStore()`/`requestQueue()`, `log()`). The mutating methods (`abort`, `reboot`,
-> `resurrect`, `metamorph`, `charge`, `update`, `delete`) require a concrete run and have no
-> `runs/last` endpoint; resolve the id first (`lastRun(...).get().join()` then `client.run(id)`). The type
-> exposes them uniformly, but calling them on a last-run client fails server-side.
+> `dataset()`/`keyValueStore()`/`requestQueue()`, `log()`). `abort`, `reboot`, and `metamorph` on
+> a last-run client call the documented `runs/last/abort`, `runs/last/reboot`, and
+> `runs/last/metamorph` endpoints with the same `status` and `origin` filters. The other mutating
+> methods (`resurrect`, `charge`, `update`, `delete`) require a concrete run and have no
+> `runs/last` endpoint; resolve the id first (`lastRun(...).get().join()` then `client.run(id)`). The
+> type exposes them uniformly, but calling them on a last-run client fails server-side.
 
 `ActorRun` fields include `getId()`, `getActId()`, `getUserId()`, `getStatus()`,
 `getStatusMessage()`, `getStartedAt()`, `getFinishedAt()`, `getBuildId()`, `getDefaultDatasetId()`,
@@ -143,7 +145,8 @@ owning it, e.g. `"ANYONE_WITH_ID_CAN_READ"`, `"RESTRICTED"`, or `null` to follow
 default), `getChargedEventCounts()` (`Map<String, Long>`; per-event-type charge counts for
 pay-per-event Actors, `null` otherwise), `getPricingInfo()` (`JsonNode`; shape depends on the
 Actor's pricing model), `getUsage()` / `getUsageUsd()` (`ActorRunUsage`; per-billable-unit resource
-consumption, the latter as its USD cost; see below), `getUsageTotalUsd()` (`Double`; the run's
+consumption, the latter as its USD cost and only for runs you own that pay for platform usage,
+`null` for standard pay-per-event Actors; see below), `getUsageTotalUsd()` (`Double`; the run's
 total cost in USD, combining platform usage and/or event costs depending on pricing model),
 `getStats()` (`ActorRunStats`; runtime metrics; `getInputBodyLen()`, `getMigrationCount()`,
 `getRebootCount()`, `getRestartCount()`, `getResurrectCount()`,
@@ -174,14 +177,13 @@ nullable), `getMemoryMbytes()` (`Long`, nullable), `getDiskMbytes()` (`Long`, nu
 `getMaxItems()` (`Long`, nullable), `getMaxTotalChargeUsd()` (`Double`, nullable),
 `getRestartOnError()` (`Boolean`, nullable).
 
-Call `charge` from inside the Actor run, with the API token the run received at startup in the
-`APIFY_TOKEN` environment variable.
-
 `RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)`,
 `idempotencyKey(String)`, auto-generated when unset so a transport-retried charge is applied at
 most once, and `requestId(String)`, the `X-Actor-Request-ID` of the Server Actor request being
 charged (required for multi-tenant Server Actor runs, omitted otherwise). See
 [Charge for a request](https://docs.apify.com/platform/actors/monetize/server-actors#charge-for-a-request).
+Call `charge` from inside the Actor run, with the API token the run received at startup in the
+`APIFY_TOKEN` environment variable.
 
 ```java
 client.run(System.getenv("ACTOR_RUN_ID")).charge(new RunChargeOptions("my-event").count(3L)).join();
