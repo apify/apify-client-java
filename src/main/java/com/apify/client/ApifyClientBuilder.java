@@ -48,7 +48,11 @@ public final class ApifyClientBuilder {
 
   ApifyClientBuilder() {}
 
-  /** Sets the API token used for authentication (sent as a Bearer token). */
+  /**
+   * Sets the API token used for authentication (sent as a Bearer token). Create a token on the <a
+   * href="https://console.apify.com/settings/integrations">Integrations page</a> in Apify Console,
+   * which shows it only once, right after you create or rotate it.
+   */
   public ApifyClientBuilder token(String token) {
     this.token = token;
     return this;
