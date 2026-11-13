@@ -174,10 +174,14 @@ nullable), `getMemoryMbytes()` (`Long`, nullable), `getDiskMbytes()` (`Long`, nu
 `getMaxItems()` (`Long`, nullable), `getMaxTotalChargeUsd()` (`Double`, nullable),
 `getRestartOnError()` (`Boolean`, nullable).
 
+Call `charge` from inside the Actor run, with the API token the run received at startup in the
+`APIFY_TOKEN` environment variable.
+
 `RunChargeOptions` (constructed with the required event name) uses plain values: `count(Long)`,
 `idempotencyKey(String)`, auto-generated when unset so a transport-retried charge is applied at
 most once, and `requestId(String)`, the `X-Actor-Request-ID` of the Server Actor request being
-charged (required for multi-tenant Server Actor runs, omitted otherwise).
+charged (required for multi-tenant Server Actor runs, omitted otherwise). See
+[Charge for a request](https://docs.apify.com/platform/actors/monetize/server-actors#charge-for-a-request).
 
 ```java
 client.run("RUN_ID").charge(new RunChargeOptions("my-event").count(3L)).join();

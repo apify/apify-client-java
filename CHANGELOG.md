@@ -9,7 +9,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Updated to Apify OpenAPI specification `v2-2026-11-13T143025Z`, a documentation-only revision: Javadoc of `RunClient.charge`, `ActorRun.getUsageUsd` and `Actor.getActorStandby` follows the new Server Actors wording, and API token docs state that Apify Console shows a token only once.
+- Updated to Apify OpenAPI specification `v2-2026-11-13T143025Z` (documentation only).
+- Javadoc of `RunClient.charge`, `ActorRun.getUsageUsd`, and `Actor.getActorStandby` uses the Server Actors wording.
+- API token docs say that Apify Console shows a token only once.
 
 ## [0.14.0] - 2026-11-10
 
