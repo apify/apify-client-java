@@ -105,9 +105,8 @@ class ClientBehaviourRegressionTest {
 
   @Test
   void lastRunAbortRebootAndMetamorphCallTheLastRunEndpointsWithTheFilters() {
-    // The spec documents runs/last/{abort,reboot,metamorph} for Actors and tasks, so these calls on
-    // a
-    // filtered last-run client must keep the pinned status and origin filters.
+    // The spec documents runs/last/{abort,reboot,metamorph} for Actors and tasks, so these calls
+    // on a filtered last-run client must keep the pinned status and origin filters.
     LastRunOptions filters = new LastRunOptions().status("RUNNING").origin("API");
     String runBody = "{\"data\":{\"id\":\"run123\"}}";
 
