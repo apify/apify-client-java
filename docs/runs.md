@@ -184,7 +184,7 @@ charged (required for multi-tenant Server Actor runs, omitted otherwise). See
 [Charge for a request](https://docs.apify.com/platform/actors/monetize/server-actors#charge-for-a-request).
 
 ```java
-client.run("RUN_ID").charge(new RunChargeOptions("my-event").count(3L)).join();
+client.run(System.getenv("ACTOR_RUN_ID")).charge(new RunChargeOptions("my-event").count(3L)).join();
 ```
 
 `MetamorphOptions` uses plain values `build(String)` and `contentType(String)`.
