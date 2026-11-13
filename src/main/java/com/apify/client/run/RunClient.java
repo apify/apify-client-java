@@ -189,8 +189,7 @@ public final class RunClient {
       body.put("requestId", requestId);
     }
     Map<String, String> headers = Map.of(CHARGE_IDEMPOTENCY_HEADER, idempotencyKey);
-    // Route through mergedParams like the run's other actions, so the context's query parameters
-    // are preserved.
+    // Kept consistent with the other actions; there is no runs/last/charge endpoint.
     String url = ctx.mergedParams(new QueryParams()).applyToUrl(ctx.subUrl("charge"));
     return ctx.http
         .call(

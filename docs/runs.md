@@ -115,10 +115,10 @@ To update the status message of a run other than the current one, call `update()
 client.run("RUN_ID").update(Map.of("statusMessage", "half way there", "isStatusMessageTerminal", false)).join();
 ```
 
-> **`lastRun()` clients are for reads.** A `RunClient` obtained via `actor(id).lastRun(...)` /
-> `task(id).lastRun(...)` targets the `runs/last` path and is intended for reading (`get`,
-> `dataset()`/`keyValueStore()`/`requestQueue()`, `log()`). `abort`, `reboot`, and `metamorph` on
-> a last-run client call the documented `runs/last/abort`, `runs/last/reboot`, and
+> **Not every method works on a `lastRun()` client.** A `RunClient` obtained via
+> `actor(id).lastRun(...)` / `task(id).lastRun(...)` targets the `runs/last` path. Reads (`get`,
+> `dataset()`/`keyValueStore()`/`requestQueue()`, `log()`) are supported, and so are `abort`,
+> `reboot`, and `metamorph`, which call the documented `runs/last/abort`, `runs/last/reboot`, and
 > `runs/last/metamorph` endpoints with the same `status` and `origin` filters. The other mutating
 > methods (`resurrect`, `charge`, `update`, `delete`) require a concrete run and have no
 > `runs/last` endpoint; resolve the id first (`lastRun(...).get().join()` then `client.run(id)`). The

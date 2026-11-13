@@ -104,6 +104,41 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void lastRunAbortRebootAndMetamorphCallTheLastRunEndpointsWithTheFilters() {
+    // The spec documents runs/last/{abort,reboot,metamorph} for Actors and tasks, so these calls on
+    // a
+    // filtered last-run client must keep the pinned status and origin filters.
+    LastRunOptions filters = new LastRunOptions().status("RUNNING").origin("API");
+    String runBody = "{\"data\":{\"id\":\"run123\"}}";
+
+    MockTransport abort = MockTransport.ofConstant(200, runBody);
+    client(abort).actor("me/x").lastRun(filters).abort(null).join();
+    assertLastRunUrl(abort.lastUrl, "actors/me~x/runs/last/abort");
+
+    MockTransport reboot = MockTransport.ofConstant(200, runBody);
+    client(reboot).actor("me/x").lastRun(filters).reboot().join();
+    assertLastRunUrl(reboot.lastUrl, "actors/me~x/runs/last/reboot");
+
+    MockTransport metamorph = MockTransport.ofConstant(200, runBody);
+    client(metamorph)
+        .actor("me/x")
+        .lastRun(filters)
+        .metamorph("apify/other-actor", Map.of("foo", "bar"), new MetamorphOptions())
+        .join();
+    assertLastRunUrl(metamorph.lastUrl, "actors/me~x/runs/last/metamorph");
+
+    MockTransport taskAbort = MockTransport.ofConstant(200, runBody);
+    client(taskAbort).task("me/t").lastRun(filters).abort(null).join();
+    assertLastRunUrl(taskAbort.lastUrl, "actor-tasks/me~t/runs/last/abort");
+  }
+
+  private static void assertLastRunUrl(String url, String expectedPath) {
+    assertTrue(url.contains(expectedPath), url);
+    assertTrue(url.contains("status=RUNNING"), url);
+    assertTrue(url.contains("origin=API"), url);
+  }
+
+  @Test
   void plainRunNestedStoragesCarryNoInheritedFilter() {
     // A non-last-run client has no pinned params, so nested accessors stay filter-free.
     MockTransport ds = MockTransport.ofConstant(200, "[]");
