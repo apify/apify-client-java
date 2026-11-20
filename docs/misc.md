@@ -38,7 +38,7 @@ still available via the inherited `getExtra()` (see
 
 | Method | Description |
 |---|---|
-| `get()` | Fetch the user. Completes with `Optional<User>` (public profile, plus private account details for `me()` or when the token belongs to that user). |
+| `get()` | Fetch the user. Completes with `Optional<User>` (public profile, plus private account details for `me()` or when a full-permission token of that user is used). |
 | `monthlyUsage()` / `monthlyUsage(String date)` | The user's monthly usage. `date` (any day within the target month, formatted `YYYY-MM-DD`) reports that month; `null`/empty reports the current month. Completes with `JsonNode`. |
 | `limits()` | The user's account and usage limits. Completes with `JsonNode`. |
 | `updateLimits(Object)` | Update the user's account and usage limits. Completes with no value (`CompletableFuture<Void>`). |
@@ -59,20 +59,21 @@ JsonNode usage = client.me().monthlyUsage().join();
 
 Which fields are set:
 
-- The public fields (`getId()`, `getUsername()`, `getProfile()`) are always set.
-- The private fields (listed below) are set for `me()`, and for `user(id)` only when the API token
-  belongs to that user or impersonates it.
-- `getPlan()`, `getEmail()`, and `getProfile()` are omitted when the request is made from an Actor
+- `getUsername()` is set, except for a proxy-password request (below), and `getProfile()` may be
+  absent.
+- The private fields (listed below, including `getId()`) are set for `me()`, and for `user(id)` only
+  when the request uses a full-permission API token of that user or a token that impersonates it.
+- `getPlan()`, `getEmail()`, and `getProfile()` are omitted when `me()` is requested from an Actor
   run.
 - A request authenticated with an Apify Proxy password (`PROXY_PASSWORD` or
   `ACTOR_RUN_PROXY_PASSWORD`) gets reduced data on both endpoints: only `getPlan()` (with just
   `getAvailableProxyGroups()`), `getEffectivePlatformFeatures()`, and `getIsPaying()` are set, and
   `getId()` and `getUsername()` are `null`.
 
-`User` fields: `getId()`, `getUsername()`, `getProfile()` (`UserProfile`: `getBio()`, `getReadme()`,
+`User` fields: `getUsername()`, `getProfile()` (`UserProfile`: `getBio()`, `getReadme()`,
 `getName()`, `getPictureUrl()`, `getGithubUsername()`, `getWebsiteUrl()`, `getTwitterUsername()`, all
 nullable).
-Private fields: `getEmail()`, `getProxy()` (`UserProxy`: `getPassword()`, `getGroups()`
+Private fields: `getId()`, `getEmail()`, `getProxy()` (`UserProxy`: `getPassword()`, `getGroups()`
 as `List<ProxyGroup>`, each with `getName()`/`getDescription()`/`getAvailableCount()` as `Long`),
 `getPlan()` (`UserPlan`: `getId()`, `getDescription()`, `getIsEnabled()`,
 `getMonthlyBasePriceUsd()`/`getMonthlyUsageCreditsUsd()`/`getUsageDiscountPercent()`/

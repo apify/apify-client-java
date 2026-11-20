@@ -5,12 +5,14 @@ import java.time.Instant;
 import tools.jackson.databind.JsonNode;
 
 /**
- * An Apify user account. The public fields are always set. The private fields ({@link #getEmail()},
- * {@link #getProxy()}, {@link #getPlan()}, {@link #getEffectivePlatformFeatures()}, {@link
- * #getCreatedAt()} and {@link #getIsPaying()}) are set for {@code me}, and for another user only
- * when the API token belongs to that user or impersonates it. {@link #getPlan()}, {@link
- * #getEmail()} and {@link #getProfile()} are omitted when the request is made from an Actor run. A
- * request authenticated with an Apify Proxy password ({@code PROXY_PASSWORD} or {@code
+ * An Apify user account. {@link #getUsername()} is set, except for a request authenticated with an
+ * Apify Proxy password, and {@link #getProfile()} may be absent. The private fields ({@link
+ * #getId()}, {@link #getEmail()}, {@link #getProxy()}, {@link #getPlan()}, {@link
+ * #getEffectivePlatformFeatures()}, {@link #getCreatedAt()}, and {@link #getIsPaying()}) are set
+ * for {@code me}, and for another user only when the request uses a full-permission API token of
+ * that user or a token that impersonates it. {@link #getPlan()}, {@link #getEmail()}, and {@link
+ * #getProfile()} are omitted when {@code me} is requested from an Actor run. A request
+ * authenticated with an Apify Proxy password ({@code PROXY_PASSWORD} or {@code
  * ACTOR_RUN_PROXY_PASSWORD}) gets reduced data on both endpoints: only {@link #getPlan()} (with
  * just {@link UserPlan#getAvailableProxyGroups()}), {@link #getEffectivePlatformFeatures()}, and
  * {@link #getIsPaying()} are set, and {@link #getId()} and {@link #getUsername()} are {@code null}.
@@ -29,7 +31,7 @@ public final class User extends ApifyResource {
   private Instant createdAt;
   private Boolean isPaying;
 
-  /** The unique user ID. */
+  /** The unique user ID. Private field; see the class description. */
   public String getId() {
     return id;
   }
