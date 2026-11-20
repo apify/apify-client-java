@@ -38,7 +38,7 @@ still available via the inherited `getExtra()` (see
 
 | Method | Description |
 |---|---|
-| `get()` | Fetch the user. Completes with `Optional<User>` (public profile, plus private account details for `me()` or when a full-permission token of that user is used). |
+| `get()` | Fetch the user. Completes with `Optional<User>` (public profile, plus private account details for `me()` or when a full-permission token of that user, or one that impersonates it, is used). |
 | `monthlyUsage()` / `monthlyUsage(String date)` | The user's monthly usage. `date` (any day within the target month, formatted `YYYY-MM-DD`) reports that month; `null`/empty reports the current month. Completes with `JsonNode`. |
 | `limits()` | The user's account and usage limits. Completes with `JsonNode`. |
 | `updateLimits(Object)` | Update the user's account and usage limits. Completes with no value (`CompletableFuture<Void>`). |

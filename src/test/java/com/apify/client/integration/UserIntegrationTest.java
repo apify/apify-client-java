@@ -21,8 +21,9 @@ class UserIntegrationTest extends IntegrationBase {
     ApifyClient client = requireClient();
     var me = client.me().get().join();
     assertTrue(me.isPresent());
-    // The account's own id is always a valid target for the by-id accessor (public profile view),
-    // covering `ApifyClient.user(id)` in addition to the `me()` convenience already exercised
+    // The account's own id is always a valid target for the by-id accessor (the account's own token
+    // also gets the private data), covering `ApifyClient.user(id)` in addition to the `me()`
+    // convenience already exercised
     // above.
     var byId = client.user(me.get().getId()).get().join();
     assertTrue(byId.isPresent());
