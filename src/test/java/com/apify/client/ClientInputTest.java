@@ -246,12 +246,12 @@ class ClientInputTest {
     MockTransport backend =
         MockTransport.ofConstant(
             200,
-            "{\"data\":{\"plan\":{\"availableProxyGroups\":[\"GOOGLE_SERP\"]},"
+            "{\"data\":{\"plan\":{\"availableProxyGroups\":{\"GOOGLE_SERP\":200}},"
                 + "\"effectivePlatformFeatures\":{},\"isPaying\":true}}");
     var user = client(backend).me().get().join().orElseThrow();
     assertEquals(null, user.getId());
     assertEquals(null, user.getUsername());
-    assertEquals("GOOGLE_SERP", user.getPlan().getAvailableProxyGroups().get(0).asString());
+    assertEquals(200, user.getPlan().getAvailableProxyGroups().get("GOOGLE_SERP").asLong());
     assertTrue(user.getEffectivePlatformFeatures().isObject());
     assertTrue(user.getIsPaying());
   }

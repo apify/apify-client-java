@@ -5,11 +5,12 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.14.1] - 2026-11-13
+## [0.14.1] - 2026-11-20
 
 ### Changed
 
-- Updated to Apify OpenAPI specification `v2-2026-11-18T151559Z`: a user authenticated with an Apify Proxy password gets reduced data (documented on `User`), and a schedule's `uiState` can be `null`.
+- Updated to Apify OpenAPI specification `v2-2026-11-18T151559Z`.
+- `User` and `UserClient.get` docs describe which user fields are set, including the reduced data for an Apify Proxy password.
 - Javadoc of `RunClient.charge` and `Actor.getActorStandby` uses the Server Actors wording.
 - `RunClient.charge` docs say to call it from inside the Actor run, with the run's `APIFY_TOKEN`.
 - `ActorRun.getUsageUsd` docs say when the field is present: runs you own that pay for platform usage, not standard pay-per-event Actors.

@@ -20,7 +20,7 @@ public final class GetAccount {
     }
     System.out.println("Account ID: " + user.get().getId());
     System.out.println("Username:   " + user.get().getUsername());
-    // email/plan/proxy/... are only populated for me() (not user(id)); any remaining unmodelled
+    // email/plan/proxy/... are private fields that are set for me(); any remaining unmodeled
     // account field is still available via the untyped extras map that getExtra() returns.
     System.out.println("Email:      " + user.get().getEmail());
   }
