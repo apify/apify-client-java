@@ -30,7 +30,8 @@ public final class UserClient {
   /**
    * Fetches the user. For {@code me} it returns private account details (via {@link
    * User#getExtra()}); for other users it returns the public profile. Returns empty if the user
-   * does not exist.
+   * does not exist. A request authenticated with an Apify Proxy password gets reduced data; see
+   * {@link User}.
    */
   public CompletableFuture<Optional<User>> get() {
     return ctx.getResource("", new QueryParams(), User.class);

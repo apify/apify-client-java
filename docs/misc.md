@@ -58,6 +58,11 @@ me.ifPresent(
 JsonNode usage = client.me().monthlyUsage().join();
 ```
 
+A request authenticated with an Apify Proxy password (`PROXY_PASSWORD` or
+`ACTOR_RUN_PROXY_PASSWORD`) gets reduced data: only `getPlan()` (with just
+`getAvailableProxyGroups()`), `getEffectivePlatformFeatures()` and `getIsPaying()` are set, and
+`getId()` and `getUsername()` are `null`.
+
 `User` fields: `getId()`, `getUsername()`, `getProfile()` (`UserProfile`: `getBio()`, `getReadme()`,
 `getName()`, `getPictureUrl()`, `getGithubUsername()`, `getWebsiteUrl()`, `getTwitterUsername()`, all
 nullable).

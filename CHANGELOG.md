@@ -9,7 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Updated to Apify OpenAPI specification `v2-2026-11-13T143025Z` (documentation only).
+- Updated to Apify OpenAPI specification `v2-2026-11-18T151559Z`: a user authenticated with an Apify Proxy password gets reduced data (documented on `User`), and a schedule's `uiState` can be `null`.
 - Javadoc of `RunClient.charge` and `Actor.getActorStandby` uses the Server Actors wording.
 - `RunClient.charge` docs say to call it from inside the Actor run, with the run's `APIFY_TOKEN`.
 - `ActorRun.getUsageUsd` docs say when the field is present: runs you own that pay for platform usage, not standard pay-per-event Actors.

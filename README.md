@@ -440,7 +440,7 @@ constants:
 - `Version.CLIENT_VERSION`: the semantic version of this client (`0.14.1`).
 - `Version.API_SPEC_VERSION`: the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters, and models were last generated
-  and checked against (`v2-2026-11-13T143025Z`). It is a snapshot, not a live compatibility
+  and checked against (`v2-2026-11-18T151559Z`). It is a snapshot, not a live compatibility
   guarantee: the client keeps working against newer, backward-compatible spec revisions, but a
   feature added to the API after this snapshot has no corresponding method here yet.
 

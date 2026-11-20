@@ -5,10 +5,14 @@ import java.time.Instant;
 import tools.jackson.databind.JsonNode;
 
 /**
- * An Apify user account. Private account details (available only for {@code me}) are typed below
- * where reasonably finite; {@link #getEffectivePlatformFeatures()} stays raw JSON (a fixed set of
- * feature-name keys, each with its own limits sub-object) and any other unmodelled field is still
- * reachable via {@link #getExtra()}.
+ * An Apify user account. A request authenticated with an Apify Proxy password ({@code
+ * PROXY_PASSWORD} or {@code ACTOR_RUN_PROXY_PASSWORD}) gets reduced data: only {@link #getPlan()}
+ * (with just {@link UserPlan#getAvailableProxyGroups()}), {@link #getEffectivePlatformFeatures()}
+ * and {@link #getIsPaying()} are set, and {@link #getId()} and {@link #getUsername()} are {@code
+ * null}. Private account details (available only for {@code me}) are typed below where reasonably
+ * finite; {@link #getEffectivePlatformFeatures()} stays raw JSON (a fixed set of feature-name keys,
+ * each with its own limits sub-object) and any other unmodelled field is still reachable via {@link
+ * #getExtra()}.
  */
 public final class User extends ApifyResource {
   private String id;
