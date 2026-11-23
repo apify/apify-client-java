@@ -21,8 +21,10 @@ compression, default headers, user-agent suffix, custom HTTP transport). `client
 returns a client that sends every request with a different timeout (see
 [Timeouts](../README.md#timeouts)).
 
-Get your API token from the
-[Apify Console → Settings → API & Integrations](https://console.apify.com/settings/integrations).
+Create an API token on the
+[Apify Console → Settings → API & Integrations](https://console.apify.com/settings/integrations)
+page. The Console shows the token only once, right after you create or rotate it, so copy it and
+store it somewhere safe.
 
 Every network-calling method returns a `CompletableFuture` (`java.util.concurrent.CompletableFuture`)
 rather than blocking the calling thread; see [Asynchronous API](../README.md#asynchronous-api) in

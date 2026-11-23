@@ -138,7 +138,12 @@ public final class Actor extends ApifyResource {
     return categories == null ? List.of() : Collections.unmodifiableList(categories);
   }
 
-  /** Standby-mode configuration for this Actor, if standby mode has ever been configured. */
+  /**
+   * Standby-mode configuration for this Actor, if standby mode has ever been configured. For
+   * details, see <a
+   * href="https://docs.apify.com/platform/actors/development/programming-interface/server-actors">Develop
+   * Server Actors</a>.
+   */
   public ActorStandby getActorStandby() {
     return actorStandby;
   }

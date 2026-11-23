@@ -38,7 +38,7 @@ still available via the inherited `getExtra()` (see
 
 | Method | Description |
 |---|---|
-| `get()` | Fetch the user. Completes with `Optional<User>` (private details for `me()` via `getExtra()`). |
+| `get()` | Fetch the user. Completes with `Optional<User>` (public profile, plus private account details for `me()` or when a full-permission token of that user, or one that impersonates it, is used). |
 | `monthlyUsage()` / `monthlyUsage(String date)` | The user's monthly usage. `date` (any day within the target month, formatted `YYYY-MM-DD`) reports that month; `null`/empty reports the current month. Completes with `JsonNode`. |
 | `limits()` | The user's account and usage limits. Completes with `JsonNode`. |
 | `updateLimits(Object)` | Update the user's account and usage limits. Completes with no value (`CompletableFuture<Void>`). |
@@ -51,17 +51,29 @@ Optional<User> me = client.me().get().join();
 me.ifPresent(
     u -> {
       System.out.println("Account: " + u.getId());
-      // email/plan/proxy/... are only populated for me() (not user(id)); use getExtra() for any
-      // remaining account field not modelled directly.
+      // email/plan/proxy/... are private fields: see "Which fields are set" below.
       System.out.println("Email: " + u.getEmail());
     });
 JsonNode usage = client.me().monthlyUsage().join();
 ```
 
-`User` fields: `getId()`, `getUsername()`, `getProfile()` (`UserProfile`: `getBio()`, `getReadme()`,
+Which fields are set:
+
+- `getUsername()` is set, except for a proxy-password request (below), and `getProfile()` may be
+  absent.
+- The private fields (listed below, including `getId()`) are set for `me()`, and for `user(id)` only
+  when the request uses a full-permission API token of that user or a token that impersonates it.
+- `getPlan()`, `getEmail()`, and `getProfile()` are omitted when `me()` is requested from an Actor
+  run.
+- A request authenticated with an Apify Proxy password (`PROXY_PASSWORD` or
+  `ACTOR_RUN_PROXY_PASSWORD`) gets reduced data on both endpoints: only `getPlan()` (with just
+  `getAvailableProxyGroups()`), `getEffectivePlatformFeatures()`, and `getIsPaying()` are set, and
+  `getId()` and `getUsername()` are `null`.
+
+`User` fields: `getUsername()`, `getProfile()` (`UserProfile`: `getBio()`, `getReadme()`,
 `getName()`, `getPictureUrl()`, `getGithubUsername()`, `getWebsiteUrl()`, `getTwitterUsername()`, all
 nullable).
-Only present for `me()`: `getEmail()`, `getProxy()` (`UserProxy`: `getPassword()`, `getGroups()`
+Private fields: `getId()`, `getEmail()`, `getProxy()` (`UserProxy`: `getPassword()`, `getGroups()`
 as `List<ProxyGroup>`, each with `getName()`/`getDescription()`/`getAvailableCount()` as `Long`),
 `getPlan()` (`UserPlan`: `getId()`, `getDescription()`, `getIsEnabled()`,
 `getMonthlyBasePriceUsd()`/`getMonthlyUsageCreditsUsd()`/`getUsageDiscountPercent()`/
@@ -72,7 +84,7 @@ as `List<ProxyGroup>`, each with `getName()`/`getDescription()`/`getAvailableCou
 `getTeamAccountSeatCount()` as `Long`, `getAvailableProxyGroups()` as `JsonNode`,
 `getSupportLevel()`, `getAvailableAddOns()` as `List<JsonNode>`), `getEffectivePlatformFeatures()`
 (`JsonNode`), `getCreatedAt()` (`Instant`), `getIsPaying()` (`Boolean`). Plus `getExtra()`, a
-`Map<String, Object>` carrying any account field not modelled directly.
+`Map<String, Object>` carrying any account field not modeled directly.
 
 ## Logs: `client.log(id)`
 

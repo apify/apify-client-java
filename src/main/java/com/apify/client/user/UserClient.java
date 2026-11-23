@@ -28,9 +28,9 @@ public final class UserClient {
   }
 
   /**
-   * Fetches the user. For {@code me} it returns private account details (via {@link
-   * User#getExtra()}); for other users it returns the public profile. Returns empty if the user
-   * does not exist.
+   * Fetches the user: the public profile, plus the private account details for {@code me} or when a
+   * full-permission token of that user (or one that impersonates it) is used. Which fields are set
+   * is described on {@link User}. Returns empty if the user does not exist.
    */
   public CompletableFuture<Optional<User>> get() {
     return ctx.getResource("", new QueryParams(), User.class);
