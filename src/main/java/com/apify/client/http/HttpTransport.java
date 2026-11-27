@@ -35,8 +35,9 @@ public interface HttpTransport {
 
   /**
    * Sends a request and completes the returned future with the response body as a live {@link
-   * InputStream}, for incremental consumption (used by log streaming). The caller closes the
-   * stream. Completes exceptionally the same way as {@link #sendAsync(HttpRequest)}.
+   * InputStream}, for incremental consumption (used by log, dataset export, key-value store record,
+   * and Server Actor response streaming). The caller closes the stream. Completes exceptionally the
+   * same way as {@link #sendAsync(HttpRequest)}.
    */
   CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request);
 

@@ -309,7 +309,7 @@ both non-blocking. `HttpRequest` and `HttpResponse<T>` below are the JDK's `java
 | Method | Signature | Contract |
 |---|---|---|
 | `sendAsync` | `CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request)` | Sends the single, fully-prepared request (auth, `User-Agent` and any other headers are already set by the client) and completes the future with the response with its body fully buffered as `byte[]`. Used for every non-streaming call. |
-| `sendStreamingAsync` | `CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request)` | Sends the request and completes the future with the response body as a live `InputStream` for incremental consumption, used by log streaming (`LogClient.stream(...)`) and dataset export streaming (`DatasetClient.streamItems(...)`). The *caller* (the client) is responsible for closing the returned stream; an implementation must not close it itself before completing the future. |
+| `sendStreamingAsync` | `CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request)` | Sends the request and completes the future with the response body as a live `InputStream` for incremental consumption, used by log streaming (`LogClient.stream(...)`), dataset export streaming (`DatasetClient.streamItems(...)`), record streaming (`KeyValueStoreClient.getRecordStream(...)`), and Server Actor response streaming (`ActorServerClient.requestStream(...)`). The *caller* (the client) is responsible for closing the returned stream; an implementation must not close it itself before completing the future. |
 
 Two further methods, `sendAsync(HttpRequest, boolean followRedirects)` and
 `sendStreamingAsync(HttpRequest, boolean followRedirects)`, have default implementations that send

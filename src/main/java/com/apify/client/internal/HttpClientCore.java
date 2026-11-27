@@ -390,10 +390,10 @@ public final class HttpClientCore {
   }
 
   /**
-   * A single-use body publisher that reads {@code body}. The JDK subscribes again to send the body
-   * once more in some cases, a 401 or 407 challenge answered by an authenticator for one, and
-   * {@code body} is then already read. A later subscription gets a stream that fails to read, so
-   * the request fails instead of silently sending an empty body.
+   * A single-use body publisher that reads {@code body}. The JDK can subscribe again to send the
+   * body once more, for example to answer a 401 or 407 challenge with an authenticator, and {@code
+   * body} is then already read. A later subscription gets a stream that fails to read, so the
+   * request fails instead of silently sending an empty body.
    */
   private static HttpRequest.BodyPublisher streamPublisher(InputStream body) {
     AtomicBoolean handedOut = new AtomicBoolean();
@@ -936,8 +936,9 @@ public final class HttpClientCore {
   /**
    * As {@link #streamRequest(String, String, byte[], String, Map, Timeout, RequestPolicy)}, for a
    * body that is read from {@code body}. A stream can be read once, so the request is sent exactly
-   * once: it is never retried, compressed, or sent again to follow a redirect. {@code body} is
-   * closed when the response arrives or the request fails.
+   * once: it is never retried, compressed, or sent again to follow a redirect or answer an
+   * authentication challenge. {@code body} is closed when the response arrives or the request
+   * fails.
    */
   public CompletableFuture<HttpResponse<InputStream>> streamRequest(
       String method,
@@ -1068,10 +1069,10 @@ public final class HttpClientCore {
 
   /**
    * Opens a live {@code GET} stream and completes with its body: the request is retried like any
-   * other, until the response headers arrive, and an error status that is not retried (or the last
-   * one) is drained and thrown as the matching {@link ApifyApiException} subclass. A failure while
-   * the body is read is not retried. Shared by every streaming resource method (log streaming,
-   * dataset export streaming) so the drain-and-throw logic lives in one place.
+   * other, until the response headers arrive, and an error status that is not retried, or the last
+   * one once the retries run out, is drained and thrown as the matching {@link ApifyApiException}
+   * subclass. A failure while the body is read is not retried. Shared by log streaming and dataset
+   * export streaming, so the drain-and-throw logic lives in one place.
    */
   public CompletableFuture<InputStream> streamOrThrow(String url) {
     CancellableFuture<InputStream> result = new CancellableFuture<>();

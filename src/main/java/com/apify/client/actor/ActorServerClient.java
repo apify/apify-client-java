@@ -290,9 +290,9 @@ public final class ActorServerClient {
   }
 
   /**
-   * Closes a stream request body when the call completes. The client closes it itself once the
-   * request is made, so this matters when the request never was, for example because the Actor is
-   * not a Server Actor.
+   * Closes a stream body when the URL lookup fails, before the request is made, for example because
+   * the Actor is not a Server Actor. Once the request is made, {@code HttpClientCore} closes the
+   * stream when the call completes.
    */
   private static void closeUnused(InputStream stream) {
     if (stream != null) {

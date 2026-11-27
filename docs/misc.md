@@ -110,7 +110,7 @@ Access a build's or run's log directly, or via `client.run(id).log()` / `client.
 |---|---|
 | `get()` / `get(LogOptions)` | The whole log as text. Completes with `Optional<String>` when addressed by an explicit id (`client.log(id)`); on `run.log()`/`build.log()` (no log id of its own), a 404 is ambiguous and throws `NotFoundError` instead; see [Fetching single resources](../README.md#fetching-single-resources). |
 | `getAsBytes()` / `getAsBytes(LogOptions)` | As `get()`, but completes with `Optional<byte[]>` (the raw bytes, not decoded as text). Same 404 handling as `get()`. |
-| `stream()` / `stream(LogOptions)` | A live `InputStream` over the log (for redirection). Completes with `InputStream`; throws on any error response, including a 404. |
+| `stream()` / `stream(LogOptions)` | A live `InputStream` over the log (for redirection). Completes with `InputStream`. The request is retried like any other, until the headers arrive; it throws on an error response that is not retried, or the last one once the retries run out, including a 404. |
 
 `LogOptions` fields: `raw(Boolean)`, `download(Boolean)`.
 
