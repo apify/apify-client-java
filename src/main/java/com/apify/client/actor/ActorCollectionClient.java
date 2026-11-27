@@ -18,7 +18,11 @@ public final class ActorCollectionClient extends AbstractCollectionClient<Actor,
         ActorListOptions::new);
   }
 
-  /** Creates a new Actor. {@code actor} is any JSON-serializable Actor definition. */
+  /**
+   * Creates a new Actor. {@code actor} is any JSON-serializable Actor definition. Fails with a
+   * {@link com.apify.client.http.ConflictError} (409, {@code actor-name-not-unique}) if you already
+   * have an Actor with the same name.
+   */
   public CompletableFuture<Actor> create(Object actor) {
     return ctx.createResource(new QueryParams(), actor, Actor.class, Timeout.MEDIUM);
   }

@@ -225,6 +225,7 @@ final class MockTransport implements HttpTransport {
     calls++;
     lastUrl = request.uri().toString();
     lastMethod = request.method();
+    lastHeaders = request.headers();
     HttpResponse<InputStream> response;
     if (streamQueue.isEmpty()) {
       Scripted r = responses.get(0);

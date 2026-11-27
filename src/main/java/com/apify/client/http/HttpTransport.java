@@ -35,8 +35,9 @@ public interface HttpTransport {
 
   /**
    * Sends a request and completes the returned future with the response body as a live {@link
-   * InputStream}, for incremental consumption (used by log streaming). The caller closes the
-   * stream. Completes exceptionally the same way as {@link #sendAsync(HttpRequest)}.
+   * InputStream}, for incremental consumption (used by log, dataset export, and key-value store
+   * record streaming). The caller closes the stream. Completes exceptionally the same way as {@link
+   * #sendAsync(HttpRequest)}.
    */
   CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request);
 
@@ -44,12 +45,15 @@ public interface HttpTransport {
    * As {@link #sendAsync(HttpRequest)}, but a transport that is asked not to follow redirects
    * returns a redirect response as it is, since the request carries a token that must not follow a
    * redirect to another host. A request to an Actor's server is sent this way (see {@link
-   * com.apify.client.actor.ActorServerClient#request}).
+   * com.apify.client.actor.ActorServerClient#request}), and so is a request whose body is an {@link
+   * InputStream}, which can be sent only once (for example {@link
+   * com.apify.client.keyvalue.KeyValueStoreClient#setRecord(String, InputStream, String)}).
    *
    * <p>The default implementation sends the request as {@link #sendAsync(HttpRequest)} does when
    * {@code followRedirects} is {@code true}, and otherwise completes the returned future
    * exceptionally with an {@link UnsupportedOperationException}: a transport that cannot hold back
-   * redirects must not be trusted with such a request. Override it to support them.
+   * redirects must not be trusted with such a request. Override it to support them; without that, a
+   * request with a stream body fails.
    *
    * @param followRedirects whether the transport may follow redirects
    */
@@ -77,8 +81,9 @@ public interface HttpTransport {
   private static UnsupportedOperationException redirectsCannotBeDisabled() {
     return new UnsupportedOperationException(
         "This HttpTransport does not support disabling redirects, which a request to an Actor's"
-            + " server needs so that the API token never follows a redirect to another host."
-            + " Override sendAsync(HttpRequest, boolean) and sendStreamingAsync(HttpRequest,"
-            + " boolean) to support it.");
+            + " server needs so that the API token never follows a redirect to another host,"
+            + " and a request with an InputStream body needs so that the stream is never sent"
+            + " twice. Override sendAsync(HttpRequest, boolean) and"
+            + " sendStreamingAsync(HttpRequest, boolean) to support it.");
   }
 }

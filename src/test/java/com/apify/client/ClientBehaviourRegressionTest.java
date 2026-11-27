@@ -3,6 +3,7 @@ package com.apify.client;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -524,6 +525,70 @@ class ClientBehaviourRegressionTest {
         Publishers.collect(client(backend).store().iterate(new StoreListOptions(), 2L)).join();
     assertEquals(3, items.size(), "iteration should walk across both non-empty pages");
     assertEquals(3, backend.calls, "two data pages plus the terminating empty page");
+  }
+
+  @Test
+  void storeSearchIterationSendsASingleRequestWithoutAnOffset() {
+    // The Store ignores `offset` for a search and has no second page, so paging would read the same
+    // page forever: the iteration must send one request and then complete.
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200,
+            "{\"data\":{\"items\":[{\"id\":\"a\"},{\"id\":\"b\"}],\"total\":2,\"offset\":0,"
+                + "\"limit\":100,\"count\":2}}");
+    StoreListOptions options = new StoreListOptions().search("crawler").offset(5L);
+    List<ActorStoreListItem> items =
+        Publishers.collect(client(backend).store().iterate(options, 1L)).join();
+    assertEquals(2, items.size());
+    assertEquals(1, backend.calls, "a search is one page");
+    assertTrue(backend.lastUrl.contains("search=crawler"), backend.lastUrl);
+    assertFalse(backend.lastUrl.contains("offset="), backend.lastUrl);
+    assertFalse(backend.lastUrl.contains("limit="), backend.lastUrl);
+  }
+
+  @Test
+  void storeSearchIterationSendsTheLimitAsThePageSize() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200,
+            "{\"data\":{\"items\":[{\"id\":\"a\"}],\"total\":1,\"offset\":0,\"limit\":10,\"count\":1}}");
+    Publishers.collect(
+            client(backend).store().iterate(new StoreListOptions().search("x").limit(10L), null))
+        .join();
+    assertEquals(1, backend.calls);
+    assertTrue(backend.lastUrl.contains("limit=10"), backend.lastUrl);
+  }
+
+  @Test
+  void storeItemParsesTheStoreShape() {
+    MockTransport backend =
+        MockTransport.ofConstant(
+            200,
+            "{\"data\":{\"items\":[{\"id\":\"a\",\"userFullName\":\"Jane Doe\","
+                + "\"categories\":[\"AI_AND_ML\",\"GENERATE_LEADS\"],\"notice\":\"UNDER_MAINTENANCE\","
+                + "\"stats\":{\"totalUsers\":6,\"totalRuns\":16,\"totalUsers7Days\":2,"
+                + "\"totalUsers30Days\":6,\"totalUsers90Days\":6,\"actorReviewRating\":4.7,"
+                + "\"actorReviewCount\":69},\"isWhiteListedForAgenticPayments\":true,"
+                + "\"isVerified\":true,\"badge\":null},"
+                + "{\"id\":\"b\",\"categories\":null,\"stats\":{\"totalUsers\":1}}],"
+                + "\"total\":2,\"offset\":0,\"limit\":2,\"count\":2}}");
+    List<ActorStoreListItem> items =
+        client(backend).store().list(new StoreListOptions()).join().getItems();
+    ActorStoreListItem first = items.get(0);
+    assertEquals("Jane Doe", first.getUserFullName());
+    assertEquals(List.of("AI_AND_ML", "GENERATE_LEADS"), first.getCategories());
+    assertEquals("UNDER_MAINTENANCE", first.getNotice());
+    assertEquals(6L, first.getStats().getTotalUsers());
+    assertEquals(16L, first.getStats().getTotalRuns());
+    assertEquals(2L, first.getStats().getTotalUsers7Days());
+    assertEquals(6L, first.getStats().getTotalUsers30Days());
+    assertEquals(6L, first.getStats().getTotalUsers90Days());
+    assertEquals(4.7, first.getStats().getActorReviewRating());
+    assertEquals(69L, first.getStats().getActorReviewCount());
+    assertEquals(Boolean.TRUE, first.getIsWhiteListedForAgenticPayments());
+    assertEquals(Boolean.TRUE, first.getIsVerified());
+    assertNull(first.getBadge());
+    assertTrue(items.get(1).getCategories().isEmpty(), "null categories read as an empty list");
   }
 
   @Test
@@ -1134,6 +1199,32 @@ class ClientBehaviourRegressionTest {
                         .dataset("d1")
                         .streamItems(DownloadItemsFormat.JSON, new DatasetDownloadOptions())));
     assertEquals(404, ex.getStatusCode());
+  }
+
+  @Test
+  void streamItemsRetriesARetryableStatusUntilTheHeadersArrive() throws java.io.IOException {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(503, "{\"error\":{\"type\":\"x\",\"message\":\"busy\"}}");
+    backend.scriptStream(200, "a;b\n1;2\n");
+    java.io.InputStream stream =
+        TestAsync.await(
+            client(backend, 2)
+                .dataset("d1")
+                .streamItems(DownloadItemsFormat.CSV, new DatasetDownloadOptions()));
+    assertEquals(
+        "a;b\n1;2\n", new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+    assertEquals(2, backend.calls, "the 503 is retried");
+  }
+
+  @Test
+  void logStreamRetriesARetryableStatusUntilTheHeadersArrive() throws java.io.IOException {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(503, "{\"error\":{\"type\":\"x\",\"message\":\"busy\"}}");
+    backend.scriptStream(200, "log line\n");
+    java.io.InputStream stream = TestAsync.await(client(backend, 2).run("r1").log().stream());
+    assertEquals(
+        "log line\n", new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+    assertEquals(2, backend.calls, "the 503 is retried");
   }
 
   @Test

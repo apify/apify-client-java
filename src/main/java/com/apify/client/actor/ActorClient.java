@@ -16,6 +16,7 @@ import com.apify.client.run.LastRunOptions;
 import com.apify.client.run.RunClient;
 import com.apify.client.run.RunCollectionClient;
 import com.apify.client.webhook.NestedWebhookCollectionClient;
+import java.io.InputStream;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -73,8 +74,13 @@ public final class ActorClient {
 
   /**
    * Starts the Actor and completes with the created run as soon as it exists (no waiting). {@code
-   * input} is any JSON-serializable value, a {@code byte[]} or {@link String} that is sent as it is
-   * (set the content type with the options' {@code contentType}), or {@code null} for no input.
+   * input} is any JSON-serializable value, a {@code byte[]}, {@link String}, or {@link InputStream}
+   * that is sent as it is (set the content type with the options' {@code contentType}), or {@code
+   * null} for no input.
+   *
+   * <p>An {@code InputStream} is read as it is sent, closed when the call completes, and never held
+   * in memory. It can be read once, so the start is sent once: a failed request is not retried, and
+   * a rejection for lack of resources is thrown even if {@code waitForResources} is set.
    */
   public CompletableFuture<ActorRun> start(Object input, ActorStartOptions options) {
     return RunStartSupport.start(

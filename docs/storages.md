@@ -52,7 +52,7 @@ any field not covered by a typed getter above is still available via the inherit
 | `iterateItems(DatasetListItemsOptions)` / `iterateItems(DatasetListItemsOptions, Long chunkSize)` | A lazy `Flow.Publisher<JsonNode>` over all items; the options' `limit` caps the dataset *rows* read (`null`/unset or non-positive = all), the optional `chunkSize` sets the per-request page size. Dataset items have no default page limit, so without `chunkSize` the whole dataset (or all `limit` rows) is loaded in one response: pass `chunkSize` to iterate a large dataset. |
 | `iterateItems(DatasetListItemsOptions, Long chunkSize, Class<T>)` | As above, decoded into `T`. Returns `Flow.Publisher<T>`. For typed iteration in one response, pass a `null` chunk size: `iterateItems(opts, null, T.class)`. |
 | `downloadItems(DownloadItemsFormat, DatasetDownloadOptions)` | Serialized bytes. `DownloadItemsFormat` is one of `JSON`, `JSONL`, `CSV`, `XLSX`, `XML`, `RSS`, `HTML`. Completes with `byte[]`. |
-| `streamItems(DownloadItemsFormat, DatasetDownloadOptions)` | As above, but resolves to a live `InputStream` over the export instead of fully buffering it, so a large export is processed in chunks. The caller closes the stream (or reads it to the end). Throws on any error response, including a 404. |
+| `streamItems(DownloadItemsFormat, DatasetDownloadOptions)` | As above, but resolves to a live `InputStream` over the export instead of fully buffering it, so a large export is processed in chunks. The caller closes the stream (or reads it to the end). The request is retried like any other, until the headers arrive; it throws on an error response that is not retried, or the last one once the retries run out, including a 404. |
 | `pushItems(Object)` | Push a single item (a `Map`, a POJO, a `JsonNode` object, ...), a list/array of items, or a `String` that already is the JSON serialization of either (sent as it is). The API accepts only an object or an array of objects, so anything else (a number, a plain string, an array of strings) throws `IllegalArgumentException` before a request is sent. A push that times out is not retried, so items cannot be stored twice. Completes with no value (`CompletableFuture<Void>`). |
 | `getStatistics()` | Dataset statistics. Completes with `JsonNode`; throws `NotFoundError` if the dataset is gone (no separate "statistics absent" state). |
 | `createItemsPublicUrl(DatasetListItemsOptions, Long expiresInSecs)` | A public (optionally signed) items URL, served as `json`. `expiresInSecs` must be positive and at most `4611686018427387` when set. Completes with `String`. |
@@ -142,6 +142,8 @@ datasets.
 | `getRecord(String key)` / `getRecord(String key, GetRecordOptions)` | Fetch a record. Completes with `Optional<KeyValueStoreRecord>`. |
 | `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. Completes with no value (`CompletableFuture<Void>`). |
 | `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`SetRecordOptions`: `timeoutSecs` (`Long`) or `timeout` (`Timeout`: a tier, an exact duration or `NO_TIMEOUT`; the default is the `LONG` tier), `doNotRetryTimeouts` (`Boolean`), `contentEncoding` (`String`, see below)). Completes with no value. |
+| `getRecordStream(String key)` / `getRecordStream(String key, GetRecordOptions)` | As `getRecord`, but completes with an `Optional<KeyValueStoreRecordStream>` whose `getValue()` is a live `InputStream`, so a large record is processed in chunks. Close the record (or read its stream to the end) when done. The request is retried like any other, until the headers arrive. Throws on an error response that is not retried, or the last one once the retries run out, except a 404, which completes with empty. A failure while reading the body is not retried. |
+| `setRecord(String key, InputStream value, String contentType)` / `setRecord(String key, InputStream value, String contentType, SetRecordOptions)` | Store the bytes read from a stream, without holding them in memory, so a large file can be uploaded. The stream is closed when the call completes. It can be read once, so the upload is sent once: it is not retried, compressed, or sent again to follow a redirect, and `doNotRetryTimeouts` has no effect. Completes with no value. |
 | `setRecordJson(String key, Object value)` | Store JSON. Completes with no value. |
 | `deleteRecord(String key)` | Delete a record. Completes with no value. |
 | `getRecordPublicUrl(String key)` | A public (optionally signed) record URL. Completes with `String`. |
@@ -184,7 +186,20 @@ client.keyValueStore("my-store")
     .join();
 ```
 
-`KeyValueStoreRecord` exposes `getKey()`, `getValue()` (raw bytes) and `getContentType()`.
+Copy a large record without reading it into memory by passing the stream of one call to the other:
+
+```java
+try (KeyValueStoreRecordStream source =
+    client.keyValueStore("my-store").getRecordStream("video.mp4").join().orElseThrow()) {
+  client.keyValueStore("other-store")
+      .setRecord("video.mp4", source.getValue(), source.getContentType())
+      .join();
+}
+```
+
+`KeyValueStoreRecord` exposes `getKey()`, `getValue()` (raw bytes), and `getContentType()`;
+`KeyValueStoreRecordStream` exposes `getKey()`, `getValue()` (the `InputStream`), `getContentType()`,
+and `close()`.
 `KeyValueStoreKeysPage` exposes `getItems()` (a list of `KeyValueStoreKey` with `getKey()`/`getSize()`),
 `isTruncated()`, `getExclusiveStartKey()` and `getNextExclusiveStartKey()`.
 

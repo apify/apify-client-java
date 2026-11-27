@@ -9,8 +9,10 @@ import com.apify.client.keyvalue.GetRecordOptions;
 import com.apify.client.keyvalue.KeyValueStore;
 import com.apify.client.keyvalue.KeyValueStoreClient;
 import com.apify.client.keyvalue.KeyValueStoreRecord;
+import com.apify.client.keyvalue.KeyValueStoreRecordStream;
 import com.apify.client.keyvalue.ListKeysOptions;
 import com.apify.client.keyvalue.SetRecordOptions;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -57,6 +59,32 @@ class KeyValueStoreIntegrationTest extends IntegrationBase {
       Optional<KeyValueStoreRecord> rec = kvs.getRecord(key).join();
       assertTrue(rec.isPresent());
       kvs.deleteRecord(key).join();
+    } finally {
+      client.keyValueStore(store.getId()).delete().join();
+    }
+  }
+
+  @Test
+  void recordStreamRoundTrip() throws Exception {
+    ApifyClient client = requireClient();
+    KeyValueStore store = client.keyValueStores().getOrCreate(uniqueName("kvs-stream")).join();
+    try {
+      KeyValueStoreClient kvs = client.keyValueStore(store.getId());
+      byte[] bytes = "streamed record bytes".repeat(1000).getBytes(StandardCharsets.UTF_8);
+      kvs.setRecord("source", new ByteArrayInputStream(bytes), "text/plain").join();
+
+      // Copy the record without reading it into memory: the stream another call returned goes
+      // straight into the upload.
+      try (KeyValueStoreRecordStream source = kvs.getRecordStream("source").join().orElseThrow()) {
+        assertTrue(source.getContentType().startsWith("text/plain"), source.getContentType());
+        kvs.setRecord("copy", source.getValue(), source.getContentType()).join();
+      }
+
+      assertEquals(
+          new String(bytes, StandardCharsets.UTF_8),
+          new String(
+              kvs.getRecord("copy").join().orElseThrow().getValue(), StandardCharsets.UTF_8));
+      assertTrue(kvs.getRecordStream("does-not-exist").join().isEmpty());
     } finally {
       client.keyValueStore(store.getId()).delete().join();
     }

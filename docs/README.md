@@ -48,13 +48,13 @@ option types, so import each resource you use from its own package:
 | `com.apify.client.build` | `Build`, `BuildClient`, `BuildCollectionClient`, `BuildActVersion`, `ActorDefinition`, `ActorDefinitionMeta`, `ActorDefinitionStorages`, `BuildMeta`, `BuildStats`, `BuildOptions`, `BuildUsage` |
 | `com.apify.client.run` | `ActorRun`, `ActorRunStats`, `ActorRunOptions`, `ActorRunMeta`, `ActorRunStandby`, `ActorRunUsage`, `RunClient`, `RunCollectionClient`, `RunListOptions`, `LastRunOptions`, `MetamorphOptions`, `RunChargeOptions`, `RunResurrectOptions`, `SetStatusMessageOptions` |
 | `com.apify.client.dataset` | `Dataset`, `DatasetClient`, `DatasetCollectionClient`, `DatasetListItemsOptions`, `DatasetDownloadOptions`, `DownloadItemsFormat` |
-| `com.apify.client.keyvalue` | `KeyValueStore`, `KeyValueStoreClient`, `KeyValueStoreCollectionClient`, `KeyValueStoreRecord`, `KeyValueStoreKeysPage`, `KeyValueStoreKey`, `GetRecordOptions`, `SetRecordOptions`, `ListKeysOptions` |
+| `com.apify.client.keyvalue` | `KeyValueStore`, `KeyValueStoreClient`, `KeyValueStoreCollectionClient`, `KeyValueStoreRecord`, `KeyValueStoreRecordStream`, `KeyValueStoreKeysPage`, `KeyValueStoreKey`, `GetRecordOptions`, `SetRecordOptions`, `ListKeysOptions` |
 | `com.apify.client.requestqueue` | `RequestQueue`, `RequestQueueClient`, `RequestQueueCollectionClient`, `RequestQueueRequest`, `RequestQueueHead`, `LockedRequestQueueHead`, `RequestQueueOperationInfo`, `RequestLockInfo`, `UnlockRequestsResult`, `RequestsList`, `BatchAddResult`, `BatchDeleteResult`, `DeletedRequestInfo`, `ListRequestsOptions`, `BatchAddRequestsOptions` |
 | `com.apify.client.task` | `Task`, `TaskStats`, `TaskOptions`, `TaskClient`, `TaskCollectionClient`, `TaskStartOptions`, `TaskCallOptions` |
 | `com.apify.client.schedule` | `Schedule`, `ScheduleNotifications`, `ScheduleClient`, `ScheduleCollectionClient` |
 | `com.apify.client.webhook` | `Webhook`, `WebhookStats`, `WebhookLastDispatch`, `WebhookClient`, `WebhookCollectionClient`, `WebhookDispatchCollectionClient`, `NestedWebhookCollectionClient`, `WebhookDispatch`, `WebhookDispatchClient`, `WebhookDispatchCall`, `WebhookDispatchWebhookInfo`, `WebhookDispatchEventData` |
 | `com.apify.client.user` | `User`, `UserClient`, `UserProfile`, `UserProxy`, `UserPlan`, `ProxyGroup` |
-| `com.apify.client.store` | `ActorStoreListItem`, `StoreCollectionClient`, `StoreListOptions`, `PricingInfo` |
+| `com.apify.client.store` | `ActorStoreListItem`, `StoreActorStats`, `StoreCollectionClient`, `StoreListOptions`, `PricingInfo` |
 | `com.apify.client.log` | `LogClient`, `LogOptions`, `StreamedLog`, `StreamedLogOptions` |
 
 For example, the [top-level README's dataset snippet](../README.md#quick-start) needs

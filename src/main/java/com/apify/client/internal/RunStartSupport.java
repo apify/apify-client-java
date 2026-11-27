@@ -8,6 +8,7 @@ import com.apify.client.log.StreamedLog;
 import com.apify.client.log.StreamedLogOptions;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.RunClient;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -54,8 +55,9 @@ public final class RunStartSupport {
 
   /**
    * Starts a run on {@code ctx}'s {@code runs} sub-resource and completes with the created run as
-   * soon as it exists (no waiting). {@code input} is any JSON-serializable value, a {@code byte[]}
-   * or {@link String} sent as it is, or {@code null} for no input. {@code applyParams} applies
+   * soon as it exists (no waiting). {@code input} is any JSON-serializable value, a {@code byte[]},
+   * {@link String}, or {@link InputStream} sent as it is, or {@code null} for no input. A stream
+   * start is sent once and skips the {@code waitForResources} retry. {@code applyParams} applies
    * every start-option query parameter (build, memory, timeout, ...) the caller's options type
    * configures; {@code contentType} is the input body's content type.
    *
@@ -87,7 +89,6 @@ public final class RunStartSupport {
       Timeout timeout) {
     QueryParams params = new QueryParams();
     applyParams.accept(params);
-    byte[] body = Json.toRequestBody(input);
     Timeout requestTimeout = timeout;
     if (requestTimeout == null) {
       HttpClientCore.WaitHold hold =
@@ -95,6 +96,13 @@ public final class RunStartSupport {
       params.setLong("waitForFinish", hold.waitForFinishSecs());
       requestTimeout = hold.timeout();
     }
+    if (input instanceof InputStream stream) {
+      // A stream is consumed by the first attempt, so the start is sent once and a rejection for
+      // lack of resources is thrown instead of retried, whatever waitForResources says.
+      return ctx.postWithStreamBody(
+          "runs", params, stream, contentType, ActorRun.class, requestTimeout);
+    }
+    byte[] body = Json.toRequestBody(input);
     if (waitForResourcesSecs == null) {
       return ctx.postWithBody("runs", params, body, contentType, ActorRun.class, requestTimeout);
     }

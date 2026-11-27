@@ -11,6 +11,7 @@ import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.RequestPolicy;
 import com.apify.client.internal.ResourceContext;
+import java.io.InputStream;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
@@ -209,19 +210,31 @@ public final class ActorServerClient {
    */
   public CompletableFuture<ApiResponse> request(String path, ActorServerRequestOptions options) {
     ActorServerRequestOptions opts = options != null ? options : new ActorServerRequestOptions();
-    byte[] body = Json.toRequestBody(opts.bodyValue());
+    RequestPolicy policy = RequestPolicy.server(opts.compressionValue());
+    InputStream stream = opts.bodyValue() instanceof InputStream in ? in : null;
+    byte[] body = stream == null ? Json.toRequestBody(opts.bodyValue()) : null;
     return getUrl()
         .thenCompose(
             serverUrl ->
-                http.call(
-                    opts.methodValue(),
-                    requestUrl(serverUrl, path, opts),
-                    body,
-                    contentTypeOf(opts),
-                    opts.headersValue(),
-                    opts.timeoutValue(),
-                    false,
-                    RequestPolicy.server(opts.compressionValue())));
+                stream != null
+                    ? http.callWithStream(
+                        opts.methodValue(),
+                        requestUrl(serverUrl, path, opts),
+                        stream,
+                        contentTypeOf(opts),
+                        opts.headersValue(),
+                        opts.timeoutValue(),
+                        policy)
+                    : http.call(
+                        opts.methodValue(),
+                        requestUrl(serverUrl, path, opts),
+                        body,
+                        contentTypeOf(opts),
+                        opts.headersValue(),
+                        opts.timeoutValue(),
+                        false,
+                        policy))
+        .whenComplete((response, error) -> closeUnused(stream));
   }
 
   /** A {@code GET} request to {@code path} on the Actor's server; see {@link #request}. */
@@ -246,22 +259,45 @@ public final class ActorServerClient {
   public CompletableFuture<ActorServerStreamResponse> requestStream(
       String path, ActorServerRequestOptions options) {
     ActorServerRequestOptions opts = options != null ? options : new ActorServerRequestOptions();
-    byte[] body = Json.toRequestBody(opts.bodyValue());
+    RequestPolicy policy = RequestPolicy.server(opts.compressionValue());
+    InputStream stream = opts.bodyValue() instanceof InputStream in ? in : null;
+    byte[] body = stream == null ? Json.toRequestBody(opts.bodyValue()) : null;
     return getUrl()
         .thenCompose(
             serverUrl ->
-                http.streamRequest(
-                    opts.methodValue(),
-                    requestUrl(serverUrl, path, opts),
-                    body,
-                    contentTypeOf(opts),
-                    opts.headersValue(),
-                    opts.timeoutValue(),
-                    RequestPolicy.server(opts.compressionValue())))
+                stream != null
+                    ? http.streamRequest(
+                        opts.methodValue(),
+                        requestUrl(serverUrl, path, opts),
+                        stream,
+                        contentTypeOf(opts),
+                        opts.headersValue(),
+                        opts.timeoutValue(),
+                        policy)
+                    : http.streamRequest(
+                        opts.methodValue(),
+                        requestUrl(serverUrl, path, opts),
+                        body,
+                        contentTypeOf(opts),
+                        opts.headersValue(),
+                        opts.timeoutValue(),
+                        policy))
+        .whenComplete((response, error) -> closeUnused(stream))
         .thenApply(
             response ->
                 new ActorServerStreamResponse(
                     response.statusCode(), response.headers(), response.body()));
+  }
+
+  /**
+   * Closes a stream body when the URL lookup fails, before the request is made, for example because
+   * the Actor is not a Server Actor. Once the request is made, {@code HttpClientCore} closes the
+   * stream when the call completes.
+   */
+  private static void closeUnused(InputStream stream) {
+    if (stream != null) {
+      HttpClientCore.closeQuietly(stream);
+    }
   }
 
   /** Fetches the Actor and checks that it is a Server Actor. */
@@ -394,7 +430,11 @@ public final class ActorServerClient {
       return set;
     }
     Object body = options.bodyValue();
-    boolean sentAsIs = body == null || body instanceof byte[] || body instanceof String;
+    boolean sentAsIs =
+        body == null
+            || body instanceof byte[]
+            || body instanceof String
+            || body instanceof InputStream;
     return sentAsIs ? null : ResourceContext.CONTENT_TYPE_JSON;
   }
 }

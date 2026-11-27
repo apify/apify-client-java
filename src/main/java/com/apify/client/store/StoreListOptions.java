@@ -17,34 +17,53 @@ public final class StoreListOptions implements ListOptionsLike {
   private String responseFormat;
   private Boolean includeInputSchema;
 
-  /** Number of Actors to skip. */
+  /** Number of Actors to skip. The API ignores it when {@link #search(String)} is used. */
   public StoreListOptions offset(Long offset) {
     this.offset = offset;
     return this;
   }
 
   /**
-   * Maximum number of Actors to return. Sent verbatim by {@code list(...)} (so {@code 0} returns
-   * zero Actors); in {@code iterate(...)} a non-positive/zero {@code limit} means "no cap" (all).
+   * Maximum number of Actors to return. The API default and maximum is {@code 1000}; when {@link
+   * #search(String)} is used, both are {@code 100} and a larger value is reduced to {@code 100}.
+   * Sent verbatim by {@code list(...)} (so {@code 0} returns zero Actors); in {@code iterate(...)}
+   * a non-positive/zero {@code limit} means "no cap" (all).
    */
   public StoreListOptions limit(Long limit) {
     this.limit = limit;
     return this;
   }
 
-  /** Full-text search query. */
+  /**
+   * Search query. The API ranks the results by relevance and returns them as a single page of at
+   * most 100 Actors: {@link #offset(Long)} is ignored and there is no second page. Narrow the
+   * results with {@link #category(String)}, {@link #username(String)}, or {@link
+   * #pricingModel(String)}.
+   */
   public StoreListOptions search(String search) {
     this.search = search;
     return this;
   }
 
-  /** The sort field (e.g. {@code "popularity"}, {@code "newest"}). */
+  /**
+   * Accepted for backward compatibility, but the API ignores it. The results are ordered by
+   * relevance when {@link #search(String)} is used and by Store position otherwise; sort them on
+   * the client for a different order.
+   *
+   * @deprecated the API ignores the value
+   */
+  @Deprecated
   public StoreListOptions sortBy(String sortBy) {
     this.sortBy = sortBy;
     return this;
   }
 
-  /** Filter Actors by category. */
+  /**
+   * Filter Actors by category. Accepts one or more category IDs (e.g. {@code "AI_AND_ML"}),
+   * separated by commas and case-insensitive; an Actor must match all of them. Legacy keys such as
+   * {@code social_media} are still accepted, and an unknown category fails with a {@code 400}
+   * error.
+   */
   public StoreListOptions category(String category) {
     this.category = category;
     return this;
@@ -92,6 +111,11 @@ public final class StoreListOptions implements ListOptionsLike {
   public StoreListOptions includeInputSchema(Boolean includeInputSchema) {
     this.includeInputSchema = includeInputSchema;
     return this;
+  }
+
+  /** Whether a non-empty search query is set, which makes the API return a single page. */
+  boolean hasSearch() {
+    return search != null && !search.isEmpty();
   }
 
   @Override

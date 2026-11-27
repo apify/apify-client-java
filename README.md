@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.14.1</version>
+  <version>0.15.0</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.14.1'
+  implementation 'com.apify:apify-client:0.15.0'
 }
 ```
 
@@ -308,15 +308,16 @@ both non-blocking. `HttpRequest` and `HttpResponse<T>` below are the JDK's `java
 
 | Method | Signature | Contract |
 |---|---|---|
-| `sendAsync` | `CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request)` | Sends the single, fully-prepared request (auth, `User-Agent` and any other headers are already set by the client) and completes the future with the response with its body fully buffered as `byte[]`. Used for every non-streaming call. |
-| `sendStreamingAsync` | `CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request)` | Sends the request and completes the future with the response body as a live `InputStream` for incremental consumption, used by log streaming (`LogClient.stream(...)`) and dataset export streaming (`DatasetClient.streamItems(...)`). The *caller* (the client) is responsible for closing the returned stream; an implementation must not close it itself before completing the future. |
+| `sendAsync` | `CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request)` | Sends the single, fully-prepared request (auth, `User-Agent` and any other headers are already set by the client) and completes the future with the response with its body fully buffered as `byte[]`. Used for every non-streaming call that follows redirects. |
+| `sendStreamingAsync` | `CompletableFuture<HttpResponse<InputStream>> sendStreamingAsync(HttpRequest request)` | Sends the request and completes the future with the response body as a live `InputStream` for incremental consumption, used by log streaming (`LogClient.stream(...)`), dataset export streaming (`DatasetClient.streamItems(...)`), and record streaming (`KeyValueStoreClient.getRecordStream(...)`). The *caller* (the client) is responsible for closing the returned stream; an implementation must not close it itself before completing the future. |
 
 Two further methods, `sendAsync(HttpRequest, boolean followRedirects)` and
 `sendStreamingAsync(HttpRequest, boolean followRedirects)`, have default implementations that send
 the request through the methods above when `followRedirects` is `true` and **fail** the future with an
 `UnsupportedOperationException` when it is `false`. A request to an Actor's server (see
-[Server Actors](docs/actors.md#server-actors)) is sent with `followRedirects` set to `false`, so
-that the API token never follows a redirect to another host. Override both to support it: with
+[Server Actors](docs/actors.md#server-actors)) and a request whose body is an `InputStream` are sent
+with `followRedirects` set to `false`, so that the API token never follows a redirect to another
+host and a stream is never sent twice. Override both to support it: with
 `false`, return a redirect response as it is. `DefaultHttpTransport` does, also when it wraps your own
 JDK `HttpClient` (it then copies the client's settings into one that does not follow redirects).
 
@@ -437,7 +438,7 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION`: the semantic version of this client (`0.14.1`).
+- `Version.CLIENT_VERSION`: the semantic version of this client (`0.15.0`).
 - `Version.API_SPEC_VERSION`: the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters, and models were last generated
   and checked against (`v2-2026-11-18T151559Z`). It is a snapshot, not a live compatibility

@@ -49,8 +49,11 @@ public final class ActorVersionCollectionClient {
     return new ListPublisher<>(items);
   }
 
-  /** Creates a new Actor version. {@code version} is any JSON-serializable version definition. */
+  /**
+   * Creates a new Actor version. {@code version} is any JSON-serializable version definition. The
+   * request uses the long timeout tier, since the version can carry its source files.
+   */
   public CompletableFuture<ActorVersion> create(Object version) {
-    return ctx.createResource(new QueryParams(), version, ActorVersion.class);
+    return ctx.createResource(new QueryParams(), version, ActorVersion.class, Timeout.LONG);
   }
 }

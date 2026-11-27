@@ -7,30 +7,46 @@ Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollec
 | Method | Description |
 |---|---|
 | `list(StoreListOptions)` | A page of Store Actors. Completes with `PaginationList<ActorStoreListItem>`. |
-| `iterate(StoreListOptions, Long chunkSize)` | A lazy `Flow.Publisher<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of rows read, which are the Actors yielded unless the API drops entries after counting them (`null`/unset or non-positive = all); `chunkSize` is the per-request page size (`null` = server default). |
+| `iterate(StoreListOptions, Long chunkSize)` | A lazy `Flow.Publisher<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of rows read, which are the Actors yielded unless the API drops entries after counting them (`null`/unset or non-positive = all); `chunkSize` is the per-request page size (`null` = server default). With `search` there is a single page instead: see below. |
 
 `StoreListOptions` fields: `offset` (number of Actors to skip), `limit` (maximum number of Actors to
-return), `search` (full-text search query), `sortBy` (the sort field, e.g. `popularity`, `newest`),
-`category` (filter Actors by category), `username` (filter Actors by owner username), `pricingModel`
-(filter by pricing model: `FREE`, `PRICE_PER_DATASET_ITEM`, `PAY_PER_EVENT`; the deprecated rental model
-`FLAT_PRICE_PER_MONTH` is no longer listed),
+return; the API default and maximum is 1000, or 100 with `search`), `search` (search query),
+`sortBy` (deprecated: the API ignores it, and orders the results by relevance with `search` and by
+Store position otherwise, so sort them on the client), `category` (filter by one or more category IDs
+such as `AI_AND_ML`, comma-separated and case-insensitive; an Actor must match all of them, and an
+unknown category fails with a `400` error), `username` (filter Actors by owner username),
+`pricingModel` (filter by pricing model: `FREE`, `PRICE_PER_DATASET_ITEM`, `PAY_PER_EVENT`; the
+deprecated rental model `FLAT_PRICE_PER_MONTH` is no longer listed),
 `includeUnrunnableActors` (include Actors the current user cannot run), `allowsAgenticUsers` (only
 Actors that allow agentic users), `responseFormat` (the response shape: `full` or `agent`).
+
+A `search` returns the Actors ranked by relevance as a single page of at most 100: the API ignores
+`offset` and has no second page. `iterate` therefore sends one request for a search, when you call
+`iterate` rather than on first demand, with the options' `limit` as its size. `chunkSize` and
+`offset` have no effect. Narrow a search with `category`, `username`, or `pricingModel`.
 
 ```java
 // Publishers.collect() drains the whole publisher; fine here since `limit` already caps it.
 // To stop early without fetching further pages, subscribe with your own Flow.Subscriber instead
 // (request(1) at a time, cancel() once you have enough); see IterateStore.java in the examples.
 List<ActorStoreListItem> items =
-    Publishers.collect(client.store().iterate(new StoreListOptions().search("crawler").limit(20L), 10L))
+    Publishers.collect(client.store().iterate(new StoreListOptions().username("apify").limit(20L), 10L))
         .join();
 items.forEach(item -> System.out.println(item.getUsername() + "/" + item.getName()));
+
+// A search is one page of at most 100 Actors.
+List<ActorStoreListItem> found =
+    Publishers.collect(client.store().iterate(new StoreListOptions().search("crawler"), null)).join();
 ```
 
 `ActorStoreListItem` fields: `getId()`, `getName()`, `getUsername()`, `getTitle()`,
-`getDescription()`, `getStats()` (`ActorStats`; see [Actors](actors.md#actorclient)),
-`getCurrentPricingInfo()` (`PricingInfo`: `getPricingModel()`), `getPictureUrl()`,
-`getUserPictureUrl()`, `getUrl()`, `getReadmeSummary()`. Any field not covered by a typed getter is
+`getUserFullName()`, `getDescription()`, `getCategories()` (`List<String>` of category IDs),
+`getNotice()`, `getStats()` (`StoreActorStats`: `getTotalUsers()`, `getTotalRuns()`,
+`getTotalUsers7Days()`, `getTotalUsers30Days()`, `getTotalUsers90Days()`, `getActorReviewRating()`,
+`getActorReviewCount()`), `getCurrentPricingInfo()` (`PricingInfo`: `getPricingModel()`),
+`getIsWhiteListedForAgenticPayments()`, `getIsVerified()` (whether the developer has a verified
+identity), `getBadge()`, `getPictureUrl()`, `getUserPictureUrl()`, `getUrl()`,
+`getReadmeSummary()`. Any field not covered by a typed getter is
 still available via the inherited `getExtra()` (see
 [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
 
@@ -94,7 +110,7 @@ Access a build's or run's log directly, or via `client.run(id).log()` / `client.
 |---|---|
 | `get()` / `get(LogOptions)` | The whole log as text. Completes with `Optional<String>` when addressed by an explicit id (`client.log(id)`); on `run.log()`/`build.log()` (no log id of its own), a 404 is ambiguous and throws `NotFoundError` instead; see [Fetching single resources](../README.md#fetching-single-resources). |
 | `getAsBytes()` / `getAsBytes(LogOptions)` | As `get()`, but completes with `Optional<byte[]>` (the raw bytes, not decoded as text). Same 404 handling as `get()`. |
-| `stream()` / `stream(LogOptions)` | A live `InputStream` over the log (for redirection). Completes with `InputStream`; throws on any error response, including a 404. |
+| `stream()` / `stream(LogOptions)` | A live `InputStream` over the log (for redirection). Completes with `InputStream`. The request is retried like any other, until the headers arrive; it throws on an error response that is not retried, or the last one once the retries run out, including a 404. |
 
 `LogOptions` fields: `raw(Boolean)`, `download(Boolean)`.
 

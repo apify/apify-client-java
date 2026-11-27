@@ -3,6 +3,7 @@ package com.apify.client.actor;
 import com.apify.client.http.HttpCompressor;
 import com.apify.client.http.Timeout;
 import com.apify.client.internal.QueryParams;
+import java.io.InputStream;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -85,10 +86,14 @@ public final class ActorServerRequestOptions {
   }
 
   /**
-   * The request body: a {@code byte[]} or a {@link String} is sent as it is (set its {@code
-   * Content-Type} with {@link #header}), and anything else, a {@link Map}, a list or a POJO, is
-   * serialized to JSON and sent as {@code application/json} unless a {@code Content-Type} header is
-   * set.
+   * The request body: a {@code byte[]}, a {@link String}, or an {@link InputStream} is sent as it
+   * is (set its {@code Content-Type} with {@link #header}), and anything else, a {@link Map}, a
+   * list, or a POJO, is serialized to JSON and sent as {@code application/json} unless a {@code
+   * Content-Type} header is set.
+   *
+   * <p>An {@code InputStream} is read as it is sent and closed when the call completes, so it is
+   * never held in memory. It can be read once, so the request is sent once, with no retry (not even
+   * for a 429 or 503 response), no compression, and no redirect followed.
    */
   public ActorServerRequestOptions body(Object body) {
     this.body = body;

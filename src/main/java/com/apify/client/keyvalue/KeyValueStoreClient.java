@@ -9,6 +9,7 @@ import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
 import com.apify.client.internal.Signatures;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -309,6 +310,35 @@ public final class KeyValueStoreClient {
             });
   }
 
+  /**
+   * As {@link #getRecord(String)}, but completes with the record's body as a live {@link
+   * InputStream} instead of buffering it, so a large record can be processed in chunks or passed on
+   * to {@link #setRecord(String, InputStream, String)} without being held in memory. Completes with
+   * empty if the record does not exist. The caller closes the returned record, or reads its stream
+   * to the end. The request is retried like any other, until the response headers arrive; an error
+   * status that is not retried, or the last one once the retries run out, is thrown as an {@link
+   * com.apify.client.http.ApifyApiException}. A failure while reading the body is not retried.
+   */
+  public CompletableFuture<Optional<KeyValueStoreRecordStream>> getRecordStream(String key) {
+    return getRecordStream(key, new GetRecordOptions().attachment(true));
+  }
+
+  /** As {@link #getRecordStream(String)}, with explicit options (attachment, signature). */
+  public CompletableFuture<Optional<KeyValueStoreRecordStream>> getRecordStream(
+      String key, GetRecordOptions options) {
+    QueryParams params = new QueryParams();
+    options.apply(params);
+    return ctx.getStream("records/" + ResourceContext.encodePathSegment(key), params)
+        .thenApply(
+            resp -> {
+              if (resp == null) {
+                return Optional.empty();
+              }
+              String contentType = resp.headers().firstValue(HttpHeaders.CONTENT_TYPE).orElse(null);
+              return Optional.of(new KeyValueStoreRecordStream(key, resp.body(), contentType));
+            });
+  }
+
   /** Stores a record with raw bytes and the given content type. */
   public CompletableFuture<Void> setRecord(String key, byte[] value, String contentType) {
     return setRecord(key, value, contentType, new SetRecordOptions());
@@ -322,25 +352,64 @@ public final class KeyValueStoreClient {
    */
   public CompletableFuture<Void> setRecord(
       String key, byte[] value, String contentType, SetRecordOptions options) {
-    // The trimmed value is validated and sent.
-    String contentEncoding = options.contentEncodingValue();
-    if (contentEncoding != null) {
-      contentEncoding = contentEncoding.trim();
-      if (contentEncoding.isEmpty()) {
-        throw new IllegalArgumentException("contentEncoding must not be blank");
-      }
-    }
-    Map<String, String> extraHeaders =
-        contentEncoding == null ? null : Map.of(HttpHeaders.CONTENT_ENCODING, contentEncoding);
-    Timeout timeout = options.timeoutValue() != null ? options.timeoutValue() : Timeout.LONG;
     return ctx.putRaw(
         "records/" + ResourceContext.encodePathSegment(key),
         new QueryParams(),
         value,
         contentType,
-        extraHeaders,
-        timeout,
+        contentEncodingHeader(options),
+        timeoutOf(options),
         options.doNotRetryTimeoutsValue());
+  }
+
+  /**
+   * The {@code Content-Encoding} header of a record upload, or {@code null} for none. The trimmed
+   * value is validated and sent.
+   */
+  private static Map<String, String> contentEncodingHeader(SetRecordOptions options) {
+    String contentEncoding = options.contentEncodingValue();
+    if (contentEncoding == null) {
+      return null;
+    }
+    contentEncoding = contentEncoding.trim();
+    if (contentEncoding.isEmpty()) {
+      throw new IllegalArgumentException("contentEncoding must not be blank");
+    }
+    return Map.of(HttpHeaders.CONTENT_ENCODING, contentEncoding);
+  }
+
+  /** The timeout of a record upload: the option, or the long tier. */
+  private static Timeout timeoutOf(SetRecordOptions options) {
+    return options.timeoutValue() != null ? options.timeoutValue() : Timeout.LONG;
+  }
+
+  /**
+   * Stores a record whose bytes are read from {@code value}, never held in memory whole, so a large
+   * file can be uploaded. The stream is closed when the call completes. It can be read once, so the
+   * upload is sent once: it is not retried on failure, compressed, or sent again to follow a
+   * redirect. To upload a file with retries, read it into a {@code byte[]} and use {@link
+   * #setRecord(String, byte[], String)} instead.
+   */
+  public CompletableFuture<Void> setRecord(String key, InputStream value, String contentType) {
+    return setRecord(key, value, contentType, new SetRecordOptions());
+  }
+
+  /**
+   * As {@link #setRecord(String, InputStream, String)}, honoring the given write options ({@code
+   * timeoutSecs} and {@code contentEncoding}; {@code doNotRetryTimeouts} has no effect, since a
+   * stream is never retried).
+   *
+   * @throws IllegalArgumentException if {@code options.contentEncoding()} is set but blank
+   */
+  public CompletableFuture<Void> setRecord(
+      String key, InputStream value, String contentType, SetRecordOptions options) {
+    return ctx.putStream(
+        "records/" + ResourceContext.encodePathSegment(key),
+        new QueryParams(),
+        value,
+        contentType,
+        contentEncodingHeader(options),
+        timeoutOf(options));
   }
 
   /** Stores a record holding the JSON serialization of {@code value}. */

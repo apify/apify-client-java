@@ -9,7 +9,7 @@ where `id` is an Actor ID or `username~name` (a `/` in the id is accepted and no
 |---|---|
 | `list(ActorListOptions)` | List the account's Actors. Completes with `PaginationList<Actor>`. |
 | `iterate(ActorListOptions, Long chunkSize)` | Lazy `Flow.Publisher<Actor>` over all matches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the page size (`null` = server default). |
-| `create(Object)` | Create a new Actor from a JSON-serializable definition. Completes with `Actor`. |
+| `create(Object)` | Create a new Actor from a JSON-serializable definition. Completes with `Actor`. Fails with a `ConflictError` (409, `actor-name-not-unique`) if you already have an Actor with that name. |
 
 `ActorListOptions` adds `my(Boolean)` (only Actors owned by the current user) and
 `sortBy(String)` (e.g. `createdAt`, `stats.lastRunStartedAt`) on top of the standard offset/limit/desc.
@@ -46,7 +46,7 @@ Actor created = client.actors().create(Map.of(
 | `get()` | Fetch the Actor. Completes with `Optional<Actor>`. |
 | `update(Object)` | Update the Actor with the given fields. Completes with `Actor`. |
 | `delete()` | Delete the Actor. |
-| `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Completes with `ActorRun`. The `input` is any JSON-serializable value, or a `byte[]`/`String` that is sent as it is (set the matching `ActorStartOptions.contentType(...)`), or `null`. |
+| `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Completes with `ActorRun`. The `input` is any JSON-serializable value, or a `byte[]`, `String`, or `InputStream` that is sent as it is (set the matching `ActorStartOptions.contentType(...)`), or `null`. A stream is read once, so its start is sent once: it is not retried, even with `waitForResources`. |
 | `call(Object input, ActorStartOptions, Long waitSecs)` | Start a run and poll until it finishes (`null` waits indefinitely); does **not** stream the run's log. Completes with `ActorRun`. |
 | `call(Object input, ActorCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default. Use `ActorCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
 | `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Completes with `boolean`. `ValidateInputOptions` fields (optional): `build` (`String`), `contentType` (`String`). |
@@ -131,8 +131,9 @@ Actor's `standbyUrl` and `actorStandby` fields.
 `ActorServerRequestOptions` fields (all optional): `method(String)` (`GET` by default; also `HEAD`,
 `POST`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`, `PATCH`), `param(String, Object)`/`params(Map)` (query
 parameters, converted as for API calls: `null` is left out, a boolean is sent as `1`/`0`, a
-collection comma-joined), `header(String, String)`/`headers(Map)`, `body(Object)` (a `byte[]` or
-`String` is sent as it is; anything else is serialized to JSON and sent as `application/json`
+collection comma-joined), `header(String, String)`/`headers(Map)`, `body(Object)` (a `byte[]`,
+`String`, or `InputStream` is sent as it is, and a stream is sent once, with no retry, no
+compression, and no redirect followed; anything else is serialized to JSON and sent as `application/json`
 unless you set a `Content-Type` header), `parentRequestId(String)` (see
 [Calling a Server Actor from a Server Actor](#calling-a-server-actor-from-a-server-actor)),
 `compression(HttpCompressor)` and `timeout(Timeout)`
@@ -232,14 +233,14 @@ and deletes a single version and exposes its environment variables.
 |---|---|
 | `list(ListOptions)` | List the Actor's versions. Completes with `PaginationList<ActorVersion>`. The endpoint takes no query parameters; `options` (`offset`/`limit`/`desc`) is accepted only for signature consistency with every other `list(ListOptions)` and has no effect; pass `null`. |
 | `iterate(ListOptions)` | Lazy `Flow.Publisher<ActorVersion>` over all versions; `limit` caps the total (`null`/unset or non-positive = all), applied client-side after the single fetch. `offset` has no effect and there is no page size to tune. |
-| `create(Object version)` | Create a version. Completes with `ActorVersion`. |
+| `create(Object version)` | Create a version. Completes with `ActorVersion`. Uses the long timeout tier, since the version can carry its source files. |
 
 ### `ActorVersionClient`: `client.actor(id).version(v)`
 
 | Method | Description |
 |---|---|
 | `get()` | Fetch the version. Completes with `Optional<ActorVersion>`. |
-| `update(Object)` | Update the version. Completes with `ActorVersion`. |
+| `update(Object)` | Update the version. Completes with `ActorVersion`. Uses the long timeout tier, since the version can carry its source files. |
 | `delete()` | Delete the version. |
 | `envVars()` | An `ActorEnvVarCollectionClient` for the version's environment variables. |
 | `envVar(String name)` | An `ActorEnvVarClient` for a single environment variable. |

@@ -80,6 +80,22 @@ class TimeoutTierTest {
   }
 
   @Test
+  void actorVersionCreateAndUpdateUseTheLongTier() {
+    // A version can carry its source files, so uploading one gets the long tier like other uploads.
+    MockTransport backend = MockTransport.ofConstant(200, "{\"data\":{\"versionNumber\":\"0.0\"}}");
+    client(backend).actor("a1").versions().create(Map.of("versionNumber", "0.0")).join();
+    assertEquals(secs(360), backend.lastTimeout);
+
+    backend = MockTransport.ofConstant(200, "{\"data\":{\"versionNumber\":\"0.0\"}}");
+    client(backend).actor("a1").version("0.0").update(Map.of("buildTag", "latest")).join();
+    assertEquals(secs(360), backend.lastTimeout);
+
+    backend = MockTransport.ofConstant(200, "{\"data\":{\"versionNumber\":\"0.0\"}}");
+    client(backend).actor("a1").version("0.0").get().join();
+    assertEquals(secs(5), backend.lastTimeout, "reading a version stays on the short tier");
+  }
+
+  @Test
   void startIsMediumExtendedByTheWaitForFinishHold() {
     MockTransport backend = MockTransport.ofConstant(201, RUN_JSON);
     client(backend).actor("a1").start(null, new ActorStartOptions()).join();
