@@ -71,4 +71,19 @@ public record RequestPolicy(
         /* compress= */ compressor != null,
         /* compressor= */ compressor);
   }
+
+  /**
+   * This policy for a request whose body is a stream, which is not compressed since that would need
+   * the whole stream in memory.
+   */
+  RequestPolicy forStreamBody() {
+    return new RequestPolicy(
+        authorizationHeader,
+        throwOnErrorStatus,
+        retryableStatus,
+        retryTransportErrors,
+        followRedirects,
+        /* compress= */ false,
+        compressor);
+  }
 }

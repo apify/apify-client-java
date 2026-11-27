@@ -76,7 +76,10 @@ public final class TaskClient {
 
   /**
    * Starts the task and completes with the created run as soon as it exists (no waiting). {@code
-   * input} optionally overrides the task's stored input ({@code null} to use the stored input).
+   * input} optionally overrides the task's stored input ({@code null} to use the stored input). As
+   * for {@link com.apify.client.actor.ActorClient#start}, it can be a {@code byte[]}, {@link
+   * String} or {@link java.io.InputStream} that is sent as it is; a stream is sent once, with no
+   * retry.
    */
   public CompletableFuture<ActorRun> start(Object input, TaskStartOptions options) {
     return RunStartSupport.start(

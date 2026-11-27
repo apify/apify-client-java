@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -75,10 +76,17 @@ public final class Json {
    * input read from a file, or the exact bytes of a non-JSON content type, are not wrapped in a
    * second layer of JSON. Anything else is serialized to JSON. A {@code null} payload sends no
    * body.
+   *
+   * @throws IllegalArgumentException if the payload is an {@link InputStream}, which only the
+   *     methods that document stream bodies send as a stream; it would otherwise be serialized to
+   *     meaningless JSON
    */
   public static byte[] toRequestBody(Object payload) {
     if (payload == null) {
       return null;
+    }
+    if (payload instanceof InputStream) {
+      throw new IllegalArgumentException("An InputStream body is not supported by this method");
     }
     if (payload instanceof byte[] bytes) {
       return bytes;

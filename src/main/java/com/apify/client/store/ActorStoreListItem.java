@@ -71,7 +71,7 @@ public final class ActorStoreListItem extends ApifyResource {
 
   /**
    * A warning displayed on the Actor's Store page: {@code "NONE"}, {@code
-   * "RESIDENTIAL_PROXY_REQUIRED"} or {@code "UNDER_MAINTENANCE"}. Can be set by the Actor's
+   * "RESIDENTIAL_PROXY_REQUIRED"}, or {@code "UNDER_MAINTENANCE"}. Can be set by the Actor's
    * developer or automatically by Apify's quality checks.
    */
   public String getNotice() {

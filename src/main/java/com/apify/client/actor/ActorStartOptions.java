@@ -101,7 +101,8 @@ public final class ActorStartOptions {
    * API rejects it with {@code actor-memory-limit-exceeded} or {@code
    * concurrent-runs-limit-exceeded}), waiting 10 seconds between attempts. {@code true} retries
    * until the run starts ({@link #WAIT_FOR_RESOURCES_INDEFINITELY}); {@code false} (the default)
-   * does not retry and throws the error immediately.
+   * does not retry and throws the error immediately. An input that is an {@link
+   * java.io.InputStream} can be read once, so its start is never retried.
    */
   public ActorStartOptions waitForResources(boolean waitForResources) {
     this.waitForResourcesSecs = waitForResources ? WAIT_FOR_RESOURCES_INDEFINITELY : null;

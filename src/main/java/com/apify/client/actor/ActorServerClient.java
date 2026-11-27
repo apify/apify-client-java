@@ -11,6 +11,8 @@ import com.apify.client.internal.Json;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.RequestPolicy;
 import com.apify.client.internal.ResourceContext;
+import java.io.InputStream;
+import java.net.http.HttpResponse;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
@@ -209,6 +211,20 @@ public final class ActorServerClient {
    */
   public CompletableFuture<ApiResponse> request(String path, ActorServerRequestOptions options) {
     ActorServerRequestOptions opts = options != null ? options : new ActorServerRequestOptions();
+    RequestPolicy policy = RequestPolicy.server(opts.compressionValue());
+    if (opts.bodyValue() instanceof InputStream stream) {
+      return getUrl()
+          .thenCompose(
+              serverUrl ->
+                  http.callWithStream(
+                      opts.methodValue(),
+                      requestUrl(serverUrl, path, opts),
+                      stream,
+                      contentTypeOf(opts),
+                      opts.headersValue(),
+                      opts.timeoutValue(),
+                      policy));
+    }
     byte[] body = Json.toRequestBody(opts.bodyValue());
     return getUrl()
         .thenCompose(
@@ -221,7 +237,7 @@ public final class ActorServerClient {
                     opts.headersValue(),
                     opts.timeoutValue(),
                     false,
-                    RequestPolicy.server(opts.compressionValue())));
+                    policy));
   }
 
   /** A {@code GET} request to {@code path} on the Actor's server; see {@link #request}. */
@@ -246,22 +262,40 @@ public final class ActorServerClient {
   public CompletableFuture<ActorServerStreamResponse> requestStream(
       String path, ActorServerRequestOptions options) {
     ActorServerRequestOptions opts = options != null ? options : new ActorServerRequestOptions();
-    byte[] body = Json.toRequestBody(opts.bodyValue());
-    return getUrl()
-        .thenCompose(
-            serverUrl ->
-                http.streamRequest(
-                    opts.methodValue(),
-                    requestUrl(serverUrl, path, opts),
-                    body,
-                    contentTypeOf(opts),
-                    opts.headersValue(),
-                    opts.timeoutValue(),
-                    RequestPolicy.server(opts.compressionValue())))
-        .thenApply(
-            response ->
-                new ActorServerStreamResponse(
-                    response.statusCode(), response.headers(), response.body()));
+    RequestPolicy policy = RequestPolicy.server(opts.compressionValue());
+    CompletableFuture<HttpResponse<InputStream>> exchange;
+    if (opts.bodyValue() instanceof InputStream stream) {
+      exchange =
+          getUrl()
+              .thenCompose(
+                  serverUrl ->
+                      http.streamRequest(
+                          opts.methodValue(),
+                          requestUrl(serverUrl, path, opts),
+                          stream,
+                          contentTypeOf(opts),
+                          opts.headersValue(),
+                          opts.timeoutValue(),
+                          policy));
+    } else {
+      byte[] body = Json.toRequestBody(opts.bodyValue());
+      exchange =
+          getUrl()
+              .thenCompose(
+                  serverUrl ->
+                      http.streamRequest(
+                          opts.methodValue(),
+                          requestUrl(serverUrl, path, opts),
+                          body,
+                          contentTypeOf(opts),
+                          opts.headersValue(),
+                          opts.timeoutValue(),
+                          policy));
+    }
+    return exchange.thenApply(
+        response ->
+            new ActorServerStreamResponse(
+                response.statusCode(), response.headers(), response.body()));
   }
 
   /** Fetches the Actor and checks that it is a Server Actor. */
@@ -394,7 +428,11 @@ public final class ActorServerClient {
       return set;
     }
     Object body = options.bodyValue();
-    boolean sentAsIs = body == null || body instanceof byte[] || body instanceof String;
+    boolean sentAsIs =
+        body == null
+            || body instanceof byte[]
+            || body instanceof String
+            || body instanceof InputStream;
     return sentAsIs ? null : ResourceContext.CONTENT_TYPE_JSON;
   }
 }

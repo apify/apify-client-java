@@ -7,7 +7,7 @@ Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollec
 | Method | Description |
 |---|---|
 | `list(StoreListOptions)` | A page of Store Actors. Completes with `PaginationList<ActorStoreListItem>`. |
-| `iterate(StoreListOptions, Long chunkSize)` | A lazy `Flow.Publisher<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of rows read, which are the Actors yielded unless the API drops entries after counting them (`null`/unset or non-positive = all); `chunkSize` is the per-request page size (`null` = server default). |
+| `iterate(StoreListOptions, Long chunkSize)` | A lazy `Flow.Publisher<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of rows read, which are the Actors yielded unless the API drops entries after counting them (`null`/unset or non-positive = all); `chunkSize` is the per-request page size (`null` = server default). With `search` there is a single page instead: see below. |
 
 `StoreListOptions` fields: `offset` (number of Actors to skip), `limit` (maximum number of Actors to
 return; the API default and maximum is 1000, or 100 with `search`), `search` (search query),
@@ -21,18 +21,22 @@ deprecated rental model `FLAT_PRICE_PER_MONTH` is no longer listed),
 Actors that allow agentic users), `responseFormat` (the response shape: `full` or `agent`).
 
 A `search` returns the Actors ranked by relevance as a single page of at most 100: the API ignores
-`offset` and has no second page. `iterate` therefore sends one request for a search, with the
-options' `limit` as its size, and `chunkSize` and `offset` have no effect. Narrow a search with
-`category`, `username` or `pricingModel`.
+`offset` and has no second page. `iterate` therefore sends one request for a search, when you call
+`iterate` rather than on first demand, with the options' `limit` as its size. `chunkSize` and
+`offset` have no effect. Narrow a search with `category`, `username`, or `pricingModel`.
 
 ```java
 // Publishers.collect() drains the whole publisher; fine here since `limit` already caps it.
 // To stop early without fetching further pages, subscribe with your own Flow.Subscriber instead
 // (request(1) at a time, cancel() once you have enough); see IterateStore.java in the examples.
 List<ActorStoreListItem> items =
-    Publishers.collect(client.store().iterate(new StoreListOptions().search("crawler").limit(20L), 10L))
+    Publishers.collect(client.store().iterate(new StoreListOptions().username("apify").limit(20L), 10L))
         .join();
 items.forEach(item -> System.out.println(item.getUsername() + "/" + item.getName()));
+
+// A search is one page of at most 100 Actors.
+List<ActorStoreListItem> found =
+    Publishers.collect(client.store().iterate(new StoreListOptions().search("crawler"), null)).join();
 ```
 
 `ActorStoreListItem` fields: `getId()`, `getName()`, `getUsername()`, `getTitle()`,

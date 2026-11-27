@@ -5,7 +5,9 @@ import com.apify.client.http.ApiResponse;
 import com.apify.client.http.ApifyApiException;
 import com.apify.client.http.ApifyTransportException;
 import com.apify.client.http.Timeout;
+import java.io.InputStream;
 import java.net.URLEncoder;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
@@ -405,6 +407,43 @@ public final class ResourceContext {
   }
 
   /**
+   * POST whose body is read from a stream, unwrapping the data envelope. The stream can be read
+   * once, so the request is sent exactly once; see {@link HttpClientCore#callWithStream}.
+   */
+  public <T> CompletableFuture<T> postWithStreamBody(
+      String subPath,
+      QueryParams params,
+      InputStream body,
+      String contentType,
+      Class<T> dataClass,
+      Timeout timeout) {
+    String u = mergedParams(params).applyToUrl(subUrl(subPath));
+    return http.callWithStream("POST", u, body, contentType, null, timeout, RequestPolicy.API)
+        .thenApply(resp -> Json.parseData(resp.body(), dataClass));
+  }
+
+  /**
+   * GET returning the live response, its body unread. Completes with {@code null} on not-found. The
+   * caller closes the body stream.
+   */
+  public CompletableFuture<HttpResponse<InputStream>> getStream(
+      String subPath, QueryParams params) {
+    String u = mergedParams(params).applyToUrl(subUrl(subPath));
+    return http.streamResponseOrThrow(u)
+        .handle(
+            (resp, error) -> {
+              if (error == null) {
+                return resp;
+              }
+              Throwable cause = HttpClientCore.unwrapCompletion(error);
+              if (cause instanceof ApifyApiException apiError && isNotFound(apiError)) {
+                return null;
+              }
+              throw asRuntimeException(cause);
+            });
+  }
+
+  /**
    * POST with a raw body, parsing the response body directly <em>without</em> unwrapping a {@code
    * {"data": ...}} envelope. Used by endpoints (e.g. actor input validation) whose response is a
    * plain object rather than the standard data envelope.
@@ -513,6 +552,23 @@ public final class ResourceContext {
               }
               throw asRuntimeException(cause);
             });
+  }
+
+  /**
+   * PUT whose body is read from a stream (used for key-value-store record uploads). The stream can
+   * be read once, so the request is sent exactly once; see {@link HttpClientCore#callWithStream}.
+   */
+  public CompletableFuture<Void> putStream(
+      String subPath,
+      QueryParams params,
+      InputStream body,
+      String contentType,
+      Map<String, String> extraHeaders,
+      Timeout timeout) {
+    String u = mergedParams(params).applyToUrl(subUrl(subPath));
+    return http.callWithStream(
+            "PUT", u, body, contentType, extraHeaders, timeout, RequestPolicy.API)
+        .thenApply(resp -> null);
   }
 
   /** PUT with raw bytes and a content type (used for key-value-store record uploads). */

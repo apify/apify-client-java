@@ -37,7 +37,7 @@ public final class StoreListOptions implements ListOptionsLike {
   /**
    * Search query. The API ranks the results by relevance and returns them as a single page of at
    * most 100 Actors: {@link #offset(Long)} is ignored and there is no second page. Narrow the
-   * results with {@link #category(String)}, {@link #username(String)} or {@link
+   * results with {@link #category(String)}, {@link #username(String)}, or {@link
    * #pricingModel(String)}.
    */
   public StoreListOptions search(String search) {

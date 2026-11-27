@@ -35,6 +35,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -346,7 +347,7 @@ public final class HttpClientCore {
     return attemptWithRetry(
         method,
         url,
-        prepared.body(),
+        bytesPublisher(prepared.body()),
         contentType,
         prepared.headers(),
         baseTimeout,
@@ -356,6 +357,55 @@ public final class HttpClientCore {
         1,
         maxAttempts,
         retry.minDelayBetweenRetries);
+  }
+
+  /**
+   * Sends a request whose body is read from {@code body}, with auth and the User-Agent applied. A
+   * stream can be read once, so the request is sent exactly once: it is never retried or
+   * compressed, and a redirect that needs the body again fails the request instead of sending an
+   * empty body. {@code body} is closed once it is read.
+   */
+  public CompletableFuture<ApiResponse> callWithStream(
+      String method,
+      String url,
+      InputStream body,
+      String contentType,
+      Map<String, String> extraHeaders,
+      Timeout timeout,
+      RequestPolicy policy) {
+    return attemptWithRetry(
+        method,
+        url,
+        streamPublisher(body),
+        contentType,
+        extraHeaders,
+        resolveTimeout(timeout),
+        false,
+        policy.forStreamBody(),
+        extractPath(url),
+        1,
+        1,
+        retry.minDelayBetweenRetries);
+  }
+
+  /**
+   * A single-use body publisher that reads {@code body}. A second subscription, which the JDK makes
+   * to send the body again for a 307 or 308 redirect, gets a stream that fails to read instead of
+   * the exhausted {@code body}, so the data is never silently replaced with an empty body.
+   */
+  private static HttpRequest.BodyPublisher streamPublisher(InputStream body) {
+    AtomicBoolean handedOut = new AtomicBoolean();
+    return HttpRequest.BodyPublishers.ofInputStream(
+        () -> handedOut.compareAndSet(false, true) ? body : new SentStream());
+  }
+
+  /** The body of a stream request that was already sent: reading it fails. */
+  private static final class SentStream extends InputStream {
+    @Override
+    public int read() throws IOException {
+      throw new IOException(
+          "The request body is a stream that was already sent and cannot be sent again");
+    }
   }
 
   /** A request body, as it is sent, with the headers that go with it. */
@@ -397,7 +447,7 @@ public final class HttpClientCore {
   private CompletableFuture<ApiResponse> attemptWithRetry(
       String method,
       String url,
-      byte[] body,
+      HttpRequest.BodyPublisher body,
       String contentType,
       Map<String, String> headers,
       Duration baseTimeout,
@@ -458,7 +508,7 @@ public final class HttpClientCore {
   private CompletableFuture<AttemptOutcome> attempt(
       String method,
       String url,
-      byte[] body,
+      HttpRequest.BodyPublisher body,
       String contentType,
       Map<String, String> extraHeaders,
       Duration timeout,
@@ -527,10 +577,26 @@ public final class HttpClientCore {
       Map<String, String> extraHeaders,
       Duration timeout,
       RequestPolicy policy) {
-    HttpRequest.BodyPublisher publisher =
-        body != null
-            ? HttpRequest.BodyPublishers.ofByteArray(body)
-            : HttpRequest.BodyPublishers.noBody();
+    return buildPublisherRequest(
+        method, url, bytesPublisher(body), contentType, extraHeaders, timeout, policy);
+  }
+
+  /** A replayable body publisher for {@code body}, or an empty one for {@code null}. */
+  private static HttpRequest.BodyPublisher bytesPublisher(byte[] body) {
+    return body != null
+        ? HttpRequest.BodyPublishers.ofByteArray(body)
+        : HttpRequest.BodyPublishers.noBody();
+  }
+
+  /** As {@link #buildRequest}, for a body that is already a publisher. */
+  private HttpRequest buildPublisherRequest(
+      String method,
+      String url,
+      HttpRequest.BodyPublisher publisher,
+      String contentType,
+      Map<String, String> extraHeaders,
+      Duration timeout,
+      RequestPolicy policy) {
     HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url)).method(method, publisher);
     if (timeout != null) {
       b.timeout(timeout);
@@ -572,13 +638,13 @@ public final class HttpClientCore {
   private CompletableFuture<ApiResponse> doAttempt(
       String method,
       String url,
-      byte[] body,
+      HttpRequest.BodyPublisher body,
       String contentType,
       Map<String, String> extraHeaders,
       Duration timeout,
       RequestPolicy policy) {
     HttpRequest request =
-        buildRequest(method, url, body, contentType, extraHeaders, timeout, policy);
+        buildPublisherRequest(method, url, body, contentType, extraHeaders, timeout, policy);
     return CancellableFuture.wrap(transport.sendAsync(request, policy.followRedirects()))
         .thenApply(resp -> new ApiResponse(resp.statusCode(), resp.headers(), resp.body()));
   }
@@ -878,6 +944,33 @@ public final class HttpClientCore {
   }
 
   /**
+   * As {@link #streamRequest(String, String, byte[], String, Map, Timeout, RequestPolicy)}, for a
+   * body that is read from {@code body}. A stream can be read once, so the request is sent exactly
+   * once: it is never retried or compressed, and a redirect that needs the body again fails the
+   * request instead of sending an empty body.
+   */
+  public CompletableFuture<HttpResponse<InputStream>> streamRequest(
+      String method,
+      String url,
+      InputStream body,
+      String contentType,
+      Map<String, String> extraHeaders,
+      Timeout timeout,
+      RequestPolicy policy) {
+    RequestPolicy singleAttempt = policy.forStreamBody();
+    HttpRequest request =
+        buildPublisherRequest(
+            method,
+            url,
+            streamPublisher(body),
+            contentType,
+            extraHeaders,
+            attemptTimeout(resolveTimeout(timeout), 1),
+            singleAttempt);
+    return openStream(request, singleAttempt.followRedirects());
+  }
+
+  /**
    * Opens one attempt of {@link #streamRequest} and, when the response has a status the policy
    * retries and attempts are left, closes it and schedules the next attempt after a backoff delay.
    */
@@ -959,6 +1052,29 @@ public final class HttpClientCore {
    */
   public CompletableFuture<InputStream> streamOrThrow(String url) {
     CancellableFuture<InputStream> result = new CancellableFuture<>();
+    CompletableFuture<HttpResponse<InputStream>> response = streamResponseOrThrow(url);
+    result.link(response);
+    response.whenComplete(
+        (resp, err) -> {
+          if (err == null) {
+            if (!result.complete(resp.body())) {
+              closeQuietly(resp.body());
+            }
+          } else if (err instanceof CancellationException) {
+            result.cancel(true);
+          } else {
+            result.completeExceptionally(err);
+          }
+        });
+    return result;
+  }
+
+  /**
+   * As {@link #streamOrThrow(String)}, but completes with the whole response, so the caller can
+   * read its headers as well as its body stream.
+   */
+  public CompletableFuture<HttpResponse<InputStream>> streamResponseOrThrow(String url) {
+    CancellableFuture<HttpResponse<InputStream>> result = new CancellableFuture<>();
     CompletableFuture<HttpResponse<InputStream>> stream = streamAsync(url);
     result.link(stream);
     stream.whenComplete(
@@ -976,7 +1092,7 @@ public final class HttpClientCore {
             byte[] body = drainQuietly(resp.body());
             result.completeExceptionally(
                 buildApiError(resp.statusCode(), body, 1, "GET", extractPath(url)));
-          } else if (!result.complete(resp.body())) {
+          } else if (!result.complete(resp)) {
             closeQuietly(resp.body());
           }
         });

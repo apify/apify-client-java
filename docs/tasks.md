@@ -25,7 +25,7 @@ Task task = client.tasks().create(Map.of(
 |---|---|
 | `get()` / `update(Object)` / `delete()` | CRUD. Complete with `Optional<Task>` / `Task` / no value. |
 | `publish()` / `unpublish()` | Publish/unpublish the task on its public landing page, by setting `isPublic` through `update(Object)`. Both require write permission to both the task and its Actor; `publish()` additionally requires the task's Actor to be public and a configured `publicConfig`. `unpublish()` preserves `publicConfig` so the task can be republished without re-entering it. Complete with the updated `Task`. |
-| `start(Object input, TaskStartOptions)` | Start a task run (input overrides stored input; `null` uses it). Completes with `ActorRun`. |
+| `start(Object input, TaskStartOptions)` | Start a task run (input overrides stored input; `null` uses it). Completes with `ActorRun`. As for an Actor, the `input` can be a `byte[]`, `String` or `InputStream` that is sent as it is; a stream is sent once, with no retry. |
 | `call(Object input, TaskStartOptions, Long waitSecs)` | Start and poll until finished; does **not** stream the run's log. Completes with `ActorRun`. |
 | `call(Object input, TaskCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default. Use `TaskCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
 | `getInput()` | The stored input. Completes with `JsonNode`; throws `NotFoundError` if the task is gone (no separate "input absent" state). |

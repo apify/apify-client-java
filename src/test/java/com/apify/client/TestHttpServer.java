@@ -53,7 +53,11 @@ final class TestHttpServer implements AutoCloseable {
     }
 
     static Reply redirect(String location) {
-      return new Reply(302, Map.of("Location", location), new byte[0], false);
+      return redirect(302, location);
+    }
+
+    static Reply redirect(int status, String location) {
+      return new Reply(status, Map.of("Location", location), new byte[0], false);
     }
 
     static Reply drop() {
@@ -130,13 +134,36 @@ final class TestHttpServer implements AutoCloseable {
           line.substring(colon + 1).trim(),
           (first, second) -> first + ", " + second);
     }
-    int length = Integer.parseInt(headers.getOrDefault("content-length", "0"));
-    byte[] body = in.readNBytes(length);
+    byte[] body;
+    if ("chunked".equalsIgnoreCase(headers.get("transfer-encoding"))) {
+      body = readChunked(in);
+    } else {
+      int length = Integer.parseInt(headers.getOrDefault("content-length", "0"));
+      body = in.readNBytes(length);
+    }
     String target = parts[1];
     int question = target.indexOf('?');
     String path = question < 0 ? target : target.substring(0, question);
     String query = question < 0 ? "" : target.substring(question + 1);
     return new Received(parts[0], path, query, headers, body);
+  }
+
+  /** Reads a body sent with {@code Transfer-Encoding: chunked}, as a streamed upload is. */
+  private static byte[] readChunked(InputStream in) throws IOException {
+    ByteArrayOutputStream body = new ByteArrayOutputStream();
+    while (true) {
+      String sizeLine = readLine(in);
+      if (sizeLine == null) {
+        throw new IOException("The connection closed in the middle of a chunked body");
+      }
+      int size = Integer.parseInt(sizeLine.split(";")[0].trim(), 16);
+      if (size == 0) {
+        readLine(in); // the empty line that ends the body
+        return body.toByteArray();
+      }
+      body.writeBytes(in.readNBytes(size));
+      readLine(in); // the line break after the chunk
+    }
   }
 
   private static String readLine(InputStream in) throws IOException {

@@ -8,6 +8,7 @@ import com.apify.client.log.StreamedLog;
 import com.apify.client.log.StreamedLogOptions;
 import com.apify.client.run.ActorRun;
 import com.apify.client.run.RunClient;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -87,7 +88,6 @@ public final class RunStartSupport {
       Timeout timeout) {
     QueryParams params = new QueryParams();
     applyParams.accept(params);
-    byte[] body = Json.toRequestBody(input);
     Timeout requestTimeout = timeout;
     if (requestTimeout == null) {
       HttpClientCore.WaitHold hold =
@@ -95,6 +95,13 @@ public final class RunStartSupport {
       params.setLong("waitForFinish", hold.waitForFinishSecs());
       requestTimeout = hold.timeout();
     }
+    if (input instanceof InputStream stream) {
+      // A stream is consumed by the first attempt, so the start is sent once and a rejection for
+      // lack of resources is thrown instead of retried, whatever waitForResources says.
+      return ctx.postWithStreamBody(
+          "runs", params, stream, contentType, ActorRun.class, requestTimeout);
+    }
+    byte[] body = Json.toRequestBody(input);
     if (waitForResourcesSecs == null) {
       return ctx.postWithBody("runs", params, body, contentType, ActorRun.class, requestTimeout);
     }

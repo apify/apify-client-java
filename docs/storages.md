@@ -142,6 +142,8 @@ datasets.
 | `getRecord(String key)` / `getRecord(String key, GetRecordOptions)` | Fetch a record. Completes with `Optional<KeyValueStoreRecord>`. |
 | `setRecord(String key, byte[] value, String contentType)` | Store raw bytes. Completes with no value (`CompletableFuture<Void>`). |
 | `setRecord(String key, byte[] value, String contentType, SetRecordOptions)` | Store raw bytes with write options (`SetRecordOptions`: `timeoutSecs` (`Long`) or `timeout` (`Timeout`: a tier, an exact duration or `NO_TIMEOUT`; the default is the `LONG` tier), `doNotRetryTimeouts` (`Boolean`), `contentEncoding` (`String`, see below)). Completes with no value. |
+| `getRecordStream(String key)` / `getRecordStream(String key, GetRecordOptions)` | As `getRecord`, but completes with an `Optional<KeyValueStoreRecordStream>` whose `getValue()` is a live `InputStream`, so a large record is processed in chunks. Close the record (or read its stream to the end) when done. Throws on any error response other than a 404, which completes with empty. |
+| `setRecord(String key, InputStream value, String contentType)` / `setRecord(String key, InputStream value, String contentType, SetRecordOptions)` | Store the bytes read from a stream, without holding them in memory, so a large file can be uploaded. The stream is closed once it is read. It can be read once, so the upload is sent once: it is not retried or compressed, and `doNotRetryTimeouts` has no effect. Completes with no value. |
 | `setRecordJson(String key, Object value)` | Store JSON. Completes with no value. |
 | `deleteRecord(String key)` | Delete a record. Completes with no value. |
 | `getRecordPublicUrl(String key)` | A public (optionally signed) record URL. Completes with `String`. |
@@ -184,7 +186,20 @@ client.keyValueStore("my-store")
     .join();
 ```
 
-`KeyValueStoreRecord` exposes `getKey()`, `getValue()` (raw bytes) and `getContentType()`.
+Copy a large record without reading it into memory by passing the stream of one call to the other:
+
+```java
+try (KeyValueStoreRecordStream source =
+    client.keyValueStore("my-store").getRecordStream("video.mp4").join().orElseThrow()) {
+  client.keyValueStore("other-store")
+      .setRecord("video.mp4", source.getValue(), source.getContentType())
+      .join();
+}
+```
+
+`KeyValueStoreRecord` exposes `getKey()`, `getValue()` (raw bytes) and `getContentType()`;
+`KeyValueStoreRecordStream` exposes `getKey()`, `getValue()` (the `InputStream`), `getContentType()`
+and `close()`.
 `KeyValueStoreKeysPage` exposes `getItems()` (a list of `KeyValueStoreKey` with `getKey()`/`getSize()`),
 `isTruncated()`, `getExclusiveStartKey()` and `getNextExclusiveStartKey()`.
 
