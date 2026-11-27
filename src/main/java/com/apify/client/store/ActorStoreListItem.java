@@ -1,8 +1,9 @@
 package com.apify.client.store;
 
 import com.apify.client.ApifyResource;
-import com.apify.client.actor.ActorStats;
 import com.apify.client.internal.NormalizedUrlDeserializer;
+import java.util.Collections;
+import java.util.List;
 import tools.jackson.databind.annotation.JsonDeserialize;
 
 /** An Actor as listed in the Apify Store. */
@@ -11,9 +12,15 @@ public final class ActorStoreListItem extends ApifyResource {
   private String name;
   private String username;
   private String title;
+  private String userFullName;
   private String description;
-  private ActorStats stats;
+  private List<String> categories = List.of();
+  private String notice;
+  private StoreActorStats stats;
   private PricingInfo currentPricingInfo;
+  private Boolean isWhiteListedForAgenticPayments;
+  private Boolean isVerified;
+  private String badge;
   private String pictureUrl;
 
   @JsonDeserialize(using = NormalizedUrlDeserializer.class)
@@ -44,19 +51,56 @@ public final class ActorStoreListItem extends ApifyResource {
     return title;
   }
 
+  /** The full name of the Actor's owner, if set. */
+  public String getUserFullName() {
+    return userFullName;
+  }
+
   /** A description of what the Actor does. */
   public String getDescription() {
     return description;
   }
 
-  /** Usage and run statistics for the Actor. */
-  public ActorStats getStats() {
+  /**
+   * The IDs of the Store categories the Actor belongs to, e.g. {@code "AI_AND_ML"}. Empty when the
+   * Actor has none.
+   */
+  public List<String> getCategories() {
+    return categories == null ? List.of() : Collections.unmodifiableList(categories);
+  }
+
+  /**
+   * A warning displayed on the Actor's Store page: {@code "NONE"}, {@code
+   * "RESIDENTIAL_PROXY_REQUIRED"} or {@code "UNDER_MAINTENANCE"}. Can be set by the Actor's
+   * developer or automatically by Apify's quality checks.
+   */
+  public String getNotice() {
+    return notice;
+  }
+
+  /** Usage statistics and Apify Store metrics of the Actor. */
+  public StoreActorStats getStats() {
     return stats;
   }
 
   /** The Actor's current pricing model. */
   public PricingInfo getCurrentPricingInfo() {
     return currentPricingInfo;
+  }
+
+  /** Whether the Actor is whitelisted for agentic payment processing. */
+  public Boolean getIsWhiteListedForAgenticPayments() {
+    return isWhiteListedForAgenticPayments;
+  }
+
+  /** Whether the Actor's developer has a verified identity. */
+  public Boolean getIsVerified() {
+    return isVerified;
+  }
+
+  /** The badge shown for the Actor in the Store, if any. */
+  public String getBadge() {
+    return badge;
   }
 
   /** URL of the Actor's picture, if set. */

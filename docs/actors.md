@@ -9,7 +9,7 @@ where `id` is an Actor ID or `username~name` (a `/` in the id is accepted and no
 |---|---|
 | `list(ActorListOptions)` | List the account's Actors. Completes with `PaginationList<Actor>`. |
 | `iterate(ActorListOptions, Long chunkSize)` | Lazy `Flow.Publisher<Actor>` over all matches; the options' `limit` caps the total yielded (`null`/unset or non-positive = all), `chunkSize` sets the page size (`null` = server default). |
-| `create(Object)` | Create a new Actor from a JSON-serializable definition. Completes with `Actor`. |
+| `create(Object)` | Create a new Actor from a JSON-serializable definition. Completes with `Actor`. Fails with a `ConflictError` (409, `actor-name-not-unique`) if you already have an Actor with that name. |
 
 `ActorListOptions` adds `my(Boolean)` (only Actors owned by the current user) and
 `sortBy(String)` (e.g. `createdAt`, `stats.lastRunStartedAt`) on top of the standard offset/limit/desc.
@@ -232,14 +232,14 @@ and deletes a single version and exposes its environment variables.
 |---|---|
 | `list(ListOptions)` | List the Actor's versions. Completes with `PaginationList<ActorVersion>`. The endpoint takes no query parameters; `options` (`offset`/`limit`/`desc`) is accepted only for signature consistency with every other `list(ListOptions)` and has no effect; pass `null`. |
 | `iterate(ListOptions)` | Lazy `Flow.Publisher<ActorVersion>` over all versions; `limit` caps the total (`null`/unset or non-positive = all), applied client-side after the single fetch. `offset` has no effect and there is no page size to tune. |
-| `create(Object version)` | Create a version. Completes with `ActorVersion`. |
+| `create(Object version)` | Create a version. Completes with `ActorVersion`. Uses the long timeout tier, since the version can carry its source files. |
 
 ### `ActorVersionClient`: `client.actor(id).version(v)`
 
 | Method | Description |
 |---|---|
 | `get()` | Fetch the version. Completes with `Optional<ActorVersion>`. |
-| `update(Object)` | Update the version. Completes with `ActorVersion`. |
+| `update(Object)` | Update the version. Completes with `ActorVersion`. Uses the long timeout tier, since the version can carry its source files. |
 | `delete()` | Delete the version. |
 | `envVars()` | An `ActorEnvVarCollectionClient` for the version's environment variables. |
 | `envVar(String name)` | An `ActorEnvVarClient` for a single environment variable. |

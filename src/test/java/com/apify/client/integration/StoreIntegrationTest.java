@@ -1,8 +1,10 @@
 package com.apify.client.integration;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.apify.client.ApifyClient;
+import com.apify.client.Publishers;
 import com.apify.client.store.ActorStoreListItem;
 import com.apify.client.store.StoreListOptions;
 import java.util.concurrent.CompletableFuture;
@@ -17,6 +19,38 @@ class StoreIntegrationTest extends IntegrationBase {
     ApifyClient client = requireClient();
     var page = client.store().list(new StoreListOptions().limit(5L)).join();
     assertTrue(page.getItems().size() <= 5);
+  }
+
+  @Test
+  void listStoreAcceptsTheDeprecatedSortBy() {
+    ApifyClient client = requireClient();
+    // The API accepts `sortBy` for compatibility but ignores it, so the order is not asserted.
+    @SuppressWarnings("deprecation")
+    StoreListOptions options = new StoreListOptions().limit(5L).sortBy("popularity");
+    var page = client.store().list(options).join();
+    assertFalse(page.getItems().isEmpty());
+  }
+
+  @Test
+  void listStoreItemsCarryTheStoreStats() {
+    ApifyClient client = requireClient();
+    var page = client.store().list(new StoreListOptions().limit(5L)).join();
+    assertFalse(page.getItems().isEmpty());
+    assertTrue(
+        page.getItems().stream()
+            .allMatch(item -> item.getStats() != null && item.getStats().getTotalUsers() != null),
+        "every listed Actor has stats.totalUsers");
+  }
+
+  @Test
+  void searchReturnsASinglePageAndIterationCompletes() {
+    ApifyClient client = requireClient();
+    // A search is one page of at most 100 Actors, so iterating it without a limit must complete.
+    var items =
+        Publishers.collect(client.store().iterate(new StoreListOptions().search("crawler"), null))
+            .join();
+    assertFalse(items.isEmpty());
+    assertTrue(items.size() <= 100, "a search returns at most 100 Actors, got " + items.size());
   }
 
   @Test

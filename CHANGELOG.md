@@ -5,6 +5,25 @@ All notable changes to the Apify Java client are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-11-27
+
+### Added
+
+- `StoreActorStats`, the statistics of a Store Actor: `totalUsers`, `totalRuns`, `totalUsers7Days`, `totalUsers30Days`, `totalUsers90Days`, `actorReviewRating` and `actorReviewCount`.
+- `ActorStoreListItem` getters for `userFullName`, `categories`, `notice`, `isWhiteListedForAgenticPayments`, `isVerified` and `badge`.
+
+### Changed
+
+- `ActorStoreListItem.getStats()` returns `StoreActorStats`, which matches the Store response. The Store no longer returns `totalBuilds`, `totalMetamorphs` and `lastRunStartedAt`.
+- Synced with the published Apify OpenAPI specification (still `v2-2026-11-18T151559Z`): a Store search returns one page of at most 100 Actors ranked by relevance and ignores `offset`, `category` takes comma-separated category IDs, and `APIFY_AI` is a run origin.
+- `StoreCollectionClient.iterate` sends one request for a search, since the Store has no second page for it.
+- `ActorVersionCollectionClient.create` and `ActorVersionClient.update` use the long timeout tier, since a version can carry its source files.
+- Documented that creating an Actor with a name you already use fails with a `ConflictError` (`actor-name-not-unique`).
+
+### Deprecated
+
+- `StoreListOptions.sortBy`: the API ignores it.
+
 ## [0.14.1] - 2026-11-20
 
 ### Changed

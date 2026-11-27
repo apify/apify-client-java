@@ -1,5 +1,6 @@
 package com.apify.client.actor;
 
+import com.apify.client.http.Timeout;
 import com.apify.client.internal.HttpClientCore;
 import com.apify.client.internal.QueryParams;
 import com.apify.client.internal.ResourceContext;
@@ -26,9 +27,12 @@ public final class ActorVersionClient {
     return ctx.getResource("", new QueryParams(), ActorVersion.class);
   }
 
-  /** Updates the version with the given fields and returns the updated object. */
+  /**
+   * Updates the version with the given fields and returns the updated object. The request uses the
+   * long timeout tier, since the version can carry its source files.
+   */
   public CompletableFuture<ActorVersion> update(Object newFields) {
-    return ctx.updateResource("", newFields, ActorVersion.class);
+    return ctx.updateResource("", newFields, ActorVersion.class, Timeout.LONG);
   }
 
   /** Deletes the version. */

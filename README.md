@@ -23,7 +23,7 @@ Maven (Maven Central is a default repository, so no extra configuration is neede
 <dependency>
   <groupId>com.apify</groupId>
   <artifactId>apify-client</artifactId>
-  <version>0.14.1</version>
+  <version>0.15.0</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.apify:apify-client:0.14.1'
+  implementation 'com.apify:apify-client:0.15.0'
 }
 ```
 
@@ -437,7 +437,7 @@ try {
 The public `com.apify.client.Version` class (`import com.apify.client.Version;`) exposes two
 constants:
 
-- `Version.CLIENT_VERSION`: the semantic version of this client (`0.14.1`).
+- `Version.CLIENT_VERSION`: the semantic version of this client (`0.15.0`).
 - `Version.API_SPEC_VERSION`: the version of the [Apify OpenAPI specification](https://docs.apify.com/api/openapi.json)
   (its `info.version` field) that this client's endpoints, parameters, and models were last generated
   and checked against (`v2-2026-11-18T151559Z`). It is a snapshot, not a live compatibility

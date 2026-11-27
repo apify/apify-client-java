@@ -54,7 +54,7 @@ option types, so import each resource you use from its own package:
 | `com.apify.client.schedule` | `Schedule`, `ScheduleNotifications`, `ScheduleClient`, `ScheduleCollectionClient` |
 | `com.apify.client.webhook` | `Webhook`, `WebhookStats`, `WebhookLastDispatch`, `WebhookClient`, `WebhookCollectionClient`, `WebhookDispatchCollectionClient`, `NestedWebhookCollectionClient`, `WebhookDispatch`, `WebhookDispatchClient`, `WebhookDispatchCall`, `WebhookDispatchWebhookInfo`, `WebhookDispatchEventData` |
 | `com.apify.client.user` | `User`, `UserClient`, `UserProfile`, `UserProxy`, `UserPlan`, `ProxyGroup` |
-| `com.apify.client.store` | `ActorStoreListItem`, `StoreCollectionClient`, `StoreListOptions`, `PricingInfo` |
+| `com.apify.client.store` | `ActorStoreListItem`, `StoreActorStats`, `StoreCollectionClient`, `StoreListOptions`, `PricingInfo` |
 | `com.apify.client.log` | `LogClient`, `LogOptions`, `StreamedLog`, `StreamedLogOptions` |
 
 For example, the [top-level README's dataset snippet](../README.md#quick-start) needs

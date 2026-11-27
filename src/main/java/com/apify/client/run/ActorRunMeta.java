@@ -15,7 +15,10 @@ public final class ActorRunMeta extends ApifyResource {
   private String scheduledAct2Id;
   private String scheduledActorTaskId;
 
-  /** What triggered the run (e.g. {@code "WEB"}, {@code "API"}, {@code "SCHEDULER"}). */
+  /**
+   * What triggered the run (e.g. {@code "WEB"}, {@code "API"}, {@code "SCHEDULER"}, {@code
+   * "APIFY_AI"} for a run started from the Apify AI chat).
+   */
   public String getOrigin() {
     return origin;
   }

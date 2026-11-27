@@ -10,12 +10,20 @@ Browse public Actors in the Apify Store. `client.store()` returns a `StoreCollec
 | `iterate(StoreListOptions, Long chunkSize)` | A lazy `Flow.Publisher<ActorStoreListItem>` over all matches, fetching pages on demand. The options' `limit` caps the total number of rows read, which are the Actors yielded unless the API drops entries after counting them (`null`/unset or non-positive = all); `chunkSize` is the per-request page size (`null` = server default). |
 
 `StoreListOptions` fields: `offset` (number of Actors to skip), `limit` (maximum number of Actors to
-return), `search` (full-text search query), `sortBy` (the sort field, e.g. `popularity`, `newest`),
-`category` (filter Actors by category), `username` (filter Actors by owner username), `pricingModel`
-(filter by pricing model: `FREE`, `PRICE_PER_DATASET_ITEM`, `PAY_PER_EVENT`; the deprecated rental model
-`FLAT_PRICE_PER_MONTH` is no longer listed),
+return; the API default and maximum is 1000, or 100 with `search`), `search` (search query),
+`sortBy` (deprecated: the API ignores it, and orders the results by relevance with `search` and by
+Store position otherwise, so sort them on the client), `category` (filter by one or more category IDs
+such as `AI_AND_ML`, comma-separated and case-insensitive; an Actor must match all of them, and an
+unknown category fails with a `400` error), `username` (filter Actors by owner username),
+`pricingModel` (filter by pricing model: `FREE`, `PRICE_PER_DATASET_ITEM`, `PAY_PER_EVENT`; the
+deprecated rental model `FLAT_PRICE_PER_MONTH` is no longer listed),
 `includeUnrunnableActors` (include Actors the current user cannot run), `allowsAgenticUsers` (only
 Actors that allow agentic users), `responseFormat` (the response shape: `full` or `agent`).
+
+A `search` returns the Actors ranked by relevance as a single page of at most 100: the API ignores
+`offset` and has no second page. `iterate` therefore sends one request for a search, with the
+options' `limit` as its size, and `chunkSize` and `offset` have no effect. Narrow a search with
+`category`, `username` or `pricingModel`.
 
 ```java
 // Publishers.collect() drains the whole publisher; fine here since `limit` already caps it.
@@ -28,9 +36,13 @@ items.forEach(item -> System.out.println(item.getUsername() + "/" + item.getName
 ```
 
 `ActorStoreListItem` fields: `getId()`, `getName()`, `getUsername()`, `getTitle()`,
-`getDescription()`, `getStats()` (`ActorStats`; see [Actors](actors.md#actorclient)),
-`getCurrentPricingInfo()` (`PricingInfo`: `getPricingModel()`), `getPictureUrl()`,
-`getUserPictureUrl()`, `getUrl()`, `getReadmeSummary()`. Any field not covered by a typed getter is
+`getUserFullName()`, `getDescription()`, `getCategories()` (`List<String>` of category IDs),
+`getNotice()`, `getStats()` (`StoreActorStats`: `getTotalUsers()`, `getTotalRuns()`,
+`getTotalUsers7Days()`, `getTotalUsers30Days()`, `getTotalUsers90Days()`, `getActorReviewRating()`,
+`getActorReviewCount()`), `getCurrentPricingInfo()` (`PricingInfo`: `getPricingModel()`),
+`getIsWhiteListedForAgenticPayments()`, `getIsVerified()` (whether the developer has a verified
+identity), `getBadge()`, `getPictureUrl()`, `getUserPictureUrl()`, `getUrl()`,
+`getReadmeSummary()`. Any field not covered by a typed getter is
 still available via the inherited `getExtra()` (see
 [the docs index](README.md#model-fields-and-unmodeled-data-getextra)).
 
