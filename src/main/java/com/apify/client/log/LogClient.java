@@ -78,9 +78,9 @@ public final class LogClient {
    * Opens a live, streaming connection to the log and completes with a stream over the log bytes.
    * The caller is responsible for closing the returned {@link InputStream}.
    *
-   * <p>Unlike {@link #get()}, this bypasses the buffered/retrying transport so the log can be
-   * followed in real time as the run produces it (the {@code stream=1} query parameter). Because
-   * the response is consumed incrementally, it is not retried.
+   * <p>Unlike {@link #get()}, this does not buffer the response, so the log can be followed in real
+   * time as the run produces it (the {@code stream=1} query parameter). The request is retried like
+   * any other, until the response headers arrive; a failure while the body is read is not retried.
    */
   public CompletableFuture<InputStream> stream() {
     return stream(new LogOptions());

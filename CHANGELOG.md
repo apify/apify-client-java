@@ -11,9 +11,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `StoreActorStats`, the statistics of a Store Actor: `totalUsers`, `totalRuns`, `totalUsers7Days`, `totalUsers30Days`, `totalUsers90Days`, `actorReviewRating`, and `actorReviewCount`.
 - `ActorStoreListItem` getters for `userFullName`, `categories`, `notice`, `isWhiteListedForAgenticPayments`, `isVerified`, and `badge`.
-- `KeyValueStoreClient.setRecord` overloads that take an `InputStream`. The stream is sent without being held in memory, and the upload is not retried or compressed.
-- `KeyValueStoreClient.getRecordStream` and `KeyValueStoreRecordStream`, which read a record as an `InputStream`.
-- `InputStream` as the input of `ActorClient.start`, `ActorClient.call`, `TaskClient.start`, and `TaskClient.call`, and as the body of `ActorServerClient.request` and `requestStream`. A stream is sent once, with no retry.
+- `KeyValueStoreClient.setRecord` overloads that take an `InputStream`. The stream is sent without being held in memory, and the upload is not retried or compressed. Like a request to an Actor's server, it needs an `HttpTransport` that can disable redirects.
+- `KeyValueStoreClient.getRecordStream` and `KeyValueStoreRecordStream`, which read a record as an `InputStream`. The request is retried like any other.
+- `InputStream` as the input of `ActorClient.start`, `ActorClient.call`, `TaskClient.start`, and `TaskClient.call`, and as the body of `ActorServerClient.request` and `requestStream`. A stream is sent once, with no retry, and needs an `HttpTransport` that can disable redirects.
 - `APIFY_AI` run origin.
 
 ### Changed
@@ -21,6 +21,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** `ActorStoreListItem.getStats()` returns `StoreActorStats` instead of `ActorStats`. The Store no longer returns `totalBuilds`, `totalMetamorphs`, and `lastRunStartedAt`.
 - **Breaking:** `StoreCollectionClient.iterate` sends one request when `search` is set, since the Store returns a single page of at most 100 Actors for a search and ignores `offset`. `chunkSize` and `offset` have no effect for a search.
 - `StoreListOptions.category` takes comma-separated category IDs.
+- `LogClient.stream` and `DatasetClient.streamItems` retry the request like any other, until the response headers arrive.
 - `ActorVersionCollectionClient.create` and `ActorVersionClient.update` use the long timeout tier, since a version can carry its source files.
 - Documented that creating an Actor with a name you already use fails with a `ConflictError` (`actor-name-not-unique`).
 - `ActorClient.validateInput` and `RunClient.metamorph` throw `IllegalArgumentException` for an `InputStream` input, instead of serializing it to JSON.

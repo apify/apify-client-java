@@ -316,7 +316,7 @@ public final class KeyValueStoreClient {
    * to {@link #setRecord(String, InputStream, String)} without being held in memory. Completes with
    * empty if the record does not exist. The caller closes the returned record, or reads its stream
    * to the end. The request is retried like any other, until the response headers arrive; an error
-   * status that is not retried (any more) is thrown as an {@link
+   * status that is not retried, or the last one once the retries run out, is thrown as an {@link
    * com.apify.client.http.ApifyApiException}. A failure while reading the body is not retried.
    */
   public CompletableFuture<Optional<KeyValueStoreRecordStream>> getRecordStream(String key) {

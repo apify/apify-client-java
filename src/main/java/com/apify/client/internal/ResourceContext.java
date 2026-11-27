@@ -424,8 +424,8 @@ public final class ResourceContext {
 
   /**
    * GET returning the live response, its body unread. Retries like any other request, throws on an
-   * error status that is not retried (any more), and completes with {@code null} on not-found. The
-   * caller closes the body stream.
+   * error status once the retries run out or for a status that is not retried, and completes with
+   * {@code null} on not-found. The caller closes the body stream.
    */
   public CompletableFuture<HttpResponse<InputStream>> getStream(
       String subPath, QueryParams params) {

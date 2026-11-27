@@ -10,6 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.apify.client.actor.ActorServerRequestOptions;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.http.ApifyApiException;
+import com.apify.client.http.ApifyTransportException;
+import com.apify.client.http.DefaultHttpTransport;
 import com.apify.client.http.ForbiddenError;
 import com.apify.client.http.ServerActorException;
 import com.apify.client.http.ServerError;
@@ -21,11 +23,15 @@ import com.apify.client.task.TaskStartOptions;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.Authenticator;
+import java.net.PasswordAuthentication;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -93,6 +99,12 @@ class StreamBodyTest {
     if (path.endsWith("/records/forbidden")) {
       return TestHttpServer.Reply.json(
           403, "{\"error\":{\"type\":\"forbidden\",\"message\":\"no access\"}}");
+    }
+    if (path.equals("/v2/actors/dead")) {
+      return TestHttpServer.Reply.json(
+          200,
+          "{\"data\":{\"id\":\"dead\",\"actorStandby\":{\"isEnabled\":true},"
+              + "\"standbyUrl\":\"http://127.0.0.1:1/server\"}}");
     }
     if (path.equals("/v2/actors/plain")) {
       return TestHttpServer.Reply.json(200, "{\"data\":{\"id\":\"plain\"}}");
@@ -248,6 +260,51 @@ class StreamBodyTest {
     assertEquals(0, requestsTo(RECORD_PATH), "the redirect target is never contacted");
   }
 
+  @Test
+  void aStreamBodyIsNotSentAgainToAnswerAnAuthenticationChallenge() throws IOException {
+    // The JDK client answers a 401 challenge by sending the request, body included, a second time.
+    // The stream is already read by then, so the call must fail instead of sending an empty body.
+    server.close();
+    try (TestHttpServer challenging =
+        new TestHttpServer(
+            request ->
+                request.header("Authorization") == null
+                        || !request.header("Authorization").startsWith("Basic")
+                    ? new TestHttpServer.Reply(
+                        401, Map.of("WWW-Authenticate", "Basic realm=\"x\""), new byte[0], false)
+                    : TestHttpServer.Reply.json(200, "{}"))) {
+      HttpClient jdk =
+          HttpClient.newBuilder()
+              .authenticator(
+                  new Authenticator() {
+                    @Override
+                    protected PasswordAuthentication getPasswordAuthentication() {
+                      return new PasswordAuthentication("user", "pass".toCharArray());
+                    }
+                  })
+              .build();
+      ApifyClient client =
+          ApifyClient.builder()
+              .token("t")
+              .baseUrl(challenging.url())
+              .httpTransport(new DefaultHttpTransport(jdk))
+              .maxRetries(0)
+              .build();
+
+      assertThrows(
+          CompletionException.class,
+          () ->
+              client
+                  .keyValueStore("s1")
+                  .setRecord("key", streamOf(new byte[] {1, 2, 3}), "text/plain")
+                  .join());
+      assertTrue(
+          challenging.received().stream()
+              .noneMatch(r -> r.header("Authorization") != null && r.body().length == 0),
+          "no empty body is sent with the credentials");
+    }
+  }
+
   // ---- closing the stream ----------------------------------------------------------------------
 
   /** A stream that records whether it was closed. */
@@ -266,10 +323,23 @@ class StreamBodyTest {
   }
 
   @Test
-  void aStreamBodyIsClosedAfterASuccessfulCall() {
+  void aStreamBodyIsClosedAndTheErrorNamesTheCauseWhenTheTransportCannotDisableRedirects() {
+    // A transport that implements only the two required methods cannot hold back redirects, so a
+    // request with a stream body fails before the stream is read.
+    MockTransport transport = MockTransport.ofConstant(200, "{}");
+    ApifyClient client = ApifyClient.builder().token("t").httpTransport(transport).build();
     TrackedStream stream = new TrackedStream();
-    client().keyValueStore("s1").setRecord("key", stream, "text/plain").join();
+    CompletionException error =
+        assertThrows(
+            CompletionException.class,
+            () -> client.keyValueStore("s1").setRecord("key", stream, "text/plain").join());
+    UnsupportedOperationException cause =
+        assertInstanceOf(
+            UnsupportedOperationException.class,
+            assertInstanceOf(ApifyTransportException.class, rootOf(error)).getCause());
+    assertTrue(cause.getMessage().contains("InputStream"), cause.getMessage());
     assertTrue(stream.closed.get());
+    assertEquals(0, transport.calls);
   }
 
   @Test
@@ -292,6 +362,20 @@ class StreamBodyTest {
     assertThrows(
         CompletionException.class,
         () -> client.actor("a1").start(stream, new ActorStartOptions()).join());
+    assertTrue(stream.closed.get());
+  }
+
+  @Test
+  void aStreamBodyOfRequestStreamIsClosedWhenTheServerIsUnreachable() {
+    TrackedStream stream = new TrackedStream();
+    assertThrows(
+        CompletionException.class,
+        () ->
+            client()
+                .actor("dead")
+                .server()
+                .requestStream("/", new ActorServerRequestOptions().method("POST").body(stream))
+                .join());
     assertTrue(stream.closed.get());
   }
 

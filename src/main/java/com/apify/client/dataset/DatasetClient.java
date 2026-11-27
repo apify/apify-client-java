@@ -216,9 +216,10 @@ public final class DatasetClient {
    * As {@link #downloadItems}, but resolves to the response body as a live {@link InputStream}
    * instead of fully buffering it, so a large export can be processed in chunks without holding all
    * of it in memory. The caller is responsible for closing the returned stream (or reading it to
-   * the end). Like {@link com.apify.client.log.LogClient#stream}, this bypasses the
-   * buffered/retrying transport, so a non-2xx response is read to completion and thrown as an
-   * {@link com.apify.client.http.ApifyApiException} rather than retried.
+   * the end). The request is retried like any other, until the response headers arrive; an error
+   * status that is not retried, or the last one once the retries run out, is read to completion and
+   * thrown as an {@link com.apify.client.http.ApifyApiException}. A failure while reading the body
+   * is not retried.
    */
   public CompletableFuture<InputStream> streamItems(
       DownloadItemsFormat format, DatasetDownloadOptions options) {

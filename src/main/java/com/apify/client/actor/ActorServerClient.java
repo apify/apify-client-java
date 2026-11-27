@@ -290,8 +290,8 @@ public final class ActorServerClient {
   }
 
   /**
-   * Closes a stream request body once the call completed. The transport closes it when it sends the
-   * request, so this matters when the request never got that far, for example because the Actor is
+   * Closes a stream request body when the call completes. The client closes it itself once the
+   * request is made, so this matters when the request never was, for example because the Actor is
    * not a Server Actor.
    */
   private static void closeUnused(InputStream stream) {

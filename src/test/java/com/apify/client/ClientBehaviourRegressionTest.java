@@ -1202,6 +1202,32 @@ class ClientBehaviourRegressionTest {
   }
 
   @Test
+  void streamItemsRetriesARetryableStatusUntilTheHeadersArrive() throws java.io.IOException {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(503, "{\"error\":{\"type\":\"x\",\"message\":\"busy\"}}");
+    backend.scriptStream(200, "a;b\n1;2\n");
+    java.io.InputStream stream =
+        TestAsync.await(
+            client(backend, 2)
+                .dataset("d1")
+                .streamItems(DownloadItemsFormat.CSV, new DatasetDownloadOptions()));
+    assertEquals(
+        "a;b\n1;2\n", new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+    assertEquals(2, backend.calls, "the 503 is retried");
+  }
+
+  @Test
+  void logStreamRetriesARetryableStatusUntilTheHeadersArrive() throws java.io.IOException {
+    MockTransport backend = MockTransport.ofConstant(200, "");
+    backend.scriptStream(503, "{\"error\":{\"type\":\"x\",\"message\":\"busy\"}}");
+    backend.scriptStream(200, "log line\n");
+    java.io.InputStream stream = TestAsync.await(client(backend, 2).run("r1").log().stream());
+    assertEquals(
+        "log line\n", new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+    assertEquals(2, backend.calls, "the 503 is retried");
+  }
+
+  @Test
   void logGetAsBytesReturnsRawBytes() {
     MockTransport backend = MockTransport.ofConstant(200, "log line 1\nlog line 2\n");
     byte[] bytes = client(backend).log("l1").getAsBytes().join().orElseThrow();
