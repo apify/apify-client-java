@@ -73,8 +73,9 @@ public record RequestPolicy(
   }
 
   /**
-   * This policy for a request whose body is a stream, which is not compressed since that would need
-   * the whole stream in memory.
+   * This policy for a request whose body is a stream, which can be read once: the request is not
+   * compressed, since that would need the whole stream in memory, and does not follow a redirect,
+   * since that would send the body again.
    */
   RequestPolicy forStreamBody() {
     return new RequestPolicy(
@@ -82,7 +83,7 @@ public record RequestPolicy(
         throwOnErrorStatus,
         retryableStatus,
         retryTransportErrors,
-        followRedirects,
+        /* followRedirects= */ false,
         /* compress= */ false,
         compressor);
   }

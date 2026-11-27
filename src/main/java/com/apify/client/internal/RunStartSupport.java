@@ -55,8 +55,9 @@ public final class RunStartSupport {
 
   /**
    * Starts a run on {@code ctx}'s {@code runs} sub-resource and completes with the created run as
-   * soon as it exists (no waiting). {@code input} is any JSON-serializable value, a {@code byte[]}
-   * or {@link String} sent as it is, or {@code null} for no input. {@code applyParams} applies
+   * soon as it exists (no waiting). {@code input} is any JSON-serializable value, a {@code byte[]},
+   * {@link String}, or {@link InputStream} sent as it is, or {@code null} for no input. A stream
+   * start is sent once and skips the {@code waitForResources} retry. {@code applyParams} applies
    * every start-option query parameter (build, memory, timeout, ...) the caller's options type
    * configures; {@code contentType} is the input body's content type.
    *

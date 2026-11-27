@@ -315,9 +315,9 @@ public final class KeyValueStoreClient {
    * InputStream} instead of buffering it, so a large record can be processed in chunks or passed on
    * to {@link #setRecord(String, InputStream, String)} without being held in memory. Completes with
    * empty if the record does not exist. The caller closes the returned record, or reads its stream
-   * to the end. Like {@link com.apify.client.dataset.DatasetClient#streamItems}, this bypasses the
-   * retrying transport, so an error status is thrown as an {@link
-   * com.apify.client.http.ApifyApiException} without a retry.
+   * to the end. The request is retried like any other, until the response headers arrive; an error
+   * status that is not retried (any more) is thrown as an {@link
+   * com.apify.client.http.ApifyApiException}. A failure while reading the body is not retried.
    */
   public CompletableFuture<Optional<KeyValueStoreRecordStream>> getRecordStream(String key) {
     return getRecordStream(key, new GetRecordOptions().attachment(true));
@@ -385,10 +385,10 @@ public final class KeyValueStoreClient {
 
   /**
    * Stores a record whose bytes are read from {@code value}, never held in memory whole, so a large
-   * file can be uploaded. The stream is closed once it is read. It can be read once, so the upload
-   * is sent once: it is not retried on failure or compressed, and a redirect that needs the body
-   * again fails the request. To upload a file with retries, read it into a {@code byte[]} and use
-   * {@link #setRecord(String, byte[], String)} instead.
+   * file can be uploaded. The stream is closed when the call completes. It can be read once, so the
+   * upload is sent once: it is not retried on failure, compressed, or sent again to follow a
+   * redirect. To upload a file with retries, read it into a {@code byte[]} and use {@link
+   * #setRecord(String, byte[], String)} instead.
    */
   public CompletableFuture<Void> setRecord(String key, InputStream value, String contentType) {
     return setRecord(key, value, contentType, new SetRecordOptions());

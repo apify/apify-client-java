@@ -35,7 +35,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -361,9 +360,9 @@ public final class HttpClientCore {
 
   /**
    * Sends a request whose body is read from {@code body}, with auth and the User-Agent applied. A
-   * stream can be read once, so the request is sent exactly once: it is never retried or
-   * compressed, and a redirect that needs the body again fails the request instead of sending an
-   * empty body. {@code body} is closed once it is read.
+   * stream can be read once, so the request is sent exactly once: it is never retried, compressed,
+   * or sent again to follow a redirect. {@code body} is closed when the call completes, whether it
+   * succeeded or not.
    */
   public CompletableFuture<ApiResponse> callWithStream(
       String method,
@@ -374,38 +373,19 @@ public final class HttpClientCore {
       Timeout timeout,
       RequestPolicy policy) {
     return attemptWithRetry(
-        method,
-        url,
-        streamPublisher(body),
-        contentType,
-        extraHeaders,
-        resolveTimeout(timeout),
-        false,
-        policy.forStreamBody(),
-        extractPath(url),
-        1,
-        1,
-        retry.minDelayBetweenRetries);
-  }
-
-  /**
-   * A single-use body publisher that reads {@code body}. A second subscription, which the JDK makes
-   * to send the body again for a 307 or 308 redirect, gets a stream that fails to read instead of
-   * the exhausted {@code body}, so the data is never silently replaced with an empty body.
-   */
-  private static HttpRequest.BodyPublisher streamPublisher(InputStream body) {
-    AtomicBoolean handedOut = new AtomicBoolean();
-    return HttpRequest.BodyPublishers.ofInputStream(
-        () -> handedOut.compareAndSet(false, true) ? body : new SentStream());
-  }
-
-  /** The body of a stream request that was already sent: reading it fails. */
-  private static final class SentStream extends InputStream {
-    @Override
-    public int read() throws IOException {
-      throw new IOException(
-          "The request body is a stream that was already sent and cannot be sent again");
-    }
+            method,
+            url,
+            HttpRequest.BodyPublishers.ofInputStream(() -> body),
+            contentType,
+            extraHeaders,
+            resolveTimeout(timeout),
+            false,
+            policy.forStreamBody(),
+            extractPath(url),
+            1,
+            1,
+            retry.minDelayBetweenRetries)
+        .whenComplete((response, error) -> closeQuietly(body));
   }
 
   /** A request body, as it is sent, with the headers that go with it. */
@@ -910,12 +890,12 @@ public final class HttpClientCore {
 
   /**
    * Opens a live streaming response to a request, as {@link #call(String, String, byte[], String,
-   * Map, Timeout, boolean, RequestPolicy)} would send it, but without turning an error status into
-   * an exception: every response is handed back with its body unread, for the caller to inspect and
-   * close. A status the policy retries is retried with the client's retry settings, each discarded
-   * response closed, and the last one is handed back once the retries run out. A transport error is
-   * never retried. The future completes exceptionally with an {@link ApifyTransportException} on a
-   * transport failure.
+   * Map, Timeout, boolean, RequestPolicy)} would send it. A status the policy retries is retried
+   * with the client's retry settings, each discarded response closed, and so is a transport error
+   * if the policy retries those. The last response is handed back with its body unread, for the
+   * caller to inspect and close, unless the policy throws on an error status: it is then drained
+   * and thrown as an {@link ApifyApiException}. The future completes exceptionally with an {@link
+   * ApifyTransportException} on a transport failure that is not retried (any more).
    */
   public CompletableFuture<HttpResponse<InputStream>> streamRequest(
       String method,
@@ -946,8 +926,8 @@ public final class HttpClientCore {
   /**
    * As {@link #streamRequest(String, String, byte[], String, Map, Timeout, RequestPolicy)}, for a
    * body that is read from {@code body}. A stream can be read once, so the request is sent exactly
-   * once: it is never retried or compressed, and a redirect that needs the body again fails the
-   * request instead of sending an empty body.
+   * once: it is never retried, compressed, or sent again to follow a redirect. {@code body} is
+   * closed when the response arrives or the request fails.
    */
   public CompletableFuture<HttpResponse<InputStream>> streamRequest(
       String method,
@@ -962,12 +942,13 @@ public final class HttpClientCore {
         buildPublisherRequest(
             method,
             url,
-            streamPublisher(body),
+            HttpRequest.BodyPublishers.ofInputStream(() -> body),
             contentType,
             extraHeaders,
             attemptTimeout(resolveTimeout(timeout), 1),
             singleAttempt);
-    return openStream(request, singleAttempt.followRedirects());
+    return openStream(request, singleAttempt.followRedirects())
+        .whenComplete((response, error) -> closeQuietly(body));
   }
 
   /**
@@ -994,14 +975,26 @@ public final class HttpClientCore {
             attemptTimeout(baseTimeout, attempt),
             policy);
     return openStream(request, policy.followRedirects())
-        .thenCompose(
-            response -> {
-              boolean retryable =
-                  isStatusRetryable(response.statusCode(), policy) && attempt < maxAttempts;
-              if (!retryable) {
-                return CompletableFuture.completedFuture(response);
+        .handle(
+            (response, error) -> {
+              boolean retryable;
+              if (error == null) {
+                retryable =
+                    isStatusRetryable(response.statusCode(), policy) && attempt < maxAttempts;
+                if (!retryable) {
+                  return finishStreamAttempt(method, url, policy, attempt, response);
+                }
+                closeQuietly(response.body());
+              } else {
+                Throwable cause = unwrapCompletion(error);
+                retryable =
+                    policy.retryTransportErrors()
+                        && attempt < maxAttempts
+                        && !(cause instanceof CancellationException);
+                if (!retryable) {
+                  return CompletableFuture.<HttpResponse<InputStream>>failedFuture(cause);
+                }
               }
-              closeQuietly(response.body());
               Duration nextDelay =
                   minDuration(delay.multipliedBy(BACKOFF_FACTOR), retry.maxDelayBetweenRetries);
               return Async.delay(randomizedDelay(delay))
@@ -1017,7 +1010,27 @@ public final class HttpClientCore {
                               attempt + 1,
                               maxAttempts,
                               nextDelay));
-            });
+            })
+        .thenCompose(next -> next);
+  }
+
+  /**
+   * The outcome of the last attempt of a streamed request: the response, or, when the policy throws
+   * on an error status, the {@link ApifyApiException} that describes it, with the response drained
+   * and closed.
+   */
+  private CompletableFuture<HttpResponse<InputStream>> finishStreamAttempt(
+      String method,
+      String url,
+      RequestPolicy policy,
+      int attempt,
+      HttpResponse<InputStream> response) {
+    if (!policy.throwOnErrorStatus() || response.statusCode() < MAX_SUCCESS_STATUS) {
+      return CompletableFuture.completedFuture(response);
+    }
+    byte[] body = drainQuietly(response.body());
+    return failedFuture(
+        buildApiError(response.statusCode(), body, attempt, method, extractPath(url)));
   }
 
   private CompletableFuture<HttpResponse<InputStream>> openStream(
@@ -1052,29 +1065,6 @@ public final class HttpClientCore {
    */
   public CompletableFuture<InputStream> streamOrThrow(String url) {
     CancellableFuture<InputStream> result = new CancellableFuture<>();
-    CompletableFuture<HttpResponse<InputStream>> response = streamResponseOrThrow(url);
-    result.link(response);
-    response.whenComplete(
-        (resp, err) -> {
-          if (err == null) {
-            if (!result.complete(resp.body())) {
-              closeQuietly(resp.body());
-            }
-          } else if (err instanceof CancellationException) {
-            result.cancel(true);
-          } else {
-            result.completeExceptionally(err);
-          }
-        });
-    return result;
-  }
-
-  /**
-   * As {@link #streamOrThrow(String)}, but completes with the whole response, so the caller can
-   * read its headers as well as its body stream.
-   */
-  public CompletableFuture<HttpResponse<InputStream>> streamResponseOrThrow(String url) {
-    CancellableFuture<HttpResponse<InputStream>> result = new CancellableFuture<>();
     CompletableFuture<HttpResponse<InputStream>> stream = streamAsync(url);
     result.link(stream);
     stream.whenComplete(
@@ -1092,14 +1082,15 @@ public final class HttpClientCore {
             byte[] body = drainQuietly(resp.body());
             result.completeExceptionally(
                 buildApiError(resp.statusCode(), body, 1, "GET", extractPath(url)));
-          } else if (!result.complete(resp)) {
+          } else if (!result.complete(resp.body())) {
             closeQuietly(resp.body());
           }
         });
     return result;
   }
 
-  private static void closeQuietly(InputStream in) {
+  /** Closes {@code in}, ignoring a failure to close it. */
+  public static void closeQuietly(InputStream in) {
     try {
       in.close();
     } catch (IOException e) {

@@ -315,8 +315,9 @@ Two further methods, `sendAsync(HttpRequest, boolean followRedirects)` and
 `sendStreamingAsync(HttpRequest, boolean followRedirects)`, have default implementations that send
 the request through the methods above when `followRedirects` is `true` and **fail** the future with an
 `UnsupportedOperationException` when it is `false`. A request to an Actor's server (see
-[Server Actors](docs/actors.md#server-actors)) is sent with `followRedirects` set to `false`, so
-that the API token never follows a redirect to another host. Override both to support it: with
+[Server Actors](docs/actors.md#server-actors)) and a request whose body is an `InputStream` are sent
+with `followRedirects` set to `false`, so that the API token never follows a redirect to another
+host and a stream is never sent twice. Override both to support it: with
 `false`, return a redirect response as it is. `DefaultHttpTransport` does, also when it wraps your own
 JDK `HttpClient` (it then copies the client's settings into one that does not follow redirects).
 

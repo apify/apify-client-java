@@ -46,7 +46,7 @@ Actor created = client.actors().create(Map.of(
 | `get()` | Fetch the Actor. Completes with `Optional<Actor>`. |
 | `update(Object)` | Update the Actor with the given fields. Completes with `Actor`. |
 | `delete()` | Delete the Actor. |
-| `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Completes with `ActorRun`. The `input` is any JSON-serializable value, or a `byte[]`, `String` or `InputStream` that is sent as it is (set the matching `ActorStartOptions.contentType(...)`), or `null`. A stream is read once, so its start is sent once: it is not retried, even with `waitForResources`. |
+| `start(Object input, ActorStartOptions)` | Start a run, returning immediately. Completes with `ActorRun`. The `input` is any JSON-serializable value, or a `byte[]`, `String`, or `InputStream` that is sent as it is (set the matching `ActorStartOptions.contentType(...)`), or `null`. A stream is read once, so its start is sent once: it is not retried, even with `waitForResources`. |
 | `call(Object input, ActorStartOptions, Long waitSecs)` | Start a run and poll until it finishes (`null` waits indefinitely); does **not** stream the run's log. Completes with `ActorRun`. |
 | `call(Object input, ActorCallOptions, Long waitSecs)` | As above, additionally streaming the run's log for the duration of the wait by default. Use `ActorCallOptions.disableLogStreaming()` to opt out, or `logOptions(StreamedLogOptions)` for a custom destination. |
 | `validateInput(Object input)` / `validateInput(Object input, ValidateInputOptions)` | Validate an input against the Actor's input schema. Completes with `boolean`. `ValidateInputOptions` fields (optional): `build` (`String`), `contentType` (`String`). |
@@ -132,8 +132,8 @@ Actor's `standbyUrl` and `actorStandby` fields.
 `POST`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`, `PATCH`), `param(String, Object)`/`params(Map)` (query
 parameters, converted as for API calls: `null` is left out, a boolean is sent as `1`/`0`, a
 collection comma-joined), `header(String, String)`/`headers(Map)`, `body(Object)` (a `byte[]`,
-`String` or `InputStream` is sent as it is, and a stream is sent once, with no retry and no
-compression; anything else is serialized to JSON and sent as `application/json`
+`String`, or `InputStream` is sent as it is, and a stream is sent once, with no retry, no
+compression, and no redirect followed; anything else is serialized to JSON and sent as `application/json`
 unless you set a `Content-Type` header), `parentRequestId(String)` (see
 [Calling a Server Actor from a Server Actor](#calling-a-server-actor-from-a-server-actor)),
 `compression(HttpCompressor)` and `timeout(Timeout)`

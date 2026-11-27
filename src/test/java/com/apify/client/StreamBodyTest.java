@@ -10,7 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.apify.client.actor.ActorServerRequestOptions;
 import com.apify.client.actor.ActorStartOptions;
 import com.apify.client.http.ApifyApiException;
-import com.apify.client.http.ApifyTransportException;
+import com.apify.client.http.ForbiddenError;
+import com.apify.client.http.ServerActorException;
 import com.apify.client.http.ServerError;
 import com.apify.client.keyvalue.KeyValueStoreRecordStream;
 import com.apify.client.keyvalue.SetRecordOptions;
@@ -27,6 +28,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +50,13 @@ class StreamBodyTest {
   private static final byte[] LARGE_BODY = "a".repeat(20_000).getBytes(StandardCharsets.UTF_8);
 
   private TestHttpServer server;
+
+  /**
+   * Counts the reads of the records that fail once, so the first read fails and the retry works.
+   */
+  private final AtomicInteger flakyReads = new AtomicInteger();
+
+  private final AtomicInteger droppedReads = new AtomicInteger();
 
   /**
    * The statuses the server answers record uploads with, one per request, before it answers 200.
@@ -70,6 +80,22 @@ class StreamBodyTest {
     }
     if (path.equals(RECORD_PATH) && request.method().equals("GET")) {
       return TestHttpServer.Reply.of(200, "text/plain", "streamed record");
+    }
+    if (path.endsWith("/records/flaky") && flakyReads.getAndIncrement() == 0) {
+      return TestHttpServer.Reply.json(503, "{\"error\":{\"type\":\"x\"}}");
+    }
+    if (path.endsWith("/records/dropped") && droppedReads.getAndIncrement() == 0) {
+      return TestHttpServer.Reply.drop();
+    }
+    if (path.endsWith("/records/flaky") || path.endsWith("/records/dropped")) {
+      return TestHttpServer.Reply.of(200, "text/plain", "after retry");
+    }
+    if (path.endsWith("/records/forbidden")) {
+      return TestHttpServer.Reply.json(
+          403, "{\"error\":{\"type\":\"forbidden\",\"message\":\"no access\"}}");
+    }
+    if (path.equals("/v2/actors/plain")) {
+      return TestHttpServer.Reply.json(200, "{\"data\":{\"id\":\"plain\"}}");
     }
     if (path.endsWith("/records/missing")) {
       return TestHttpServer.Reply.json(
@@ -209,7 +235,7 @@ class StreamBodyTest {
   }
 
   @Test
-  void setRecordFailsInsteadOfSendingAnEmptyBodyWhenARedirectNeedsTheStreamAgain() {
+  void setRecordDoesNotFollowARedirectWithAStream() {
     CompletionException error =
         assertThrows(
             CompletionException.class,
@@ -218,8 +244,71 @@ class StreamBodyTest {
                     .keyValueStore("s1")
                     .setRecord("redirected", streamOf(new byte[] {1, 2, 3}), "text/plain")
                     .join());
-    assertInstanceOf(ApifyTransportException.class, rootOf(error));
-    assertEquals(0, requestsTo(RECORD_PATH), "the redirect target never receives an empty body");
+    assertEquals(307, assertInstanceOf(ApifyApiException.class, rootOf(error)).getStatusCode());
+    assertEquals(0, requestsTo(RECORD_PATH), "the redirect target is never contacted");
+  }
+
+  // ---- closing the stream ----------------------------------------------------------------------
+
+  /** A stream that records whether it was closed. */
+  private static final class TrackedStream extends ByteArrayInputStream {
+    private final AtomicBoolean closed = new AtomicBoolean();
+
+    TrackedStream() {
+      super(new byte[] {1, 2, 3});
+    }
+
+    @Override
+    public void close() throws IOException {
+      closed.set(true);
+      super.close();
+    }
+  }
+
+  @Test
+  void aStreamBodyIsClosedAfterASuccessfulCall() {
+    TrackedStream stream = new TrackedStream();
+    client().keyValueStore("s1").setRecord("key", stream, "text/plain").join();
+    assertTrue(stream.closed.get());
+  }
+
+  @Test
+  void aStreamBodyIsClosedAfterAFailedCall() {
+    uploadStatuses.add(503);
+    TrackedStream stream = new TrackedStream();
+    assertThrows(
+        CompletionException.class,
+        () -> client().keyValueStore("s1").setRecord("key", stream, "text/plain").join());
+    assertTrue(stream.closed.get());
+  }
+
+  @Test
+  void aStreamBodyIsClosedWhenTheConnectionFails() throws IOException {
+    String unreachable = server.url();
+    server.close();
+    ApifyClient client =
+        ApifyClient.builder().token("t").baseUrl(unreachable).maxRetries(0).build();
+    TrackedStream stream = new TrackedStream();
+    assertThrows(
+        CompletionException.class,
+        () -> client.actor("a1").start(stream, new ActorStartOptions()).join());
+    assertTrue(stream.closed.get());
+  }
+
+  @Test
+  void aStreamBodyIsClosedWhenTheActorIsNotAServerActor() {
+    TrackedStream stream = new TrackedStream();
+    CompletionException error =
+        assertThrows(
+            CompletionException.class,
+            () ->
+                client()
+                    .actor("plain")
+                    .server()
+                    .request("/", new ActorServerRequestOptions().method("POST").body(stream))
+                    .join());
+    assertInstanceOf(ServerActorException.class, rootOf(error));
+    assertTrue(stream.closed.get());
   }
 
   // ---- streamed record read --------------------------------------------------------------------
@@ -241,6 +330,36 @@ class StreamBodyTest {
   @Test
   void getRecordStreamCompletesWithEmptyForAMissingRecord() {
     assertTrue(client().keyValueStore("s1").getRecordStream("missing").join().isEmpty());
+  }
+
+  @Test
+  void getRecordStreamRetriesARetryableStatus() throws IOException {
+    try (KeyValueStoreRecordStream record =
+        client().keyValueStore("s1").getRecordStream("flaky").join().orElseThrow()) {
+      assertEquals(
+          "after retry", new String(record.getValue().readAllBytes(), StandardCharsets.UTF_8));
+    }
+    assertEquals(2, requestsTo("/v2/key-value-stores/s1/records/flaky"));
+  }
+
+  @Test
+  void getRecordStreamRetriesATransportError() throws IOException {
+    try (KeyValueStoreRecordStream record =
+        client().keyValueStore("s1").getRecordStream("dropped").join().orElseThrow()) {
+      assertEquals(
+          "after retry", new String(record.getValue().readAllBytes(), StandardCharsets.UTF_8));
+    }
+    assertEquals(2, requestsTo("/v2/key-value-stores/s1/records/dropped"));
+  }
+
+  @Test
+  void getRecordStreamThrowsOnAnErrorStatusThatIsNotRetried() {
+    CompletionException error =
+        assertThrows(
+            CompletionException.class,
+            () -> client().keyValueStore("s1").getRecordStream("forbidden").join());
+    assertInstanceOf(ForbiddenError.class, rootOf(error));
+    assertEquals(1, requestsTo("/v2/key-value-stores/s1/records/forbidden"));
   }
 
   @Test

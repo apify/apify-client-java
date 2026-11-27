@@ -423,13 +423,14 @@ public final class ResourceContext {
   }
 
   /**
-   * GET returning the live response, its body unread. Completes with {@code null} on not-found. The
+   * GET returning the live response, its body unread. Retries like any other request, throws on an
+   * error status that is not retried (any more), and completes with {@code null} on not-found. The
    * caller closes the body stream.
    */
   public CompletableFuture<HttpResponse<InputStream>> getStream(
       String subPath, QueryParams params) {
     String u = mergedParams(params).applyToUrl(subUrl(subPath));
-    return http.streamResponseOrThrow(u)
+    return http.streamRequest("GET", u, (byte[]) null, null, null, Timeout.LONG, RequestPolicy.API)
         .handle(
             (resp, error) -> {
               if (error == null) {
